@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, Mic, Sparkles, Loader2 } from "lucide-react";
-import type { Clip } from '@/lib/videoUtils'; // Assuming Clip type definition
+import type { Clip } from '@/lib/videoUtils';
 
 interface TranscriptionWorkspaceProps {
   videoSrc?: string;
@@ -18,9 +18,8 @@ interface TranscriptionWorkspaceProps {
   currentClipIndex: number;
   onNextClip: () => void;
   onPrevClip: () => void;
-  onTranscribeAudio: (audioDataUri: string) => Promise<string | null>;
+  onTranscribeAudio: () => Promise<string | null>; // No audioDataUri parameter
   onGetFeedback: (userTranscription: string, automatedTranscription: string) => Promise<string | null>;
-  videoElementRef: React.RefObject<HTMLVideoElement>; // For audio extraction
   isYouTubeVideo: boolean;
 }
 
@@ -32,7 +31,6 @@ export default function TranscriptionWorkspace({
   onPrevClip,
   onTranscribeAudio,
   onGetFeedback,
-  videoElementRef, // This ref should be connected to the <video> inside VideoPlayer if not YouTube
   isYouTubeVideo,
 }: TranscriptionWorkspaceProps) {
   const [userTranscription, setUserTranscription] = useState("");
@@ -44,37 +42,27 @@ export default function TranscriptionWorkspace({
   const currentClip = clips[currentClipIndex];
 
   useEffect(() => {
-    // Reset transcriptions and feedback when clip changes
     setUserTranscription("");
     setAutomatedTranscription(null);
     setFeedback(null);
-  }, [currentClipIndex]);
+  }, [currentClipIndex, videoSrc]); // Added videoSrc dependency to reset on new video
 
   const handleTranscribe = async () => {
-    if (!currentClip || isYouTubeVideo) { // Transcription from YouTube iframe is complex and not handled here
+    if (!currentClip || isYouTubeVideo) { 
       alert("Transcription is only available for uploaded videos and active clips.");
       return;
     }
     
     setIsLoadingTranscription(true);
-    setAutomatedTranscription(null); // Clear previous transcription
-    
-    // Simulate audio extraction for now. Actual extraction would be complex.
-    // This would ideally call a utility to get audioDataUri from currentClip segment of videoSrc
-    // For example, using MediaRecorder on videoElementRef.current if it's a direct file.
-    // This is a placeholder for where audio extraction logic would go.
-    // In a real scenario, you'd use videoElementRef.current with MediaRecorder.
-    // const audioDataUri = await extractAudioFromVideoSegment(videoElementRef.current, currentClip.startTime, currentClip.endTime);
-    
-    // Placeholder for audio data URI. In a real app, this would be dynamically generated.
-    const placeholderAudioDataUri = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="; // Empty WAV
+    setAutomatedTranscription(null); 
     
     try {
-      const transcription = await onTranscribeAudio(placeholderAudioDataUri); // Pass actual audio URI
+      const transcription = await onTranscribeAudio(); // Call without arguments
       setAutomatedTranscription(transcription);
     } catch (error) {
-      console.error("Transcription error:", error);
-      setAutomatedTranscription("Error during transcription.");
+      console.error("Transcription error in workspace:", error);
+      // Error should be handled and toasted by onTranscribeAudio in LinguaClipApp
+      setAutomatedTranscription("Error during transcription. Check console or notifications.");
     } finally {
       setIsLoadingTranscription(false);
     }
@@ -85,14 +73,18 @@ export default function TranscriptionWorkspace({
       alert("Please provide your transcription and ensure automated transcription is available.");
       return;
     }
+    if (isYouTubeVideo) {
+       alert("Feedback is not available for YouTube videos.");
+       return;
+    }
     setIsLoadingFeedback(true);
-    setFeedback(null); // Clear previous feedback
+    setFeedback(null);
     try {
       const newFeedback = await onGetFeedback(userTranscription, automatedTranscription);
       setFeedback(newFeedback);
     } catch (error) {
-      console.error("Feedback error:", error);
-      setFeedback("Error generating feedback.");
+      console.error("Feedback error in workspace:", error);
+      setFeedback("Error generating feedback. Check console or notifications.");
     } finally {
       setIsLoadingFeedback(false);
     }
@@ -108,15 +100,12 @@ export default function TranscriptionWorkspace({
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
-      {/* Video Player and Clip Navigation Section */}
       <div className="lg:w-2/3 w-full space-y-4">
         <VideoPlayer
           src={videoSrc}
           startTime={currentClip?.startTime}
           endTime={currentClip?.endTime}
           className="shadow-lg rounded-lg"
-          // Pass down the ref if VideoPlayer can accept it and it's not a YouTube video
-          // This part needs careful ref forwarding if VideoPlayer nests the actual video element
         />
         <div className="flex justify-between items-center p-2 bg-card rounded-lg shadow">
           <Button onClick={onPrevClip} disabled={currentClipIndex === 0} variant="outline" size="icon">
@@ -153,7 +142,6 @@ export default function TranscriptionWorkspace({
           </Button>
       </div>
 
-      {/* Transcription and Feedback Section */}
       <div className="lg:w-1/3 w-full">
         <Tabs defaultValue="manual" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
