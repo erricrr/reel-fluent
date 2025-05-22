@@ -8,6 +8,8 @@ import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { FileVideo, X as XIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, extractAudioFromVideoSegment, type Clip } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
@@ -18,6 +20,7 @@ export default function LinguaClipApp() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined); // For YT or direct URLs
   const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
+  const [videoDisplayName, setVideoDisplayName] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [clips, setClips] = useState<Clip[]>([]);
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
@@ -36,6 +39,7 @@ export default function LinguaClipApp() {
     setVideoFile(null);
     setVideoUrl(undefined);
     setVideoSrc(undefined);
+    setVideoDisplayName(null);
     setVideoDuration(0);
     setClips([]);
     setCurrentClipIndex(0);
@@ -47,17 +51,21 @@ export default function LinguaClipApp() {
     resetAppState(); 
     setIsLoading(true);
     let currentVideoSrc: string | undefined = undefined;
+    let displayName: string | null = null;
 
     if (source.file) {
       setVideoFile(source.file);
+      displayName = source.file.name;
       const objectURL = URL.createObjectURL(source.file);
       setVideoSrc(objectURL);
       currentVideoSrc = objectURL;
     } else if (source.url) {
       setVideoUrl(source.url);
+      displayName = source.url;
       setVideoSrc(source.url);
       currentVideoSrc = source.url;
       if (source.url.includes("youtube.com") || source.url.includes("youtu.be")) {
+        setVideoDisplayName(displayName);
         setClips([{ id: 'yt-full', startTime: 0, endTime: Infinity }]); 
         setVideoDuration(Infinity); 
         setIsLoading(false);
@@ -70,6 +78,8 @@ export default function LinguaClipApp() {
       return;
     }
    
+    setVideoDisplayName(displayName);
+
     if (currentVideoSrc && !isYouTubeVideo) {
         const tempVideo = document.createElement('video');
         tempVideo.onloadedmetadata = () => {
@@ -211,8 +221,30 @@ export default function LinguaClipApp() {
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg">
           <CardContent className="p-6 space-y-6">
-            <VideoInputForm onVideoLoad={handleVideoLoad} isLoading={isLoading} />
-            <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !videoSrc} />
+            {videoSrc && videoDisplayName ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/50 shadow-sm">
+                  <div className="flex items-center gap-3 min-w-0"> {/* Added min-w-0 for truncation */}
+                    <FileVideo className="h-6 w-6 text-primary flex-shrink-0" />
+                    <span className="text-sm font-medium truncate" title={videoDisplayName}>
+                      {videoDisplayName}
+                    </span>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={resetAppState} aria-label="Remove video">
+                    <XIcon className="h-5 w-5" />
+                  </Button>
+                </div>
+                <Button onClick={resetAppState} variant="outline" className="w-full">
+                  Clear Loaded Video
+                </Button>
+                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !videoSrc} />
+              </div>
+            ) : (
+              <>
+                <VideoInputForm onVideoLoad={handleVideoLoad} isLoading={isLoading} />
+                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !videoSrc} />
+              </>
+            )}
           </CardContent>
         </Card>
         
@@ -243,3 +275,4 @@ export default function LinguaClipApp() {
     </div>
   );
 }
+
