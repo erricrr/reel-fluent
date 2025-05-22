@@ -2,7 +2,7 @@
 "use client";
 
 import type * as React from 'react';
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
@@ -18,24 +18,25 @@ import { compareTranscriptions, type CompareTranscriptionsOutput } from "@/ai/fl
 
 export default function LinguaClipApp() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined); // For YT or direct URLs
+  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined);
   const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
   const [videoDisplayName, setVideoDisplayName] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [clips, setClips] = useState<Clip[]>([]);
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
-  const [language, setLanguage] = useState<string>("vietnamese"); // Default language
+  const [language, setLanguage] = useState<string>("vietnamese");
   const [comparisonResult, setComparisonResult] = useState<CompareTranscriptionsOutput['comparisonResult'] | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const videoProcessingIdRef = useRef<number>(0); // To manage concurrent/stale video processing
 
-  const [isLoading, setIsLoading] = useState<boolean>(false); // General loading for video processing
-  
   const { toast } = useToast();
 
   const isYouTubeVideo = videoUrl?.includes("youtube.com") || videoUrl?.includes("youtu.be") || false;
 
+  const resetAppState = useCallback(() => {
+    videoProcessingIdRef.current += 1; // Invalidate previous processing attempts
 
-  const resetAppState = () => {
     setVideoFile(null);
     setVideoUrl(undefined);
     setVideoSrc(undefined);
@@ -45,10 +46,13 @@ export default function LinguaClipApp() {
     setCurrentClipIndex(0);
     setIsLoading(false);
     setComparisonResult(null);
-  };
+    // setLanguage("vietnamese"); // Optionally reset language, or keep user's preference
+  }, []);
 
   const handleVideoLoad = useCallback(async (source: { file?: File; url?: string }) => {
-    resetAppState(); 
+    resetAppState(); // Reset state and generate new processing ID
+    const currentProcessingId = videoProcessingIdRef.current;
+
     setIsLoading(true);
     let currentVideoSrc: string | undefined = undefined;
     let displayName: string | null = null;
@@ -65,24 +69,31 @@ export default function LinguaClipApp() {
       setVideoSrc(source.url);
       currentVideoSrc = source.url;
       if (source.url.includes("youtube.com") || source.url.includes("youtu.be")) {
+        if (videoProcessingIdRef.current !== currentProcessingId) return; // Stale process
         setVideoDisplayName(displayName);
-        setClips([{ id: 'yt-full', startTime: 0, endTime: Infinity }]); 
-        setVideoDuration(Infinity); 
+        setClips([{ id: 'yt-full', startTime: 0, endTime: Infinity }]);
+        setVideoDuration(Infinity);
         setIsLoading(false);
         toast({ title: "YouTube Video Loaded", description: "Viewing YouTube video. Transcription/clip features are limited." });
         return;
       }
     } else {
+      if (videoProcessingIdRef.current !== currentProcessingId) return; // Stale process
       toast({ variant: "destructive", title: "Error", description: "No video source provided." });
       setIsLoading(false);
       return;
     }
-   
+
+    if (videoProcessingIdRef.current !== currentProcessingId) return; // Stale process
     setVideoDisplayName(displayName);
 
-    if (currentVideoSrc && !isYouTubeVideo) {
+    if (currentVideoSrc && !(source.url?.includes("youtube.com") || source.url?.includes("youtu.be"))) {
         const tempVideo = document.createElement('video');
         tempVideo.onloadedmetadata = () => {
+            if (videoProcessingIdRef.current !== currentProcessingId) {
+              console.log("Stale onloadedmetadata ignored for ID:", currentProcessingId);
+              return;
+            }
             setVideoDuration(tempVideo.duration);
             const generatedClips = generateClips(tempVideo.duration);
             setClips(generatedClips);
@@ -94,15 +105,24 @@ export default function LinguaClipApp() {
             setIsLoading(false);
         };
         tempVideo.onerror = () => {
+            if (videoProcessingIdRef.current !== currentProcessingId) {
+              console.log("Stale onerror ignored for ID:", currentProcessingId);
+              return;
+            }
             toast({ variant: "destructive", title: "Error", description: "Could not load video metadata. The video file might be corrupted or in an unsupported format." });
             setIsLoading(false);
-            resetAppState();
+            resetAppState(); // Reset if this specific load attempt fails
         };
         tempVideo.src = currentVideoSrc;
-        tempVideo.load(); 
+        tempVideo.load();
+    } else if (!currentVideoSrc) { // Handles if currentVideoSrc somehow became undefined for non-YT
+        if (videoProcessingIdRef.current !== currentProcessingId) return;
+        setIsLoading(false);
+        toast({ variant: "destructive", title: "Error", description: "Video source became unavailable." });
     }
 
-  }, [toast, isYouTubeVideo]); 
+
+  }, [toast, resetAppState]);
 
 
   useEffect(() => {
@@ -122,7 +142,7 @@ export default function LinguaClipApp() {
   const handleNextClip = () => {
     if (currentClipIndex < clips.length - 1) {
       setCurrentClipIndex(currentClipIndex + 1);
-      setComparisonResult(null); 
+      setComparisonResult(null);
     }
   };
 
@@ -135,12 +155,12 @@ export default function LinguaClipApp() {
 
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
-    setComparisonResult(null); 
+    setComparisonResult(null);
   };
 
   const handleTranscribeAudio = async (): Promise<string | null> => {
     const currentClipToTranscribe = clips[currentClipIndex];
-    setComparisonResult(null); 
+    setComparisonResult(null);
     if (!videoSrc || isYouTubeVideo || !currentClipToTranscribe) {
       toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure an uploaded video and clip are active."});
       return null;
@@ -154,7 +174,7 @@ export default function LinguaClipApp() {
         toast({variant: "destructive", title: "Audio Extraction Failed", description: (error as Error).message || "Could not extract audio for transcription. The video format might not be fully compatible."});
         return null;
     }
-    
+
     if (!audioDataUri) {
         toast({variant: "destructive", title: "Transcription Error", description: "Failed to obtain audio data for transcription."});
         return null;
@@ -196,7 +216,7 @@ export default function LinguaClipApp() {
       toast({variant: "destructive", title: "Comparison Error", description: "Comparison is not available for YouTube videos."});
       return null;
     }
-    setComparisonResult(null); 
+    setComparisonResult(null);
     try {
       const result = await compareTranscriptions({
         userTranscription,
@@ -215,8 +235,9 @@ export default function LinguaClipApp() {
   };
 
   const handleRemoveClip = (clipIdToRemove: string) => {
+    videoProcessingIdRef.current += 1; // Invalidate any pending video processing tied to old clip set
     const removedClipOriginalIndex = clips.findIndex(clip => clip.id === clipIdToRemove);
-    if (removedClipOriginalIndex === -1) return; // Should not happen
+    if (removedClipOriginalIndex === -1) return;
 
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
@@ -224,25 +245,18 @@ export default function LinguaClipApp() {
       setClips([]);
       setCurrentClipIndex(0);
       setComparisonResult(null);
-      // Optionally, could call a more comprehensive reset if all clips are gone
-      // resetAppState(); // This would clear the video source too, might not be desired
     } else {
       let newCurrentIdx = currentClipIndex;
       if (removedClipOriginalIndex < currentClipIndex) {
         newCurrentIdx = Math.max(0, currentClipIndex - 1);
       } else if (removedClipOriginalIndex === currentClipIndex) {
-        // If the current clip was removed, try to stay at the same index if a new clip takes its place,
-        // or move to the new last clip if the removed clip was effectively the last one accessible at that index.
         newCurrentIdx = Math.min(currentClipIndex, newClips.length - 1);
       }
-      // If removedClipOriginalIndex > currentClipIndex, newCurrentIdx doesn't need to change based on removal
-      
-      // Final clamp to ensure newCurrentIdx is within the bounds of the newClips array
       newCurrentIdx = Math.max(0, Math.min(newCurrentIdx, newClips.length - 1));
 
       setClips(newClips);
       setCurrentClipIndex(newCurrentIdx);
-      setComparisonResult(null); // Reset comparison as the clip context has changed
+      setComparisonResult(null);
     }
     toast({ title: "Clip Removed", description: "The selected clip has been removed from the list." });
   };
@@ -257,7 +271,7 @@ export default function LinguaClipApp() {
             {videoSrc && videoDisplayName ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/50 shadow-sm">
-                  <div className="flex items-center gap-3 min-w-0"> {/* Added min-w-0 for truncation */}
+                  <div className="flex items-center gap-3 min-w-0">
                     <FileVideo className="h-6 w-6 text-primary flex-shrink-0" />
                     <span className="text-sm font-medium truncate" title={videoDisplayName}>
                       {videoDisplayName}
@@ -280,7 +294,7 @@ export default function LinguaClipApp() {
             )}
           </CardContent>
         </Card>
-        
+
         {videoSrc && clips.length > 0 && (
           <TranscriptionWorkspace
             videoSrc={videoSrc}
@@ -297,7 +311,7 @@ export default function LinguaClipApp() {
             language={language}
           />
         )}
-        {isLoading && videoSrc === undefined && ( 
+        {isLoading && videoSrc === undefined && (
           <div className="text-center py-10">
             <p className="text-lg text-primary animate-pulse">Processing video...</p>
           </div>
