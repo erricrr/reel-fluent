@@ -27,6 +27,29 @@ interface TranscriptionWorkspaceProps {
   language: string;
 }
 
+const formatSecondsToMMSS = (totalSeconds: number): string => {
+  if (!isFinite(totalSeconds) || totalSeconds < 0) {
+    return "--:--"; // Handle Infinity, NaN, negative numbers
+  }
+  try {
+    // Using Date object. Note: For extremely large numbers of seconds, this could hit Date limits,
+    // but video durations should be well within typical Date object ranges.
+    const date = new Date(totalSeconds * 1000);
+    if (isNaN(date.getTime())) {
+      // This would happen if totalSeconds * 1000 results in a value Date cannot handle,
+      // despite totalSeconds being finite and non-negative. Unlikely for video durations.
+      return "??:??";
+    }
+    const minutes = date.getUTCMinutes();
+    const seconds = date.getUTCSeconds();
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  } catch (e) {
+    console.error("Error formatting seconds to MM:SS:", totalSeconds, e);
+    return "!!:!!"; // Fallback for unexpected errors
+  }
+};
+
+
 export default function TranscriptionWorkspace({
   videoSrc,
   clips,
@@ -180,8 +203,7 @@ export default function TranscriptionWorkspace({
             Clip {currentClipIndex + 1} of {clips.length}
             {currentClip && (
               <span className="ml-2 text-xs text-muted-foreground">
-                ({new Date(currentClip.startTime * 1000).toISOString().substr(14, 5)} - 
-                 {isFinite(currentClip.endTime) ? new Date(currentClip.endTime * 1000).toISOString().substr(14, 5) : "--:--"})
+                ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
               </span>
             )}
           </div>
@@ -322,3 +344,6 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
+
+
+    
