@@ -180,7 +180,21 @@ export default function TranscriptionWorkspace({
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
-      <div className="lg:w-2/3 w-full space-y-4">
+      <div className="lg:w-1/2 w-full space-y-4">
+        <Button 
+          onClick={handleTranscribe} 
+          disabled={isLoadingTranscription || isYouTubeVideo} 
+          className="w-full"
+          variant="outline"
+        >
+          {isLoadingTranscription ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Mic className="mr-2 h-4 w-4" />
+          )}
+          Transcribe This Clip (AI)
+          {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
+        </Button>
         <VideoPlayer
           src={videoSrc}
           startTime={currentClip?.startTime}
@@ -220,23 +234,9 @@ export default function TranscriptionWorkspace({
             <span className="sr-only">Next Clip</span>
           </Button>
         </div>
-         <Button 
-            onClick={handleTranscribe} 
-            disabled={isLoadingTranscription || isYouTubeVideo} 
-            className="w-full"
-            variant="outline"
-          >
-            {isLoadingTranscription ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Mic className="mr-2 h-4 w-4" />
-            )}
-            Transcribe This Clip (AI)
-            {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
-          </Button>
       </div>
 
-      <div className="lg:w-1/3 w-full">
+      <div className="lg:w-1/2 w-full">
         <Tabs defaultValue="ai" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="ai">AI Tools</TabsTrigger>
@@ -281,7 +281,7 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                     {isLoadingTranscription && <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />}
-                    {!isLoadingTranscription && automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" on the left to generate.</p>}
+                    {!isLoadingTranscription && automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the video to generate.</p>}
                   </ScrollArea>
                 </div>
 
