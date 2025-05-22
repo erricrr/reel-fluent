@@ -7,31 +7,32 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UploadCloud, Link as LinkIcon, FileVideo } from "lucide-react";
+import { UploadCloud, Link as LinkIcon, FileVideo, FileAudio } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 interface VideoInputFormProps {
-  onVideoLoad: (source: { file?: File; url?: string }) => void;
+  onSourceLoad: (source: { file?: File; url?: string }) => void;
   isLoading: boolean;
 }
 
-export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFormProps) {
+export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFormProps) {
   const [inputType, setInputType] = useState<"url" | "file">("file");
   const [url, setUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [draggedFileType, setDraggedFileType] = useState<'video' | 'audio' | null>(null);
 
   const processFile = (file: File | null | undefined) => {
     if (file) {
-      if (file.type.startsWith("video/")) {
-        onVideoLoad({ file });
+      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+        onSourceLoad({ file });
       } else {
         toast({
           variant: "destructive",
           title: "Invalid File Type",
-          description: "Please upload a valid video file.",
+          description: "Please upload a valid video or audio file (e.g., mp4, mp3, wav, ogg).",
         });
         if (fileInputRef.current) {
           fileInputRef.current.value = ""; // Reset file input
@@ -49,7 +50,7 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
     if (url.trim()) {
       try {
         new URL(url);
-        onVideoLoad({ url });
+        onSourceLoad({ url });
       } catch (error) {
         toast({
           variant: "destructive",
@@ -71,6 +72,17 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
     event.stopPropagation();
     if (!isLoading) {
       setIsDraggingOver(true);
+      const items = event.dataTransfer.items;
+      if (items && items.length > 0) {
+        const itemType = items[0].type;
+        if (itemType.startsWith('video/')) {
+          setDraggedFileType('video');
+        } else if (itemType.startsWith('audio/')) {
+          setDraggedFileType('audio');
+        } else {
+          setDraggedFileType(null);
+        }
+      }
     }
   };
 
@@ -78,33 +90,41 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
+    setDraggedFileType(null);
   };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
+    setDraggedFileType(null);
     if (isLoading) return;
 
     const files = event.dataTransfer.files;
     if (files && files.length > 0) {
-      // Check if any dropped item is a directory
       const items = event.dataTransfer.items;
       for (let i = 0; i < items.length; i++) {
         if (items[i].kind === 'file' && items[i].webkitGetAsEntry?.()?.isDirectory) {
           toast({
             variant: "destructive",
             title: "Folder Upload Not Supported",
-            description: "Please drag and drop a single video file, not a folder.",
+            description: "Please drag and drop a single video or audio file, not a folder.",
           });
           return;
         }
       }
-      processFile(files[0]); // Process the first file
+      processFile(files[0]);
        if (fileInputRef.current) {
-        fileInputRef.current.files = files; // Assign to file input for consistency
+        fileInputRef.current.files = files;
       }
     }
+  };
+  
+  const renderDragIcon = () => {
+    if (draggedFileType === 'audio') {
+      return <FileAudio className={cn("h-12 w-12", isDraggingOver ? "text-primary" : "text-muted-foreground")} />;
+    }
+    return <FileVideo className={cn("h-12 w-12", isDraggingOver ? "text-primary" : "text-muted-foreground")} />;
   };
 
   return (
@@ -125,18 +145,18 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
           onDrop={handleDrop}
         >
           <div className="flex flex-col items-center justify-center space-y-2 text-center">
-            <FileVideo className={cn("h-12 w-12", isDraggingOver ? "text-primary" : "text-muted-foreground")} />
-            <Label htmlFor="video-file-upload" className={cn("text-lg font-medium", isLoading ? "cursor-not-allowed": "cursor-pointer")}>
-              Drag & drop a video file here, or click to select
+            {renderDragIcon()}
+            <Label htmlFor="media-file-upload" className={cn("text-lg font-medium", isLoading ? "cursor-not-allowed": "cursor-pointer")}>
+              Drag & drop a video or audio file here, or click to select
             </Label>
             <Input
-              id="video-file-upload"
+              id="media-file-upload"
               type="file"
-              accept="video/*"
+              accept="video/*,audio/*"
               onChange={handleFileChange}
               ref={fileInputRef}
               disabled={isLoading}
-              className="sr-only" // Hidden, triggered by label or drop
+              className="sr-only"
             />
             <Button
               type="button"
@@ -150,7 +170,7 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
             </Button>
           </div>
            <p className="text-xs text-muted-foreground text-center">
-            Your video will be processed locally and automatically divided into 1-minute practice clips. Max 1 file.
+            Video files will be divided into 1-minute clips. Audio files will be treated as a single clip. Max 1 file.
           </p>
         </div>
       </TabsContent>
@@ -171,7 +191,7 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
             {isLoading ? "Loading..." : "Load Video from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-            Note: For direct video URLs (non-YouTube), the video will be divided into 1-minute clips. Full functionality like transcription is best supported with uploaded files. YouTube links are primarily for viewing and will not be clipped.
+            Note: For direct video URLs (non-YouTube), the video will be divided into 1-minute clips. YouTube links are primarily for viewing and will not be clipped. Audio URLs are not supported.
           </p>
         </form>
       </TabsContent>

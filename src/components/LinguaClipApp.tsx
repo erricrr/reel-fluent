@@ -9,7 +9,7 @@ import LanguageSelector from "./LanguageSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileVideo, X as XIcon } from "lucide-react";
+import { FileVideo, X as XIcon, FileAudio } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, extractAudioFromVideoSegment, type Clip } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
@@ -17,84 +17,85 @@ import { transcriptionFeedback } from "@/ai/flows/transcription-feedback";
 import { compareTranscriptions, type CompareTranscriptionsOutput } from "@/ai/flows/compare-transcriptions-flow";
 
 export default function LinguaClipApp() {
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | undefined>(undefined);
-  const [videoSrc, setVideoSrc] = useState<string | undefined>(undefined);
-  const [videoDisplayName, setVideoDisplayName] = useState<string | null>(null);
-  const [videoDuration, setVideoDuration] = useState<number>(0);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceUrl, setSourceUrl] = useState<string | undefined>(undefined); // Used for YouTube or direct video URLs
+  const [mediaSrc, setMediaSrc] = useState<string | undefined>(undefined); // Object URL for files, or direct URL
+  const [mediaDisplayName, setMediaDisplayName] = useState<string | null>(null);
+  const [mediaDuration, setMediaDuration] = useState<number>(0);
   const [clips, setClips] = useState<Clip[]>([]);
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
   const [language, setLanguage] = useState<string>("vietnamese");
   const [comparisonResult, setComparisonResult] = useState<CompareTranscriptionsOutput['comparisonResult'] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | null>(null);
 
-  const videoProcessingIdRef = useRef<number>(0); // To manage concurrent/stale video processing
+
+  const processingIdRef = useRef<number>(0);
 
   const { toast } = useToast();
 
-  const isYouTubeVideo = videoUrl?.includes("youtube.com") || videoUrl?.includes("youtu.be") || false;
+  const isYouTubeVideo = sourceUrl?.includes("youtube.com") || sourceUrl?.includes("youtu.be") || false;
 
   const resetAppState = useCallback(() => {
-    videoProcessingIdRef.current += 1; // Invalidate previous processing attempts
+    processingIdRef.current += 1; 
 
-    setVideoFile(null);
-    setVideoUrl(undefined);
-    setVideoSrc(undefined);
-    setVideoDisplayName(null);
-    setVideoDuration(0);
+    setSourceFile(null);
+    setSourceUrl(undefined);
+    setMediaSrc(undefined);
+    setMediaDisplayName(null);
+    setMediaDuration(0);
     setClips([]);
     setCurrentClipIndex(0);
     setIsLoading(false);
     setComparisonResult(null);
-    // setLanguage("vietnamese"); // Optionally reset language, or keep user's preference
+    setCurrentSourceType(null);
   }, []);
 
-  const handleVideoLoad = useCallback(async (source: { file?: File; url?: string }) => {
-    resetAppState(); // Reset state and generate new processing ID
-    const currentProcessingId = videoProcessingIdRef.current;
-
+  const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
+    resetAppState(); 
+    const currentProcessingId = processingIdRef.current;
     setIsLoading(true);
-    let currentVideoSrc: string | undefined = undefined;
+    let currentMediaSrc: string | undefined = undefined;
     let displayName: string | null = null;
 
     if (source.file) {
-      setVideoFile(source.file);
+      setSourceFile(source.file);
       displayName = source.file.name;
       const objectURL = URL.createObjectURL(source.file);
-      setVideoSrc(objectURL);
-      currentVideoSrc = objectURL;
+      setMediaSrc(objectURL);
+      currentMediaSrc = objectURL;
+      setCurrentSourceType(source.file.type.startsWith('video/') ? 'video' : 'audio');
     } else if (source.url) {
-      setVideoUrl(source.url);
+      setSourceUrl(source.url);
       displayName = source.url;
-      setVideoSrc(source.url);
-      currentVideoSrc = source.url;
-      if (source.url.includes("youtube.com") || source.url.includes("youtu.be")) {
-        if (videoProcessingIdRef.current !== currentProcessingId) return; // Stale process
-        setVideoDisplayName(displayName);
+      setMediaSrc(source.url);
+      currentMediaSrc = source.url;
+      setCurrentSourceType('url');
+      if (isYouTubeVideo) {
+        if (processingIdRef.current !== currentProcessingId) return; 
+        setMediaDisplayName(displayName);
         setClips([{ id: 'yt-full', startTime: 0, endTime: Infinity }]);
-        setVideoDuration(Infinity);
+        setMediaDuration(Infinity);
         setIsLoading(false);
         toast({ title: "YouTube Video Loaded", description: "Viewing YouTube video. Transcription/clip features are limited." });
         return;
       }
     } else {
-      if (videoProcessingIdRef.current !== currentProcessingId) return; // Stale process
-      toast({ variant: "destructive", title: "Error", description: "No video source provided." });
+      if (processingIdRef.current !== currentProcessingId) return; 
+      toast({ variant: "destructive", title: "Error", description: "No media source provided." });
       setIsLoading(false);
       return;
     }
 
-    if (videoProcessingIdRef.current !== currentProcessingId) return; // Stale process
-    setVideoDisplayName(displayName);
+    if (processingIdRef.current !== currentProcessingId) return; 
+    setMediaDisplayName(displayName);
 
-    if (currentVideoSrc && !(source.url?.includes("youtube.com") || source.url?.includes("youtu.be"))) {
+    if (currentMediaSrc && !isYouTubeVideo) {
+      if (source.file?.type.startsWith("video/")) {
         const tempVideo = document.createElement('video');
         tempVideo.onloadedmetadata = () => {
-            if (videoProcessingIdRef.current !== currentProcessingId) {
-              console.log("Stale onloadedmetadata ignored for ID:", currentProcessingId);
-              return;
-            }
-            setVideoDuration(tempVideo.duration);
+            if (processingIdRef.current !== currentProcessingId) return;
+            setMediaDuration(tempVideo.duration);
             const generatedClips = generateClips(tempVideo.duration);
             setClips(generatedClips);
             if (generatedClips.length > 0) {
@@ -105,30 +106,65 @@ export default function LinguaClipApp() {
             setIsLoading(false);
         };
         tempVideo.onerror = () => {
-            if (videoProcessingIdRef.current !== currentProcessingId) {
-              console.log("Stale onerror ignored for ID:", currentProcessingId);
-              return;
-            }
-            toast({ variant: "destructive", title: "Error", description: "Could not load video metadata. The video file might be corrupted or in an unsupported format." });
+            if (processingIdRef.current !== currentProcessingId) return;
+            toast({ variant: "destructive", title: "Error", description: "Could not load video metadata." });
             setIsLoading(false);
-            resetAppState(); // Reset if this specific load attempt fails
+            resetAppState();
         };
-        tempVideo.src = currentVideoSrc;
+        tempVideo.src = currentMediaSrc;
         tempVideo.load();
-    } else if (!currentVideoSrc) { // Handles if currentVideoSrc somehow became undefined for non-YT
-        if (videoProcessingIdRef.current !== currentProcessingId) return;
+      } else if (source.file?.type.startsWith("audio/")) {
+        const tempAudio = document.createElement('audio');
+        tempAudio.onloadedmetadata = () => {
+            if (processingIdRef.current !== currentProcessingId) return;
+            setMediaDuration(tempAudio.duration);
+            setClips([{ id: 'audio-full-0', startTime: 0, endTime: tempAudio.duration }]);
+            toast({ title: "Audio File Processed", description: `1 clip generated for the full audio duration (${Math.round(tempAudio.duration)}s).` });
+            setIsLoading(false);
+        };
+        tempAudio.onerror = () => {
+            if (processingIdRef.current !== currentProcessingId) return;
+            toast({ variant: "destructive", title: "Error", description: "Could not load audio metadata." });
+            setIsLoading(false);
+            resetAppState();
+        };
+        tempAudio.src = currentMediaSrc;
+        tempAudio.load();
+      } else if (source.url) { // Direct video URL (non-YouTube)
+        const tempVideo = document.createElement('video');
+        tempVideo.onloadedmetadata = () => {
+            if (processingIdRef.current !== currentProcessingId) return;
+            setMediaDuration(tempVideo.duration);
+            const generatedClips = generateClips(tempVideo.duration);
+            setClips(generatedClips);
+             if (generatedClips.length > 0) {
+              toast({ title: "Video URL Processed", description: `${generatedClips.length} clips generated.` });
+            } else {
+              toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips for video URL." });
+            }
+            setIsLoading(false);
+        };
+        tempVideo.onerror = () => {
+            if (processingIdRef.current !== currentProcessingId) return;
+            toast({ variant: "destructive", title: "Error", description: "Could not load video URL metadata." });
+            setIsLoading(false);
+            resetAppState();
+        };
+        tempVideo.src = currentMediaSrc; // This is source.url
+        tempVideo.load();
+      }
+    } else if (!currentMediaSrc && !isYouTubeVideo) { 
+        if (processingIdRef.current !== currentProcessingId) return;
         setIsLoading(false);
-        toast({ variant: "destructive", title: "Error", description: "Video source became unavailable." });
+        toast({ variant: "destructive", title: "Error", description: "Media source became unavailable." });
     }
-
-
-  }, [toast, resetAppState]);
+  }, [toast, resetAppState, isYouTubeVideo]);
 
 
   useEffect(() => {
     let objectUrlToRevoke: string | undefined;
-    if (videoFile && videoSrc?.startsWith('blob:')) {
-      objectUrlToRevoke = videoSrc;
+    if (sourceFile && mediaSrc?.startsWith('blob:')) {
+      objectUrlToRevoke = mediaSrc;
     }
     return () => {
       if (objectUrlToRevoke) {
@@ -136,7 +172,7 @@ export default function LinguaClipApp() {
         console.log("Revoked ObjectURL:", objectUrlToRevoke);
       }
     };
-  }, [videoFile, videoSrc]);
+  }, [sourceFile, mediaSrc]);
 
 
   const handleNextClip = () => {
@@ -161,17 +197,18 @@ export default function LinguaClipApp() {
   const handleTranscribeAudio = async (): Promise<string | null> => {
     const currentClipToTranscribe = clips[currentClipIndex];
     setComparisonResult(null);
-    if (!videoSrc || isYouTubeVideo || !currentClipToTranscribe) {
-      toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure an uploaded video and clip are active."});
+    if (!mediaSrc || isYouTubeVideo || !currentClipToTranscribe) {
+      toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure an uploaded video/audio and clip are active."});
       return null;
     }
 
     let audioDataUri: string | null = null;
     try {
-        audioDataUri = await extractAudioFromVideoSegment(videoSrc, currentClipToTranscribe.startTime, currentClipToTranscribe.endTime);
+        // mediaSrc here is the object URL for the full uploaded file, or the direct URL
+        audioDataUri = await extractAudioFromVideoSegment(mediaSrc, currentClipToTranscribe.startTime, currentClipToTranscribe.endTime);
     } catch (error) {
         console.error("Audio extraction failed:", error);
-        toast({variant: "destructive", title: "Audio Extraction Failed", description: (error as Error).message || "Could not extract audio for transcription. The video format might not be fully compatible."});
+        toast({variant: "destructive", title: "Audio Extraction Failed", description: (error as Error).message || "Could not extract audio for transcription."});
         return null;
     }
 
@@ -235,13 +272,19 @@ export default function LinguaClipApp() {
   };
 
   const handleRemoveClip = (clipIdToRemove: string) => {
-    videoProcessingIdRef.current += 1; // Invalidate any pending video processing tied to old clip set
+    processingIdRef.current += 1; 
     const removedClipOriginalIndex = clips.findIndex(clip => clip.id === clipIdToRemove);
     if (removedClipOriginalIndex === -1) return;
 
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
     if (newClips.length === 0) {
+      // If it was an audio file with only one clip, and it's removed, reset entirely
+      if (sourceFile?.type.startsWith('audio/')) {
+        resetAppState();
+        toast({ title: "Audio Clip Removed", description: "The audio file has been cleared." });
+        return;
+      }
       setClips([]);
       setCurrentClipIndex(0);
       setComparisonResult(null);
@@ -261,6 +304,7 @@ export default function LinguaClipApp() {
     toast({ title: "Clip Removed", description: "The selected clip has been removed from the list." });
   };
 
+  const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -268,36 +312,36 @@ export default function LinguaClipApp() {
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg">
           <CardContent className="p-6 space-y-6">
-            {videoSrc && videoDisplayName ? (
+            {mediaSrc && mediaDisplayName ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/50 shadow-sm">
                   <div className="flex items-center gap-3 min-w-0">
-                    <FileVideo className="h-6 w-6 text-primary flex-shrink-0" />
-                    <span className="text-sm font-medium truncate" title={videoDisplayName}>
-                      {videoDisplayName}
+                    <LoadedMediaIcon className="h-6 w-6 text-primary flex-shrink-0" />
+                    <span className="text-sm font-medium truncate" title={mediaDisplayName}>
+                      {mediaDisplayName}
                     </span>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={resetAppState} aria-label="Remove video">
+                  <Button variant="ghost" size="icon" onClick={resetAppState} aria-label="Remove media">
                     <XIcon className="h-5 w-5" />
                   </Button>
                 </div>
                 <Button onClick={resetAppState} variant="outline" className="w-full">
-                  Clear Loaded Video
+                  Clear Loaded Media
                 </Button>
-                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !videoSrc} />
+                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc} />
               </div>
             ) : (
               <>
-                <VideoInputForm onVideoLoad={handleVideoLoad} isLoading={isLoading} />
-                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !videoSrc} />
+                <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading} />
+                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc} />
               </>
             )}
           </CardContent>
         </Card>
 
-        {videoSrc && clips.length > 0 && (
+        {mediaSrc && clips.length > 0 && (
           <TranscriptionWorkspace
-            videoSrc={videoSrc}
+            mediaSrc={mediaSrc}
             clips={clips}
             currentClipIndex={currentClipIndex}
             onNextClip={handleNextClip}
@@ -309,11 +353,12 @@ export default function LinguaClipApp() {
             comparisonResult={comparisonResult}
             isYouTubeVideo={isYouTubeVideo}
             language={language}
+            isAudioSource={currentSourceType === 'audio'}
           />
         )}
-        {isLoading && videoSrc === undefined && (
+        {isLoading && mediaSrc === undefined && (
           <div className="text-center py-10">
-            <p className="text-lg text-primary animate-pulse">Processing video...</p>
+            <p className="text-lg text-primary animate-pulse">Processing media...</p>
           </div>
         )}
       </main>
@@ -323,4 +368,3 @@ export default function LinguaClipApp() {
     </div>
   );
 }
-

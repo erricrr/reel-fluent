@@ -14,7 +14,7 @@ import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken, CompareTranscriptionsOutput } from '@/ai/flows/compare-transcriptions-flow';
 
 interface TranscriptionWorkspaceProps {
-  videoSrc?: string;
+  mediaSrc?: string;
   clips: Clip[];
   currentClipIndex: number;
   onNextClip: () => void;
@@ -26,6 +26,7 @@ interface TranscriptionWorkspaceProps {
   comparisonResult: CompareTranscriptionsOutput['comparisonResult'] | null;
   isYouTubeVideo: boolean;
   language: string;
+  isAudioSource?: boolean;
 }
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -33,8 +34,8 @@ const formatSecondsToMMSS = (totalSeconds: number): string => {
     return "--:--"; 
   }
   try {
-    const date = new Date(0); // Use a base date
-    date.setSeconds(totalSeconds); // Set seconds, handles overflow to minutes/hours
+    const date = new Date(0); 
+    date.setSeconds(totalSeconds); 
     const minutes = date.getUTCMinutes();
     const seconds = date.getUTCSeconds();
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
@@ -46,7 +47,7 @@ const formatSecondsToMMSS = (totalSeconds: number): string => {
 
 
 export default function TranscriptionWorkspace({
-  videoSrc,
+  mediaSrc,
   clips,
   currentClipIndex,
   onNextClip,
@@ -58,6 +59,7 @@ export default function TranscriptionWorkspace({
   comparisonResult,
   isYouTubeVideo,
   language,
+  isAudioSource = false,
 }: TranscriptionWorkspaceProps) {
   const [userTranscription, setUserTranscription] = useState("");
   const [automatedTranscription, setAutomatedTranscription] = useState<string | null>(null);
@@ -78,11 +80,11 @@ export default function TranscriptionWorkspace({
     setIsLoadingFeedback(false);
     setIsLoadingCorrections(false);
     setActiveTab("manual"); 
-  }, [currentClipIndex, videoSrc, language, clips]);
+  }, [currentClipIndex, mediaSrc, language, clips]);
 
   const handleTranscribe = async () => {
     if (!currentClip || isYouTubeVideo) {
-      alert("Transcription is only available for uploaded videos and active clips.");
+      alert(`Transcription is only available for uploaded ${isAudioSource ? 'audio' : 'video'} files and active clips.`);
       return;
     }
     
@@ -146,10 +148,10 @@ export default function TranscriptionWorkspace({
   };
 
 
-  if (!videoSrc || clips.length === 0 || !currentClip) { 
+  if (!mediaSrc || clips.length === 0 || !currentClip) { 
     return (
       <div className="text-center py-10 text-muted-foreground">
-        <p>Load a video and ensure clips are generated to begin.</p>
+        <p>Load a video or audio file and ensure clips are generated to begin.</p>
       </div>
     );
   }
@@ -197,10 +199,12 @@ export default function TranscriptionWorkspace({
           {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
         </Button>
         <VideoPlayer
-          src={videoSrc}
+          src={mediaSrc}
           startTime={currentClip?.startTime}
           endTime={currentClip?.endTime}
           className="shadow-lg rounded-lg"
+          // Pass isAudioSource to VideoPlayer if you want it to render differently for audio
+          // For now, it will use a <video> tag which can play audio.
         />
         <div className="flex justify-between items-center p-2 bg-card rounded-lg shadow">
           <Button onClick={onPrevClip} disabled={currentClipIndex === 0} variant="outline" size="icon">
@@ -282,7 +286,7 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                     {isLoadingTranscription && <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />}
-                    {!isLoadingTranscription && automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the video to generate.</p>}
+                    {!isLoadingTranscription && automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the player to generate.</p>}
                   </ScrollArea>
                 </div>
 
@@ -353,4 +357,3 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
-
