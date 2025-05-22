@@ -1,3 +1,4 @@
+
 "use client";
 
 import type * as React from 'react';
@@ -127,7 +128,7 @@ export default function TranscriptionWorkspace({
             {currentClip && (
               <span className="ml-2 text-xs text-muted-foreground">
                 ({new Date(currentClip.startTime * 1000).toISOString().substr(14, 5)} - 
-                 {new Date(currentClip.endTime * 1000).toISOString().substr(14, 5)})
+                 {isFinite(currentClip.endTime) ? new Date(currentClip.endTime * 1000).toISOString().substr(14, 5) : "--:--"})
               </span>
             )}
           </div>
