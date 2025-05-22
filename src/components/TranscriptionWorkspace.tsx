@@ -65,7 +65,7 @@ export default function TranscriptionWorkspace({
   const [isLoadingTranscription, setIsLoadingTranscription] = useState(false);
   const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
   const [isLoadingCorrections, setIsLoadingCorrections] = useState(false);
-  const [activeTab, setActiveTab] = useState("ai");
+  const [activeTab, setActiveTab] = useState("manual");
 
 
   const currentClip = clips[currentClipIndex];
@@ -77,7 +77,8 @@ export default function TranscriptionWorkspace({
     setIsLoadingTranscription(false);
     setIsLoadingFeedback(false);
     setIsLoadingCorrections(false);
-  }, [currentClipIndex, videoSrc, language, clips]); // Added clips dependency
+    setActiveTab("manual"); 
+  }, [currentClipIndex, videoSrc, language, clips]);
 
   const handleTranscribe = async () => {
     if (!currentClip || isYouTubeVideo) {
@@ -145,7 +146,7 @@ export default function TranscriptionWorkspace({
   };
 
 
-  if (!videoSrc || clips.length === 0 || !currentClip) { // Added !currentClip check
+  if (!videoSrc || clips.length === 0 || !currentClip) { 
     return (
       <div className="text-center py-10 text-muted-foreground">
         <p>Load a video and ensure clips are generated to begin.</p>
@@ -237,17 +238,17 @@ export default function TranscriptionWorkspace({
       </div>
 
       <div className="lg:w-1/2 w-full">
-        <Tabs defaultValue="ai" value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs defaultValue="manual" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="ai">AI Tools</TabsTrigger>
             <TabsTrigger value="manual">Your Transcription</TabsTrigger>
+            <TabsTrigger value="ai" disabled={!userTranscription.trim()}>AI Tools</TabsTrigger>
           </TabsList>
           
           <TabsContent value="manual" className="mt-4">
             <Card>
               <CardHeader>
                 <CardTitle>Type What You Hear</CardTitle>
-                <CardDescription>Listen to the clip and type the dialogue below. Then, check the "AI Tools" tab.</CardDescription>
+                <CardDescription>Listen to the clip and type the dialogue below. Then, the "AI Tools" tab will unlock.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Textarea
@@ -352,3 +353,4 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
+
