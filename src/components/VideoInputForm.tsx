@@ -150,7 +150,7 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
             </Button>
           </div>
            <p className="text-xs text-muted-foreground text-center">
-            Your video will be processed locally in your browser. Max 1 file.
+            Your video will be processed locally and automatically divided into 1-minute practice clips. Max 1 file.
           </p>
         </div>
       </TabsContent>
@@ -171,7 +171,7 @@ export default function VideoInputForm({ onVideoLoad, isLoading }: VideoInputFor
             {isLoading ? "Loading..." : "Load Video from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-            Note: Full functionality like transcription is best supported with uploaded files. YouTube links primarily for viewing.
+            Note: For direct video URLs (non-YouTube), the video will be divided into 1-minute clips. Full functionality like transcription is best supported with uploaded files. YouTube links are primarily for viewing and will not be clipped.
           </p>
         </form>
       </TabsContent>
