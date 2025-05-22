@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { generateClips, extractAudioFromVideoSegment, type Clip } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
 import { transcriptionFeedback } from "@/ai/flows/transcription-feedback";
+import { compareTranscriptions, type CompareTranscriptionsOutput } from "@/ai/flows/compare-transcriptions-flow";
 
 export default function LinguaClipApp() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -21,6 +22,8 @@ export default function LinguaClipApp() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
   const [language, setLanguage] = useState<string>("vietnamese"); // Default language
+  const [comparisonResult, setComparisonResult] = useState<CompareTranscriptionsOutput['comparisonResult'] | null>(null);
+
 
   const [isLoading, setIsLoading] = useState<boolean>(false); // General loading for video processing
   
@@ -37,6 +40,7 @@ export default function LinguaClipApp() {
     setClips([]);
     setCurrentClipIndex(0);
     setIsLoading(false);
+    setComparisonResult(null);
   };
 
   const handleVideoLoad = useCallback(async (source: { file?: File; url?: string }) => {
@@ -78,7 +82,6 @@ export default function LinguaClipApp() {
               toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips. Video may be too short or invalid." });
             }
             setIsLoading(false);
-            // Note: objectURL (if from file) is kept in videoSrc state for the player
         };
         tempVideo.onerror = () => {
             toast({ variant: "destructive", title: "Error", description: "Could not load video metadata. The video file might be corrupted or in an unsupported format." });
@@ -86,13 +89,12 @@ export default function LinguaClipApp() {
             resetAppState();
         };
         tempVideo.src = currentVideoSrc;
-        tempVideo.load(); // Explicitly load
+        tempVideo.load(); 
     }
 
-  }, [toast, isYouTubeVideo]); // Added isYouTubeVideo dependency
+  }, [toast, isYouTubeVideo]); 
 
 
-  // Cleanup ObjectURL
   useEffect(() => {
     let objectUrlToRevoke: string | undefined;
     if (videoFile && videoSrc?.startsWith('blob:')) {
@@ -110,21 +112,25 @@ export default function LinguaClipApp() {
   const handleNextClip = () => {
     if (currentClipIndex < clips.length - 1) {
       setCurrentClipIndex(currentClipIndex + 1);
+      setComparisonResult(null); 
     }
   };
 
   const handlePrevClip = () => {
     if (currentClipIndex > 0) {
       setCurrentClipIndex(currentClipIndex - 1);
+      setComparisonResult(null);
     }
   };
 
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
+    setComparisonResult(null); 
   };
 
   const handleTranscribeAudio = async (): Promise<string | null> => {
     const currentClipToTranscribe = clips[currentClipIndex];
+    setComparisonResult(null); 
     if (!videoSrc || isYouTubeVideo || !currentClipToTranscribe) {
       toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure an uploaded video and clip are active."});
       return null;
@@ -175,6 +181,29 @@ export default function LinguaClipApp() {
     }
   };
 
+  const handleGetCorrections = async (userTranscription: string, automatedTranscription: string): Promise<CompareTranscriptionsOutput['comparisonResult'] | null> => {
+    if (isYouTubeVideo) {
+      toast({variant: "destructive", title: "Comparison Error", description: "Comparison is not available for YouTube videos."});
+      return null;
+    }
+    setComparisonResult(null); 
+    try {
+      const result = await compareTranscriptions({
+        userTranscription,
+        automatedTranscription,
+        language,
+      });
+      setComparisonResult(result.comparisonResult);
+      toast({ title: "Comparison Complete" });
+      return result.comparisonResult;
+    } catch (error) {
+      console.error("AI Comparison error:", error);
+      toast({ variant: "destructive", title: "AI Error", description: "Failed to generate comparison." });
+      setComparisonResult([{ token: "Error generating comparison.", status: "incorrect" }]);
+      return null;
+    }
+  };
+
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -196,10 +225,13 @@ export default function LinguaClipApp() {
             onPrevClip={handlePrevClip}
             onTranscribeAudio={handleTranscribeAudio}
             onGetFeedback={handleGetFeedback}
+            onGetCorrections={handleGetCorrections}
+            comparisonResult={comparisonResult}
             isYouTubeVideo={isYouTubeVideo}
+            language={language}
           />
         )}
-        {isLoading && videoSrc === undefined && ( // Show processing only if videoSrc is not yet set
+        {isLoading && videoSrc === undefined && ( 
           <div className="text-center py-10">
             <p className="text-lg text-primary animate-pulse">Processing video...</p>
           </div>
