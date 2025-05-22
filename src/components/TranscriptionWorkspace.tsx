@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, Mic, Sparkles, Loader2, FileDiff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mic, Sparkles, Loader2, FileDiff, Trash2 as Trash2Icon } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken, CompareTranscriptionsOutput } from '@/ai/flows/compare-transcriptions-flow';
 
@@ -22,6 +22,7 @@ interface TranscriptionWorkspaceProps {
   onTranscribeAudio: () => Promise<string | null>;
   onGetFeedback: (userTranscription: string, automatedTranscription: string) => Promise<string | null>;
   onGetCorrections: (userTranscription: string, automatedTranscription: string) => Promise<CompareTranscriptionsOutput['comparisonResult'] | null>;
+  onRemoveClip: (clipId: string) => void;
   comparisonResult: CompareTranscriptionsOutput['comparisonResult'] | null;
   isYouTubeVideo: boolean;
   language: string;
@@ -29,23 +30,17 @@ interface TranscriptionWorkspaceProps {
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
   if (!isFinite(totalSeconds) || totalSeconds < 0) {
-    return "--:--"; // Handle Infinity, NaN, negative numbers
+    return "--:--"; 
   }
   try {
-    // Using Date object. Note: For extremely large numbers of seconds, this could hit Date limits,
-    // but video durations should be well within typical Date object ranges.
-    const date = new Date(totalSeconds * 1000);
-    if (isNaN(date.getTime())) {
-      // This would happen if totalSeconds * 1000 results in a value Date cannot handle,
-      // despite totalSeconds being finite and non-negative. Unlikely for video durations.
-      return "??:??";
-    }
+    const date = new Date(0); // Use a base date
+    date.setSeconds(totalSeconds); // Set seconds, handles overflow to minutes/hours
     const minutes = date.getUTCMinutes();
     const seconds = date.getUTCSeconds();
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   } catch (e) {
     console.error("Error formatting seconds to MM:SS:", totalSeconds, e);
-    return "!!:!!"; // Fallback for unexpected errors
+    return "!!:!!"; 
   }
 };
 
@@ -59,6 +54,7 @@ export default function TranscriptionWorkspace({
   onTranscribeAudio,
   onGetFeedback,
   onGetCorrections,
+  onRemoveClip,
   comparisonResult,
   isYouTubeVideo,
   language,
@@ -78,11 +74,10 @@ export default function TranscriptionWorkspace({
     setUserTranscription("");
     setAutomatedTranscription(null);
     setFeedback(null);
-    // comparisonResult is managed by parent, but reset internal loading states
     setIsLoadingTranscription(false);
     setIsLoadingFeedback(false);
     setIsLoadingCorrections(false);
-  }, [currentClipIndex, videoSrc, language]); // Added language dependency to reset states if language changes
+  }, [currentClipIndex, videoSrc, language, clips]); // Added clips dependency
 
   const handleTranscribe = async () => {
     if (!currentClip || isYouTubeVideo) {
@@ -93,7 +88,6 @@ export default function TranscriptionWorkspace({
     setIsLoadingTranscription(true);
     setAutomatedTranscription(null); 
     setFeedback(null);
-    // comparisonResult will be reset by parent via prop change if needed, or handled by handleCorrections
     
     try {
       const transcription = await onTranscribeAudio();
@@ -145,17 +139,16 @@ export default function TranscriptionWorkspace({
       await onGetCorrections(userTranscription, automatedTranscription);
     } catch (error) {
       console.error("Corrections error in workspace:", error);
-      // Error toast is handled by LinguaClipApp
     } finally {
       setIsLoadingCorrections(false);
     }
   };
 
 
-  if (!videoSrc || clips.length === 0) {
+  if (!videoSrc || clips.length === 0 || !currentClip) { // Added !currentClip check
     return (
       <div className="text-center py-10 text-muted-foreground">
-        <p>Load a video to begin.</p>
+        <p>Load a video and ensure clips are generated to begin.</p>
       </div>
     );
   }
@@ -199,14 +192,29 @@ export default function TranscriptionWorkspace({
             <ChevronLeft className="h-5 w-5" />
             <span className="sr-only">Previous Clip</span>
           </Button>
-          <div className="text-sm font-medium text-foreground">
-            Clip {currentClipIndex + 1} of {clips.length}
-            {currentClip && (
-              <span className="ml-2 text-xs text-muted-foreground">
-                ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-              </span>
+          
+          <div className="text-center space-y-1">
+            <div className="text-sm font-medium text-foreground">
+              Clip {currentClipIndex + 1} of {clips.length}
+              {currentClip && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
+                </span>
+              )}
+            </div>
+            {currentClip && onRemoveClip && !isYouTubeVideo && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2 py-1 h-auto"
+                onClick={() => onRemoveClip(currentClip.id)}
+                aria-label="Remove this clip"
+              >
+                <Trash2Icon className="h-3 w-3 mr-1" /> Remove This Clip
+              </Button>
             )}
           </div>
+
           <Button onClick={onNextClip} disabled={currentClipIndex === clips.length - 1 || clips.length === 0} variant="outline" size="icon">
             <ChevronRight className="h-5 w-5" />
             <span className="sr-only">Next Clip</span>
@@ -344,6 +352,3 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
-
-
-    

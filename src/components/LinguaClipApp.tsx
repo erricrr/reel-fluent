@@ -214,6 +214,39 @@ export default function LinguaClipApp() {
     }
   };
 
+  const handleRemoveClip = (clipIdToRemove: string) => {
+    const removedClipOriginalIndex = clips.findIndex(clip => clip.id === clipIdToRemove);
+    if (removedClipOriginalIndex === -1) return; // Should not happen
+
+    const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
+
+    if (newClips.length === 0) {
+      setClips([]);
+      setCurrentClipIndex(0);
+      setComparisonResult(null);
+      // Optionally, could call a more comprehensive reset if all clips are gone
+      // resetAppState(); // This would clear the video source too, might not be desired
+    } else {
+      let newCurrentIdx = currentClipIndex;
+      if (removedClipOriginalIndex < currentClipIndex) {
+        newCurrentIdx = Math.max(0, currentClipIndex - 1);
+      } else if (removedClipOriginalIndex === currentClipIndex) {
+        // If the current clip was removed, try to stay at the same index if a new clip takes its place,
+        // or move to the new last clip if the removed clip was effectively the last one accessible at that index.
+        newCurrentIdx = Math.min(currentClipIndex, newClips.length - 1);
+      }
+      // If removedClipOriginalIndex > currentClipIndex, newCurrentIdx doesn't need to change based on removal
+      
+      // Final clamp to ensure newCurrentIdx is within the bounds of the newClips array
+      newCurrentIdx = Math.max(0, Math.min(newCurrentIdx, newClips.length - 1));
+
+      setClips(newClips);
+      setCurrentClipIndex(newCurrentIdx);
+      setComparisonResult(null); // Reset comparison as the clip context has changed
+    }
+    toast({ title: "Clip Removed", description: "The selected clip has been removed from the list." });
+  };
+
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -258,6 +291,7 @@ export default function LinguaClipApp() {
             onTranscribeAudio={handleTranscribeAudio}
             onGetFeedback={handleGetFeedback}
             onGetCorrections={handleGetCorrections}
+            onRemoveClip={handleRemoveClip}
             comparisonResult={comparisonResult}
             isYouTubeVideo={isYouTubeVideo}
             language={language}
