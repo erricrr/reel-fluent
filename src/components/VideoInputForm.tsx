@@ -170,7 +170,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             </Button>
           </div>
            <p className="text-xs text-muted-foreground text-center">
-            Video files will be divided into 1-minute clips. Audio files will be treated as a single clip. Max 1 file.
+            Video and audio files will be divided into 1-minute clips. Max 1 file.
           </p>
         </div>
       </TabsContent>
@@ -198,3 +198,5 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
     </Tabs>
   );
 }
+
+    

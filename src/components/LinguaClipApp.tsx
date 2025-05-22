@@ -118,8 +118,13 @@ export default function LinguaClipApp() {
         tempAudio.onloadedmetadata = () => {
             if (processingIdRef.current !== currentProcessingId) return;
             setMediaDuration(tempAudio.duration);
-            setClips([{ id: 'audio-full-0', startTime: 0, endTime: tempAudio.duration }]);
-            toast({ title: "Audio File Processed", description: `1 clip generated for the full audio duration (${Math.round(tempAudio.duration)}s).` });
+            const generatedClips = generateClips(tempAudio.duration);
+            setClips(generatedClips);
+            if (generatedClips.length > 0) {
+              toast({ title: "Audio File Processed", description: `${generatedClips.length} clips generated.` });
+            } else {
+              toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips. Audio may be too short or invalid." });
+            }
             setIsLoading(false);
         };
         tempAudio.onerror = () => {
@@ -279,10 +284,10 @@ export default function LinguaClipApp() {
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
     if (newClips.length === 0) {
-      // If it was an audio file with only one clip, and it's removed, reset entirely
-      if (sourceFile?.type.startsWith('audio/')) {
+      // If all clips from an audio or video file are removed, reset the app state.
+      if (sourceFile?.type.startsWith('audio/') || sourceFile?.type.startsWith('video/')) {
         resetAppState();
-        toast({ title: "Audio Clip Removed", description: "The audio file has been cleared." });
+        toast({ title: "Media Cleared", description: "All clips have been removed and the media file has been cleared." });
         return;
       }
       setClips([]);
@@ -368,3 +373,5 @@ export default function LinguaClipApp() {
     </div>
   );
 }
+
+    
