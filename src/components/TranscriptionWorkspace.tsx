@@ -18,7 +18,7 @@ interface TranscriptionWorkspaceProps {
   currentClipIndex: number;
   onNextClip: () => void;
   onPrevClip: () => void;
-  onTranscribeAudio: () => Promise<string | null>; // No audioDataUri parameter
+  onTranscribeAudio: () => Promise<string | null>;
   onGetFeedback: (userTranscription: string, automatedTranscription: string) => Promise<string | null>;
   isYouTubeVideo: boolean;
 }
@@ -45,10 +45,10 @@ export default function TranscriptionWorkspace({
     setUserTranscription("");
     setAutomatedTranscription(null);
     setFeedback(null);
-  }, [currentClipIndex, videoSrc]); // Added videoSrc dependency to reset on new video
+  }, [currentClipIndex, videoSrc]);
 
   const handleTranscribe = async () => {
-    if (!currentClip || isYouTubeVideo) { 
+    if (!currentClip || isYouTubeVideo) {
       alert("Transcription is only available for uploaded videos and active clips.");
       return;
     }
@@ -57,11 +57,10 @@ export default function TranscriptionWorkspace({
     setAutomatedTranscription(null); 
     
     try {
-      const transcription = await onTranscribeAudio(); // Call without arguments
+      const transcription = await onTranscribeAudio();
       setAutomatedTranscription(transcription);
     } catch (error) {
       console.error("Transcription error in workspace:", error);
-      // Error should be handled and toasted by onTranscribeAudio in LinguaClipApp
       setAutomatedTranscription("Error during transcription. Check console or notifications.");
     } finally {
       setIsLoadingTranscription(false);
@@ -69,8 +68,8 @@ export default function TranscriptionWorkspace({
   };
 
   const handleFeedback = async () => {
-    if (!userTranscription.trim() || !automatedTranscription) {
-      alert("Please provide your transcription and ensure automated transcription is available.");
+    if (!userTranscription.trim() || !automatedTranscription || (automatedTranscription && automatedTranscription.startsWith("Error:"))) {
+      alert("Please provide your transcription and ensure automated transcription is available and does not contain errors.");
       return;
     }
     if (isYouTubeVideo) {
@@ -80,7 +79,10 @@ export default function TranscriptionWorkspace({
     setIsLoadingFeedback(true);
     setFeedback(null);
     try {
-      const newFeedback = await onGetFeedback(userTranscription, automatedTranscription);
+      let newFeedback = await onGetFeedback(userTranscription, automatedTranscription);
+      if (newFeedback === "") {
+        newFeedback = "AI analysis complete. No specific suggestions found.";
+      }
       setFeedback(newFeedback);
     } catch (error) {
       console.error("Feedback error in workspace:", error);
@@ -97,6 +99,8 @@ export default function TranscriptionWorkspace({
       </div>
     );
   }
+
+  const isAutomatedTranscriptionError = automatedTranscription && automatedTranscription.startsWith("Error:");
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
@@ -163,7 +167,11 @@ export default function TranscriptionWorkspace({
                   rows={8}
                   className="min-h-[150px] resize-none"
                 />
-                <Button onClick={handleFeedback} disabled={isLoadingFeedback || !userTranscription.trim() || !automatedTranscription || isYouTubeVideo} className="w-full">
+                <Button 
+                  onClick={handleFeedback} 
+                  disabled={isLoadingFeedback || !userTranscription.trim() || !automatedTranscription || isAutomatedTranscriptionError || isYouTubeVideo} 
+                  className="w-full"
+                >
                   {isLoadingFeedback ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -171,6 +179,7 @@ export default function TranscriptionWorkspace({
                   )}
                   Get Feedback (AI)
                   {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
+                  {isAutomatedTranscriptionError && <span className="text-xs ml-1">(Fix Transcription First)</span>}
                 </Button>
               </CardContent>
             </Card>
@@ -187,14 +196,19 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                   <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
                     {isLoadingTranscription && <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />}
-                    {automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" to generate.</p>}
+                    {!isLoadingTranscription && automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" to generate.</p>}
                   </ScrollArea>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2 text-foreground">AI Feedback:</h3>
                   <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
-                     {isLoadingFeedback && <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />}
-                    {feedback ? <p className="text-sm whitespace-pre-wrap">{feedback}</p> : <p className="text-sm text-muted-foreground">Submit your transcription to get feedback.</p>}
+                     {isLoadingFeedback ? (
+                       <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
+                     ) : feedback === null ? (
+                       <p className="text-sm text-muted-foreground">Submit your transcription to get feedback.</p>
+                     ) : (
+                       <p className="text-sm whitespace-pre-wrap">{feedback}</p>
+                     )}
                   </ScrollArea>
                 </div>
               </CardContent>
