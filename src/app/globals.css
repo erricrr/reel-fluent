@@ -82,8 +82,8 @@ body {
     --accent: 160 60% 60%; /* Lighter vibrant teal-green */
     --accent-foreground: 160 10% 10%; /* Very dark for contrast on accent */
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 70% 55%; /* Brighter red for dark mode */
+    --destructive-foreground: 0 0% 98%; /* contrast for destructive background */
 
     --border: 150 8% 30%; /* Darker green-gray border */
     --input: 150 8% 30%;
@@ -119,3 +119,4 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
