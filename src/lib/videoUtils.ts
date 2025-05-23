@@ -5,17 +5,32 @@ export interface Clip {
   id: string;
   startTime: number;
   endTime: number;
+  userTranscription?: string | null;
+  automatedTranscription?: string | null;
+  feedback?: string | null;
+  comparisonResult?: CorrectionToken[] | null; // From compare-transcriptions-flow
+  language?: string;
 }
 
-const CLIP_DURATION_SECONDS = 60; // 1 minute
+// Define CorrectionToken type locally if it's not imported from the flow directly
+// to avoid circular dependencies or if videoUtils is a very low-level utility.
+// However, for simplicity and if it's closely tied, direct import is fine.
+// For now, assuming CorrectionToken is available or can be defined.
+interface CorrectionToken {
+  token: string;
+  status: "correct" | "incorrect" | "extra" | "missing";
+  suggestion?: string;
+}
+
 
 /**
- * Generates an array of clip start and end times from a total video duration.
- * @param duration Total duration of the video in seconds.
- * @param clipLength Desired length of each clip in seconds (default 60).
+ * Generates an array of clip objects from a total media duration.
+ * @param duration Total duration of the media in seconds.
+ * @param clipLength Desired length of each clip in seconds.
+ * @param language The language of the media.
  * @returns Array of Clip objects.
  */
-export function generateClips(duration: number, clipLength: number = CLIP_DURATION_SECONDS): Clip[] {
+export function generateClips(duration: number, clipLength: number, language: string): Clip[] {
   if (isNaN(duration) || duration <= 0) {
     return [];
   }
@@ -30,6 +45,11 @@ export function generateClips(duration: number, clipLength: number = CLIP_DURATI
       id: `clip-${clipId++}`,
       startTime: currentTime,
       endTime: endTime,
+      userTranscription: null,
+      automatedTranscription: null,
+      feedback: null,
+      comparisonResult: null,
+      language: language,
     });
     currentTime += clipLength;
   }
@@ -64,17 +84,33 @@ export async function extractAudioFromVideoSegment(
     };
 
     const onErrorHandler = (event: Event | string) => {
-      console.error("Video error during audio extraction setup:", event);
-      const eventType = typeof event === 'string' ? event : (event.type || 'Unknown video error');
+      let eventType = 'Unknown video error';
+      let errorCode = 'N/A';
+      let errorMessage = 'No specific error message.';
+
+      if (typeof event === 'string') {
+        eventType = event;
+      } else if (event && (event as Event).type) {
+        eventType = (event as Event).type;
+      }
+
+      if (videoElement.error) {
+        errorCode = String(videoElement.error.code);
+        errorMessage = videoElement.error.message || 'No specific error message from video element.';
+        eventType += ` (Code: ${errorCode})`;
+      }
+      
+      console.warn(`Video error during audio extraction setup. Event Type: ${eventType}, Original Event:`, event, `Video Element Error: {code: ${errorCode}, message: "${errorMessage}"}`);
+      
       cleanup();
-      reject(new Error(`Video error during audio extraction: ${eventType}`));
+      reject(new Error(`Video error during audio extraction: ${eventType}. Message: ${errorMessage}`));
     };
 
     const onLoadedMetadata = () => {
       console.log("Temporary video metadata loaded for audio extraction.");
       videoElement.currentTime = startTime;
 
-      if (!videoElement.captureStream) {
+      if (!videoElement.captureStream && !(videoElement as any).mozCaptureStream) { // Added mozCaptureStream for Firefox
         cleanup();
         return reject(new Error("Browser does not support video.captureStream() for audio extraction."));
       }
@@ -86,7 +122,7 @@ export async function extractAudioFromVideoSegment(
       }
 
       try {
-        const stream = videoElement.captureStream();
+        const stream = videoElement.captureStream ? videoElement.captureStream() : (videoElement as any).mozCaptureStream(); // Added mozCaptureStream for Firefox
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length === 0) {
           cleanup();
@@ -95,13 +131,16 @@ export async function extractAudioFromVideoSegment(
         
         const audioStream = new MediaStream(audioTracks);
         
-        const mimeType = 'audio/webm'; // Or 'audio/ogg; codecs=opus' etc.
-        if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported(mimeType)) {
+        // Prefer 'audio/webm;codecs=opus' if available, fallback to 'audio/webm'
+        const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+        let selectedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+
+        if (typeof MediaRecorder === "undefined" || !selectedMimeType) {
             cleanup();
-            return reject(new Error(`MediaRecorder API not supported or ${mimeType} MIME type not supported by your browser.`));
+            return reject(new Error(`MediaRecorder API not supported or none of the tested MIME types (${mimeTypes.join(', ')}) are supported by your browser.`));
         }
 
-        const recorder = new MediaRecorder(audioStream, { mimeType });
+        const recorder = new MediaRecorder(audioStream, { mimeType: selectedMimeType });
         const chunks: Blob[] = [];
 
         recorder.ondataavailable = (event) => {
@@ -112,13 +151,20 @@ export async function extractAudioFromVideoSegment(
 
         recorder.onstop = () => {
           cleanup();
+          if (chunks.length === 0) {
+            console.warn("Audio extraction: No data recorded. This might happen if the media segment is too short or silent.");
+            // Depending on desired behavior, you might reject or resolve with null/empty.
+            // For now, let's treat it as a failure to get meaningful audio.
+            reject(new Error("No audio data recorded from the segment."));
+            return;
+          }
           const blob = new Blob(chunks, { type: recorder.mimeType });
           const reader = new FileReader();
           reader.onloadend = () => {
             resolve(reader.result as string);
           };
           reader.onerror = (err) => {
-            console.error("FileReader error after recording audio segment:", err);
+            console.warn("FileReader error after recording audio segment:", err);
             reject(new Error("FileReader error after recording audio segment."));
           };
           reader.readAsDataURL(blob);
@@ -126,7 +172,7 @@ export async function extractAudioFromVideoSegment(
         
         recorder.onerror = (event) => {
           cleanup();
-          console.error("MediaRecorder error:", event);
+          console.warn("MediaRecorder error:", event);
           reject(new Error("MediaRecorder error during audio segment recording."));
         };
 
@@ -138,19 +184,19 @@ export async function extractAudioFromVideoSegment(
               recorder.stop();
             }
             videoElement.pause();
-          }, segmentDuration);
+          }, segmentDuration + 200); // Add a small buffer
         }).catch(playError => {
           cleanup();
-          console.error("Error playing temporary video for recording:", playError);
+          console.warn("Error playing temporary video for recording:", playError);
           if (recorder.state === "recording") {
-            recorder.stop();
+            recorder.stop(); // Attempt to stop recorder even if play fails
           }
           reject(new Error(`Failed to play video for audio extraction: ${(playError as Error).message}. This can happen if the video format is not fully supported.`));
         });
 
       } catch (error) {
         cleanup();
-        console.error("Error setting up MediaRecorder for audio extraction:", error);
+        console.warn("Error setting up MediaRecorder for audio extraction:", error);
         reject(new Error(`Setup error for audio extraction: ${(error as Error).message}`));
       }
     };
