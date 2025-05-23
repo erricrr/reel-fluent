@@ -164,7 +164,6 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
-              className={cn(!isLoading && "hover:bg-primary/10")}
             >
               Browse Files
             </Button>
@@ -191,7 +190,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Video from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-            Note: For direct video URLs (non-YouTube), the video will be divided into short clips (configurable length). YouTube links are primarily for viewing and will not be clipped. Audio URLs are not supported.
+            Note: For direct video URLs (non-YouTube), video and audio files will be divided into short clips (configurable length). YouTube links are primarily for viewing and will not be clipped.
           </p>
         </form>
       </TabsContent>
