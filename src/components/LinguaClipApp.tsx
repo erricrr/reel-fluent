@@ -6,7 +6,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
-// Removed ClipDurationSelector import from here
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,17 +31,23 @@ export default function LinguaClipApp() {
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
   
   const [language, setLanguage] = useState<string>("vietnamese");
-  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60); // Default to 1 minute
+  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60); 
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | 'unknown' | null>(null);
+  const [isAnyClipTranscribing, setIsAnyClipTranscribing] = useState<boolean>(false);
   
   const processingIdRef = useRef<number>(0);
   const { user } = useAuth();
   const { toast } = useToast();
 
   const isYouTubeVideo = sourceUrl?.includes("youtube.com") || sourceUrl?.includes("youtu.be") || false;
+
+  useEffect(() => {
+    const currentlyTranscribing = clips.some(clip => clip.automatedTranscription === "Transcribing...");
+    setIsAnyClipTranscribing(currentlyTranscribing);
+  }, [clips]);
 
   const updateClipData = (clipId: string, data: Partial<Omit<Clip, 'id' | 'startTime' | 'endTime'>>) => {
     setClips(prevClips =>
@@ -66,7 +71,6 @@ export default function LinguaClipApp() {
     setIsSaving(false);
     setCurrentSourceType(null);
     setClipSegmentationDuration(60); 
-    // Language is intentionally not reset
   }, []);
 
   const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
@@ -77,7 +81,6 @@ export default function LinguaClipApp() {
     let displayName: string | null = null;
     let determinedSourceType: 'video' | 'audio' | 'url' | 'unknown' = 'unknown';
     let mediaElementTypeForLoad: 'video' | 'audio' = 'video';
-
 
     if (source.file) {
       setSourceFile(source.file);
@@ -134,22 +137,17 @@ export default function LinguaClipApp() {
     setCurrentSourceType(determinedSourceType);
 
     if (currentMediaSrcVal) {
-      const tempMediaElement = document.createElement(mediaElementTypeForLoad);
+      const tempMediaElement = document.createElement(mediaElementTypeForLoad); // Use determined type
       tempMediaElement.onloadedmetadata = () => {
           if (processingIdRef.current !== currentProcessingId) {
              if (source.file && currentMediaSrcVal?.startsWith('blob:')) URL.revokeObjectURL(currentMediaSrcVal);
              return;
           }
           setMediaDuration(tempMediaElement.duration);
-          const generatedClips = generateClips(tempMediaElement.duration, clipSegmentationDuration, language);
-          setClips(generatedClips);
-
-          if (generatedClips.length > 0) {
-            toast({ title: `${determinedSourceType === 'audio' ? 'Audio' : 'Video'} Processed`, description: `${generatedClips.length} clip(s) generated.` });
-          } else {
-            toast({ variant: "destructive", title: "Processing Error", description: `${determinedSourceType === 'audio' ? 'Audio' : 'Video'} may be too short or invalid.` });
-          }
-          setIsLoading(false);
+          // generateClips is now primarily handled by the useEffect below, 
+          // but we can set it here for immediate feedback if needed or rely on the effect.
+          // For simplicity, we'll let the useEffect handle it to avoid race conditions with state.
+          setIsLoading(false); // Duration is set, effect will pick it up
       };
       tempMediaElement.onerror = (e) => {
           if (processingIdRef.current !== currentProcessingId) {
@@ -170,12 +168,14 @@ export default function LinguaClipApp() {
     }
   }, [resetAppState, toast, clipSegmentationDuration, language]);
 
+
   useEffect(() => {
+    // This effect is to regenerate clips if media source or duration settings change
     if (mediaSrc && mediaDuration > 0 && !isYouTubeVideo) {
       processingIdRef.current += 1; 
       const currentProcessingId = processingIdRef.current;
-
       setIsLoading(true); 
+
       const newGeneratedClips = generateClips(mediaDuration, clipSegmentationDuration, language);
       
       if (processingIdRef.current !== currentProcessingId) return; 
@@ -183,9 +183,9 @@ export default function LinguaClipApp() {
       setClips(newGeneratedClips.map(clip => ({...clip, language: language, comparisonResult: null, feedback: null, automatedTranscription: null, userTranscription: null })));
       setCurrentClipIndex(0); 
       if (newGeneratedClips.length > 0) {
-        toast({ title: "Clips Regenerated", description: `${newGeneratedClips.length} clip(s) generated with new settings.` });
+        toast({ title: "Media Processed", description: `${newGeneratedClips.length} clip(s) generated.` });
       } else if (mediaDuration > 0) {
-        toast({ variant: "destructive", title: "Processing Error", description: "Could not regenerate clips with new settings." });
+        toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips for the media." });
       }
       setIsLoading(false);
     } else if (mediaSrc && isYouTubeVideo && mediaDuration === Infinity) { 
@@ -193,14 +193,13 @@ export default function LinguaClipApp() {
         const currentProcessingId = processingIdRef.current;
         setIsLoading(true);
         const newGeneratedClips = generateClips(Infinity, clipSegmentationDuration, language);
-         if (processingIdRef.current !== currentProcessingId) return;
+        if (processingIdRef.current !== currentProcessingId) return;
         setClips(newGeneratedClips.map(clip => ({...clip, language: language, comparisonResult: null, feedback: null, automatedTranscription: null, userTranscription: null })));
         setCurrentClipIndex(0);
-        toast({ title: "Clip View Updated", description: "YouTube clip segment view updated for new settings." });
+        toast({ title: "Clip View Updated", description: "YouTube clip segment view updated." });
         setIsLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipSegmentationDuration, language, mediaDuration]); // Removed mediaSrc from dependencies as it might cause loops if it changes frequently for non-YT videos
+  }, [mediaSrc, mediaDuration, clipSegmentationDuration, language, isYouTubeVideo, toast]);
 
 
   useEffect(() => {
@@ -251,7 +250,7 @@ export default function LinguaClipApp() {
           mediaSrc, 
           currentClipToTranscribe.startTime, 
           currentClipToTranscribe.endTime,
-          currentSourceType === 'audio' ? 'audio' : 'video'
+          currentSourceType 
         );
     } catch (error) {
         console.warn("Audio extraction failed in LinguaClipApp:", error);
@@ -322,6 +321,10 @@ export default function LinguaClipApp() {
   };
 
   const handleRemoveClip = (clipIdToRemove: string) => {
+    if (isAnyClipTranscribing) {
+      toast({variant: "destructive", title: "Action Disabled", description: "Cannot remove clips while transcription is in progress."});
+      return;
+    }
     processingIdRef.current += 1; 
     const removedClipOriginalIndex = clips.findIndex(clip => clip.id === clipIdToRemove);
     if (removedClipOriginalIndex === -1) return;
@@ -395,8 +398,17 @@ export default function LinguaClipApp() {
     }
   };
 
+  const handleResetAppWithCheck = () => {
+    if (isAnyClipTranscribing) {
+      toast({variant: "destructive", title: "Action Disabled", description: "Cannot clear media while transcription is in progress."});
+      return;
+    }
+    resetAppState();
+  }
+
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
   const currentClip = clips[currentClipIndex];
+  const globalDisable = isLoading || isSaving || isAnyClipTranscribing;
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -413,16 +425,15 @@ export default function LinguaClipApp() {
                       {mediaDisplayName}
                     </span>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={resetAppState} aria-label="Remove media">
+                  <Button variant="ghost" size="icon" onClick={handleResetAppWithCheck} aria-label="Remove media" disabled={globalDisable}>
                     <XIcon className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc || isSaving} />
-                   {/* ClipDurationSelector removed from here */}
+                   <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={globalDisable} />
                 </div>
                  {user && mediaSrc && clips.length > 0 && (currentSourceType !== 'url' || !isYouTubeVideo) && (
-                    <Button onClick={handleSaveMedia} disabled={isSaving || isLoading} className="w-full sm:w-auto">
+                    <Button onClick={handleSaveMedia} disabled={globalDisable} className="w-full sm:w-auto">
                     <Save className="mr-2 h-4 w-4" />
                     {isSaving ? "Saving..." : "Save Media"}
                     </Button>
@@ -432,8 +443,7 @@ export default function LinguaClipApp() {
               <>
                 <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc || isSaving} />
-                    {/* ClipDurationSelector also not here when no media is loaded */}
+                    <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading} />
                 </div>
               </>
             )}
@@ -448,7 +458,6 @@ export default function LinguaClipApp() {
             mediaSrc={mediaSrc} 
             currentClipIndex={currentClipIndex}
             onSelectClip={handleSelectClip} 
-            // onNextClip and onPrevClip removed
             onTranscribeAudio={handleTranscribeAudio}
             onGetFeedback={handleGetFeedback}
             onGetCorrections={handleGetCorrections}
@@ -457,11 +466,11 @@ export default function LinguaClipApp() {
             isYouTubeVideo={isYouTubeVideo}
             language={currentClip.language || language} 
             isAudioSource={currentSourceType === 'audio'}
-            // Props for ClipDurationSelector
             clipSegmentationDuration={clipSegmentationDuration}
             onClipDurationChange={handleClipDurationChange}
-            isLoading={isLoading}
+            isLoading={isLoading || isAnyClipTranscribing} 
             isSaving={isSaving}
+            isAnyClipTranscribing={isAnyClipTranscribing}
           />
         )}
         {isLoading && !mediaDisplayName && ( 
@@ -476,6 +485,4 @@ export default function LinguaClipApp() {
     </div>
   );
 }
-    
-
     
