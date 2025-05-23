@@ -86,7 +86,7 @@ body {
     --destructive-foreground: 0 0% 10%; /* Very dark text for on-destructive background */
 
     --border: 150 8% 30%; /* Darker green-gray border */
-    --input: 150 8% 30%;
+    --input: 150 10% 50%; /* MODIFIED: Lighter gray-green for input borders */
     --ring: 150 40% 55%; /* Lighter forest green (same as dark primary) */
 
     /* Chart colors for dark mode */

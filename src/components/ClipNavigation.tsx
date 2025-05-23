@@ -85,7 +85,7 @@ export default function ClipNavigation({
               ref={index === currentClipIndex ? activeClipRef : null}
               variant={index === currentClipIndex ? "default" : "outline"}
               className={cn(
-                "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out",
+                "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group", // Added 'group'
                 index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
               )}
               onClick={() => onSelectClip(index)}
@@ -97,7 +97,12 @@ export default function ClipNavigation({
                     Clip {index + 1}
                   </span>
                 </div>
-                <span className={cn("text-xs", index === currentClipIndex ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                <span className={cn(
+                  "text-xs", 
+                  index === currentClipIndex 
+                    ? "text-primary-foreground/80" 
+                    : "text-muted-foreground group-hover:text-accent-foreground" // Changed for hover
+                )}>
                   {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
                 </span>
               </div>
