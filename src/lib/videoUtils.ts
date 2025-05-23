@@ -1,5 +1,5 @@
 
-"use client"; // Mark as client component because it might use browser APIs
+"use client"; 
 
 export interface Clip {
   id: string;
@@ -7,15 +7,12 @@ export interface Clip {
   endTime: number;
   userTranscription?: string | null;
   automatedTranscription?: string | null;
-  feedback?: string | null;
-  comparisonResult?: CorrectionToken[] | null; // From compare-transcriptions-flow
+  feedback?: string | null; // Kept for now, though UI repurposes this area
+  englishTranslation?: string | null; // Added
+  comparisonResult?: CorrectionToken[] | null; 
   language?: string;
 }
 
-// Define CorrectionToken type locally if it's not imported from the flow directly
-// to avoid circular dependencies or if videoUtils is a very low-level utility.
-// However, for simplicity and if it's closely tied, direct import is fine.
-// For now, assuming CorrectionToken is available or can be defined.
 interface CorrectionToken {
   token: string;
   status: "correct" | "incorrect" | "extra" | "missing";
@@ -23,13 +20,6 @@ interface CorrectionToken {
 }
 
 
-/**
- * Generates an array of clip objects from a total media duration.
- * @param duration Total duration of the media in seconds.
- * @param clipLength Desired length of each clip in seconds.
- * @param language The language of the media.
- * @returns Array of Clip objects.
- */
 export function generateClips(duration: number, clipLength: number, language: string): Clip[] {
   if (isNaN(duration) || duration <= 0) {
     return [];
@@ -48,6 +38,7 @@ export function generateClips(duration: number, clipLength: number, language: st
       userTranscription: null,
       automatedTranscription: null,
       feedback: null,
+      englishTranslation: null, // Added
       comparisonResult: null,
       language: language,
     });
@@ -56,15 +47,6 @@ export function generateClips(duration: number, clipLength: number, language: st
   return clips;
 }
 
-/**
- * Extracts audio from a segment of a media source URL and returns it as a Base64 Data URI.
- * This function creates a temporary media element to perform the extraction.
- * @param mediaSrcUrl The URL of the media source (e.g., from URL.createObjectURL).
- * @param startTime The start time of the segment in seconds.
- * @param endTime The end time of the segment in seconds.
- * @param sourceType The type of the media source ('audio' or 'video').
- * @returns A promise that resolves with the audio data URI (e.g., "data:audio/webm;base64,...") or null if extraction fails.
- */
 export async function extractAudioFromVideoSegment(
   mediaSrcUrl: string,
   startTime: number,
@@ -110,7 +92,7 @@ export async function extractAudioFromVideoSegment(
       console.log(`Temporary ${sourceType} metadata loaded for audio extraction. Duration: ${mediaElement.duration}s. Seeking to: ${startTime}s.`);
       mediaElement.currentTime = startTime;
 
-      const mediaElementForCapture = mediaElement as HTMLVideoElement; // captureStream is on HTMLMediaElement
+      const mediaElementForCapture = mediaElement as HTMLVideoElement | HTMLAudioElement; 
       if (!mediaElementForCapture.captureStream && !(mediaElementForCapture as any).mozCaptureStream) { 
         cleanup();
         return reject(new Error(`Browser does not support ${sourceType}.captureStream() for audio extraction.`));
@@ -187,7 +169,7 @@ export async function extractAudioFromVideoSegment(
             if (!mediaElement.paused) {
                mediaElement.pause();
             }
-          }, segmentDuration + 500); // Increased buffer
+          }, segmentDuration + 500); 
         }).catch(playError => {
           cleanup();
           console.warn(`Error playing temporary ${sourceType} for recording:`, playError);
@@ -212,4 +194,3 @@ export async function extractAudioFromVideoSegment(
     mediaElement.load();
   });
 }
-
