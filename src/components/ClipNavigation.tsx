@@ -78,7 +78,7 @@ export default function ClipNavigation({
       </div>
 
       <ScrollArea className="w-full whitespace-nowrap rounded-md">
-        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-2.5"> {/* Added pt-1 for top padding */}
+        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-3.5"> {/* Changed pb-2.5 to pb-3.5 */}
           {clips.map((clip, index) => (
             <Button
               key={clip.id}
