@@ -43,11 +43,12 @@ export default function ClipNavigation({
       const scrollLeft = scrollViewport.scrollLeft;
       const activeElementOffsetLeft = activeElement.offsetLeft; // Position relative to the scrollable container
       const activeElementWidth = activeElement.offsetWidth;
+      const scrollMargin = 16; // Increased margin to account for focus ring and padding
 
-      if (activeElementOffsetLeft < scrollLeft) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft - 10; // Scroll to bring left edge into view
-      } else if (activeElementOffsetLeft + activeElementWidth > scrollLeft + viewportRect.width) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + 10; // Scroll to bring right edge into view
+      if (activeElementOffsetLeft < scrollLeft + scrollMargin) {
+        scrollViewport.scrollLeft = activeElementOffsetLeft - scrollMargin; // Scroll to bring left edge into view
+      } else if (activeElementOffsetLeft + activeElementWidth > scrollLeft + viewportRect.width - scrollMargin) {
+        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + scrollMargin; // Scroll to bring right edge into view
       }
     }
   }, [currentClipIndex, clips]); // Rerun when clips array changes too, e.g. after removal
@@ -78,7 +79,7 @@ export default function ClipNavigation({
       </div>
 
       <ScrollArea className="w-full whitespace-nowrap rounded-md">
-        <div ref={scrollContainerRef} className="flex space-x-3 pb-2.5">
+        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pb-2.5"> {/* Added px-1 for padding */}
           {clips.map((clip, index) => (
             <Button
               key={clip.id}
