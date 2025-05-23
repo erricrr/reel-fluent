@@ -1,8 +1,10 @@
+
 "use client";
 
 import type * as React from 'react';
 import { useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils"; // For conditional class names
 
 interface VideoPlayerProps {
   src?: string;
@@ -12,6 +14,7 @@ interface VideoPlayerProps {
   onLoadedMetadata?: (duration: number) => void;
   onEnded?: () => void;
   className?: string;
+  isAudioSource?: boolean; // New prop
 }
 
 export default function VideoPlayer({
@@ -22,65 +25,60 @@ export default function VideoPlayer({
   onLoadedMetadata,
   onEnded,
   className,
+  isAudioSource = false, // Default to false
 }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (video && src) {
-      if (video.src !== src) {
-        video.src = src;
-        video.load(); // Ensure the new source is loaded
+    const media = mediaRef.current;
+    if (media && src) {
+      if (media.src !== src) {
+        media.src = src;
+        media.load(); 
       }
 
       const handleLoadedMetadata = () => {
         if (onLoadedMetadata) {
-          onLoadedMetadata(video.duration);
+          onLoadedMetadata(media.duration);
         }
-        // Always seek to startTime when metadata is loaded or src changes
-        video.currentTime = startTime; 
+        media.currentTime = startTime; 
       };
 
       const handleTimeUpdate = () => {
         if (onTimeUpdate) {
-          onTimeUpdate(video.currentTime);
+          onTimeUpdate(media.currentTime);
         }
-        if (endTime !== undefined && video.currentTime >= endTime) {
-          video.pause();
-          if (onEnded) onEnded(); // Call onEnded when clip segment finishes
+        if (endTime !== undefined && media.currentTime >= endTime) {
+          media.pause();
+          if (onEnded) onEnded(); 
         }
       };
       
-      const handleVideoEnded = () => {
-        // This handles the natural end of the video, or can be used for clip end too
+      const handleMediaEnded = () => {
         if (onEnded) onEnded();
       };
 
-      video.addEventListener("loadedmetadata", handleLoadedMetadata);
-      video.addEventListener("timeupdate", handleTimeUpdate);
-      video.addEventListener("ended", handleVideoEnded);
+      media.addEventListener("loadedmetadata", handleLoadedMetadata);
+      media.addEventListener("timeupdate", handleTimeUpdate);
+      media.addEventListener("ended", handleMediaEnded);
       
-      // Initial seek if src is already set and metadata might be available
-      // Or if startTime changes for an existing src
-      if (video.readyState >= video.HAVE_METADATA) { // HAVE_METADATA or higher
-         video.currentTime = startTime;
+      if (media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) { 
+         media.currentTime = startTime;
       }
 
-
       return () => {
-        video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-        video.removeEventListener("timeupdate", handleTimeUpdate);
-        video.removeEventListener("ended", handleVideoEnded);
+        media.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        media.removeEventListener("timeupdate", handleTimeUpdate);
+        media.removeEventListener("ended", handleMediaEnded);
       };
     }
   }, [src, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded]);
   
-  // Effect to handle only startTime changes for an already loaded video
   useEffect(() => {
-    const video = videoRef.current;
-    if (video && video.src && video.readyState >= video.HAVE_METADATA) {
-        if (video.currentTime < startTime || (endTime && video.currentTime > endTime)) {
-             video.currentTime = startTime;
+    const media = mediaRef.current;
+    if (media && media.src && media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) {
+        if (media.currentTime < startTime || (endTime && media.currentTime > endTime)) {
+             media.currentTime = startTime;
         }
     }
   }, [startTime, endTime]);
@@ -88,16 +86,18 @@ export default function VideoPlayer({
 
   if (!src) {
     return (
-      <Card className={`aspect-video flex items-center justify-center bg-muted ${className}`}>
+      <Card className={cn(
+        "flex items-center justify-center bg-muted",
+        isAudioSource ? "h-24" : "aspect-video", // Different height for audio
+        className
+      )}>
         <CardContent className="p-0">
-          <p className="text-muted-foreground">No video loaded</p>
+          <p className="text-muted-foreground">No {isAudioSource ? 'audio' : 'video'} loaded</p>
         </CardContent>
       </Card>
     );
   }
   
-  // If src is a YouTube URL, render an iframe
-  // This is a basic check, more robust parsing might be needed
   if (src.includes("youtube.com/watch") || src.includes("youtu.be/")) {
     let videoId = '';
     if (src.includes("youtube.com/watch")) {
@@ -108,10 +108,9 @@ export default function VideoPlayer({
     }
 
     if (videoId) {
-       // For YouTube, startTime and endTime for clips can be passed via URL parameters
-      const embedSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endTime ? `&end=${Math.floor(endTime)}` : ''}&autoplay=0&controls=1`;
+      const embedSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endTime && isFinite(endTime) ? `&end=${Math.floor(endTime)}` : ''}&autoplay=0&controls=1`;
       return (
-        <Card className={`aspect-video overflow-hidden ${className}`}>
+        <Card className={cn("overflow-hidden aspect-video", className)}>
           <CardContent className="p-0 h-full">
             <iframe
               width="100%"
@@ -127,7 +126,7 @@ export default function VideoPlayer({
       );
     } else {
        return (
-        <Card className={`aspect-video flex items-center justify-center bg-muted ${className}`}>
+        <Card className={cn("flex items-center justify-center bg-muted aspect-video", className)}>
           <CardContent className="p-0">
             <p className="text-muted-foreground">Invalid YouTube URL</p>
           </CardContent>
@@ -136,14 +135,26 @@ export default function VideoPlayer({
     }
   }
 
+  if (isAudioSource) {
+    return (
+      <Card className={cn("overflow-hidden", className)}> {/* No aspect-video for audio */}
+        <CardContent className="p-2 h-full flex items-center justify-center"> {/* Adjust padding/layout as needed */}
+          <audio ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
+            Your browser does not support the audio tag.
+          </audio>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Card className={`aspect-video overflow-hidden ${className}`}>
+    <Card className={cn("aspect-video overflow-hidden", className)}>
       <CardContent className="p-0 h-full">
-        <video ref={videoRef} controls className="w-full h-full bg-black" playsInline>
+        <video ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
           Your browser does not support the video tag.
         </video>
       </CardContent>
     </Card>
   );
 }
+

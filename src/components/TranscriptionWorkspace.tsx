@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, Mic, Sparkles, Loader2, FileDiff, Trash2 as Trash2Icon } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
-import { useToast } from "@/hooks/use-toast"; // Added import
+import { useToast } from "@/hooks/use-toast"; 
 
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
@@ -65,20 +65,13 @@ export default function TranscriptionWorkspace({
   isAudioSource = false,
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
-  const [isLoadingTranscription, setIsLoadingTranscription] = useState(false);
-  const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
-  const [isLoadingCorrections, setIsLoadingCorrections] = useState(false);
   const [activeTab, setActiveTab] = useState("manual");
   const { toast } = useToast();
 
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-    // Reset loading states when clip changes
-    setIsLoadingTranscription(currentClip.automatedTranscription === "Transcribing...");
-    setIsLoadingFeedback(currentClip.feedback === "Generating feedback...");
-    setIsLoadingCorrections(Array.isArray(currentClip.comparisonResult) && currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Comparing...");
-
+    
     // If the AI tab is active but shouldn't be (e.g., user input cleared), switch to manual
     if (activeTab === "ai" && (!currentClip.userTranscription || currentClip.userTranscription.trim() === "")) {
         setActiveTab("manual");
@@ -99,14 +92,11 @@ export default function TranscriptionWorkspace({
       toast({variant: "destructive", title: "Transcription Unavailable", description: `Transcription is only available for uploaded ${isAudioSource ? 'audio' : 'video'} files.`});
       return;
     }
-    setIsLoadingTranscription(true);
     try {
       await onTranscribeAudio(currentClip.id);
     } catch (error) {
       console.error("Transcription error in workspace:", error);
       // Toast for this error should be handled by LinguaClipApp
-    } finally {
-      // Loading state will be updated via prop currentClip.automatedTranscription
     }
   };
 
@@ -119,14 +109,11 @@ export default function TranscriptionWorkspace({
        toast({variant: "destructive", title: "Feedback Unavailable", description: "Feedback is not available for YouTube videos."});
        return;
     }
-    setIsLoadingFeedback(true);
     try {
       await onGetFeedback(currentClip.id);
     } catch (error) {
       console.error("Feedback error in workspace:", error);
       // Toast for this error should be handled by LinguaClipApp
-    } finally {
-      // Loading state will be updated via prop currentClip.feedback
     }
   };
 
@@ -139,14 +126,11 @@ export default function TranscriptionWorkspace({
        toast({variant: "destructive", title: "Corrections Unavailable", description: "Corrections are not available for YouTube videos."});
        return;
     }
-    setIsLoadingCorrections(true);
     try {
       await onGetCorrections(currentClip.id);
     } catch (error) {
       console.error("Corrections error in workspace:", error);
       // Toast for this error should be handled by LinguaClipApp
-    } finally {
-     // Loading state will be updated via prop currentClip.comparisonResult
     }
   };
 
@@ -161,9 +145,9 @@ export default function TranscriptionWorkspace({
 
   const isAutomatedTranscriptionError = currentClip.automatedTranscription && (currentClip.automatedTranscription.startsWith("Error:"));
   const isAutomatedTranscriptionLoading = currentClip.automatedTranscription === "Transcribing...";
-  const canGetFeedbackOrCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
   const isFeedbackLoading = currentClip.feedback === "Generating feedback...";
   const isCorrectionsLoading = Array.isArray(currentClip.comparisonResult) && currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Comparing...";
+  const canGetFeedbackOrCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
 
 
   const renderCorrectionToken = (token: CorrectionToken, index: number) => {
@@ -208,11 +192,11 @@ export default function TranscriptionWorkspace({
       <div className="lg:w-1/2 w-full space-y-4">
         <Button
           onClick={handleTranscribe}
-          disabled={isLoadingTranscription || isYouTubeVideo || isAutomatedTranscriptionLoading}
+          disabled={isAutomatedTranscriptionLoading || isYouTubeVideo}
           className="w-full"
           variant="default"
         >
-          {isLoadingTranscription || isAutomatedTranscriptionLoading ? (
+          {isAutomatedTranscriptionLoading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <Mic className="mr-2 h-4 w-4" />
@@ -225,7 +209,7 @@ export default function TranscriptionWorkspace({
           startTime={currentClip?.startTime}
           endTime={currentClip?.endTime}
           className="shadow-lg rounded-lg"
-          isAudioSource={isAudioSource}
+          isAudioSource={isAudioSource} 
         />
         <div className="flex justify-between items-center p-2 bg-card rounded-lg shadow">
           <Button onClick={onPrevClip} disabled={currentClipIndex === 0} variant="outline" size="icon">
@@ -306,9 +290,9 @@ export default function TranscriptionWorkspace({
                 <div>
                   <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
-                    {isLoadingTranscription || isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
-                    {!isLoadingTranscription && !isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
-                    {!isLoadingTranscription && !isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the player to generate.</p>}
+                    {isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
+                    {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
+                    {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the player to generate.</p>}
                   </ScrollArea>
                 </div>
 
@@ -316,11 +300,11 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold text-foreground">Transcription Comparison:</h3>
                    <Button
                     onClick={handleCorrections}
-                    disabled={isLoadingCorrections || !canGetFeedbackOrCorrections || isCorrectionsLoading}
+                    disabled={isCorrectionsLoading || !canGetFeedbackOrCorrections}
                     className="w-full"
                     variant="outline"
                   >
-                    {isLoadingCorrections || isCorrectionsLoading ? (
+                    {isCorrectionsLoading ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <FileDiff className="mr-2 h-4 w-4" />
@@ -331,10 +315,12 @@ export default function TranscriptionWorkspace({
                     {!userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
                   </Button>
                   <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
-                     {isLoadingCorrections || isCorrectionsLoading ? (
+                     {isCorrectionsLoading ? (
                        <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
                      ) : currentClip.comparisonResult === null || currentClip.comparisonResult === undefined ? (
                        <p className="text-sm text-muted-foreground">Click "Show Corrections" above after entering your transcription and generating the AI transcription.</p>
+                     ) : currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Error generating comparison." ? (
+                        <p className="text-sm text-destructive">{currentClip.comparisonResult[0].token}</p>
                      ) : (
                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
                          {currentClip.comparisonResult.map(renderCorrectionToken)}
@@ -347,11 +333,11 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold mb-2 text-foreground">AI Feedback:</h3>
                    <Button
                     onClick={handleFeedback}
-                    disabled={isLoadingFeedback || !canGetFeedbackOrCorrections || isFeedbackLoading}
+                    disabled={isFeedbackLoading || !canGetFeedbackOrCorrections}
                     className="w-full mb-2"
                     variant="outline"
                   >
-                    {isLoadingFeedback || isFeedbackLoading ? (
+                    {isFeedbackLoading ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
                       <Sparkles className="mr-2 h-4 w-4" />
@@ -362,12 +348,14 @@ export default function TranscriptionWorkspace({
                     {!userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
                   </Button>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
-                     {isLoadingFeedback || isFeedbackLoading ? (
+                     {isFeedbackLoading ? (
                        <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
                      ) : currentClip.feedback === null || currentClip.feedback === undefined ? (
                        <p className="text-sm text-muted-foreground">Click "Get General Feedback" above after entering your transcription.</p>
                      ) : currentClip.feedback === "" ? (
                         <p className="text-sm">AI analysis complete. No specific suggestions found.</p>
+                     ) : currentClip.feedback.startsWith("Error:") ? (
+                        <p className="text-sm text-destructive">{currentClip.feedback}</p>
                      ) : (
                        <p className="text-sm whitespace-pre-wrap">{currentClip.feedback}</p>
                      )}

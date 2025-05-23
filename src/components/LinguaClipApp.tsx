@@ -32,7 +32,7 @@ export default function LinguaClipApp() {
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
   
   const [language, setLanguage] = useState<string>("vietnamese");
-  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60);
+  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60); // Default to 1 minute
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -76,7 +76,7 @@ export default function LinguaClipApp() {
     let currentMediaSrcVal: string | undefined = undefined; 
     let displayName: string | null = null;
     let determinedSourceType: 'video' | 'audio' | 'url' | 'unknown' = 'unknown';
-    let mediaElementType: 'video' | 'audio' = 'video'; 
+    let mediaElementTypeForLoad: 'video' | 'audio' = 'video'; // Element type for initial metadata load
 
 
     if (source.file) {
@@ -87,12 +87,11 @@ export default function LinguaClipApp() {
       
       if (source.file.type.startsWith('video/')) {
         determinedSourceType = 'video';
-        mediaElementType = 'video';
+        mediaElementTypeForLoad = 'video';
       } else if (source.file.type.startsWith('audio/')) {
         determinedSourceType = 'audio';
-        mediaElementType = 'audio';
+        mediaElementTypeForLoad = 'audio';
       } else {
-        determinedSourceType = 'unknown';
         if (processingIdRef.current !== currentProcessingId) return; 
         toast({ variant: "destructive", title: "Unsupported File", description: "Please upload a valid video or audio file." });
         setIsLoading(false);
@@ -104,7 +103,7 @@ export default function LinguaClipApp() {
       displayName = source.url;
       currentMediaSrcVal = source.url;
       determinedSourceType = 'url';
-      mediaElementType = 'video'; 
+      mediaElementTypeForLoad = 'video'; // Assume URL is video for metadata load
       
       const isYt = source.url?.includes("youtube.com") || source.url?.includes("youtu.be") || false;
       if (isYt) {
@@ -112,9 +111,9 @@ export default function LinguaClipApp() {
         setMediaSrc(source.url);
         setMediaDisplayName(displayName);
         setCurrentSourceType('url');
+        setMediaDuration(Infinity); // Special value for YouTube duration
         const initialYtClips = generateClips(Infinity, clipSegmentationDuration, language);
         setClips(initialYtClips);
-        setMediaDuration(Infinity); 
         setIsLoading(false);
         toast({ title: "YouTube Video Loaded", description: "Viewing YouTube video. Transcription/clip features are limited." });
         return;
@@ -132,8 +131,7 @@ export default function LinguaClipApp() {
     setCurrentSourceType(determinedSourceType);
 
     if (currentMediaSrcVal) {
-      // Use the determined mediaElementType for the temporary element
-      const tempMediaElement = document.createElement(mediaElementType);
+      const tempMediaElement = document.createElement(mediaElementTypeForLoad);
       tempMediaElement.onloadedmetadata = () => {
           if (processingIdRef.current !== currentProcessingId) return;
           setMediaDuration(tempMediaElement.duration);
@@ -146,18 +144,18 @@ export default function LinguaClipApp() {
             toast({ variant: "destructive", title: "Processing Error", description: `${determinedSourceType === 'audio' ? 'Audio' : 'Video'} may be too short or invalid.` });
           }
           setIsLoading(false);
-          if (source.file && currentMediaSrcVal?.startsWith('blob:')) URL.revokeObjectURL(tempMediaElement.src); 
+          if (source.file && currentMediaSrcVal?.startsWith('blob:')) { /* Do not revoke here, let useEffect handle it */ }
       };
       tempMediaElement.onerror = (e) => {
           if (processingIdRef.current !== currentProcessingId) return;
-          console.warn("Error loading media metadata:", e, tempMediaElement.error);
+          console.warn(`Error loading ${mediaElementTypeForLoad} metadata for ${displayName}:`, e, tempMediaElement.error);
           toast({ variant: "destructive", title: "Error", description: `Could not load ${determinedSourceType === 'audio' ? 'audio' : 'video'} metadata. The file might be corrupt or in an unsupported format.` });
           setIsLoading(false);
           resetAppState();
-          if (source.file && currentMediaSrcVal?.startsWith('blob:')) URL.revokeObjectURL(tempMediaElement.src); 
+          if (source.file && currentMediaSrcVal?.startsWith('blob:')) { /* Do not revoke here */ }
       };
       tempMediaElement.src = currentMediaSrcVal;
-      tempMediaElement.load();
+      tempMediaElement.load(); // Explicitly call load
     } else { 
         if (processingIdRef.current !== currentProcessingId) return;
         setIsLoading(false);
@@ -166,7 +164,7 @@ export default function LinguaClipApp() {
   }, [resetAppState, toast, clipSegmentationDuration, language]);
 
   useEffect(() => {
-    if (mediaSrc && mediaDuration > 0 && !isYouTubeVideo) {
+    if (mediaSrc && mediaDuration > 0 && !isYouTubeVideo) { // mediaDuration > 0 ensures metadata loaded
       processingIdRef.current += 1; 
       const currentProcessingId = processingIdRef.current;
 
@@ -179,7 +177,7 @@ export default function LinguaClipApp() {
       setCurrentClipIndex(0); 
       if (newGeneratedClips.length > 0) {
         toast({ title: "Clips Regenerated", description: `${newGeneratedClips.length} clip(s) generated with new settings.` });
-      } else {
+      } else if (mediaDuration > 0) { // Only show error if media was actually loaded
         toast({ variant: "destructive", title: "Processing Error", description: "Could not regenerate clips with new settings." });
       }
       setIsLoading(false);
@@ -195,7 +193,7 @@ export default function LinguaClipApp() {
         setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipSegmentationDuration, language]); 
+  }, [clipSegmentationDuration, language, mediaDuration]); // Added mediaDuration to re-run if it changes after initial load. MediaSrc is not needed because it's implied by mediaDuration > 0.
 
 
   useEffect(() => {
@@ -203,12 +201,15 @@ export default function LinguaClipApp() {
     if (sourceFile && mediaSrc?.startsWith('blob:')) {
       objectUrlToRevoke = mediaSrc;
     }
+    // This cleanup function runs when the component unmounts OR when dependencies change
+    // It's important for preventing memory leaks from Object URLs
     return () => {
       if (objectUrlToRevoke) {
         URL.revokeObjectURL(objectUrlToRevoke);
+        console.log("Revoked Object URL:", objectUrlToRevoke);
       }
     };
-  }, [sourceFile, mediaSrc]);
+  }, [sourceFile, mediaSrc]); // Rerun if sourceFile or mediaSrc changes
 
   const handleNextClip = () => {
     if (currentClipIndex < clips.length - 1) {
@@ -248,12 +249,11 @@ export default function LinguaClipApp() {
 
     let audioDataUri: string | null = null;
     try {
-        // Pass the correct sourceType to the extraction function
         audioDataUri = await extractAudioFromVideoSegment(
           mediaSrc, 
           currentClipToTranscribe.startTime, 
           currentClipToTranscribe.endTime,
-          currentSourceType as 'audio' | 'video' // Assert because we checked above
+          currentSourceType // No assertion needed if currentSourceType is correctly 'audio' | 'video' | 'url'
         );
     } catch (error) {
         console.warn("Audio extraction failed in LinguaClipApp:", error);
@@ -331,21 +331,27 @@ export default function LinguaClipApp() {
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
     if (newClips.length === 0) {
+      // If all clips are removed from an uploaded file, clear the media source
       if (currentSourceType === 'video' || currentSourceType === 'audio') {
-        resetAppState();
+        resetAppState(); // This will also revoke the object URL if applicable
         toast({ title: "Media Cleared", description: "All clips have been removed and the media file has been cleared." });
         return;
       }
+      // If it was a URL source or something else, just clear clips
       setClips([]); 
       setCurrentClipIndex(0);
       toast({ title: "All Clips Removed" });
     } else {
       let newCurrentIdx = currentClipIndex;
+      // Adjust currentClipIndex if the removed clip affected it
       if (removedClipOriginalIndex < currentClipIndex) {
         newCurrentIdx = Math.max(0, currentClipIndex - 1);
       } else if (removedClipOriginalIndex === currentClipIndex) {
+        // If the current clip was removed, try to stay at the same index (now pointing to the next clip)
+        // or move to the new last clip if the removed clip was the last one.
         newCurrentIdx = Math.min(currentClipIndex, newClips.length - 1);
       }
+      // Ensure newCurrentIdx is within bounds
       newCurrentIdx = Math.max(0, Math.min(newCurrentIdx, newClips.length - 1));
 
       setClips(newClips);
@@ -423,7 +429,7 @@ export default function LinguaClipApp() {
                    <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc || isSaving} />
                    <ClipDurationSelector selectedDuration={clipSegmentationDuration} onDurationChange={handleClipDurationChange} disabled={isLoading || !mediaSrc || isSaving} />
                 </div>
-                 {user && mediaSrc && clips.length > 0 && (
+                 {user && mediaSrc && clips.length > 0 && (currentSourceType !== 'url' || !isYouTubeVideo) && (
                     <Button onClick={handleSaveMedia} disabled={isSaving || isLoading} className="w-full sm:w-auto">
                     <Save className="mr-2 h-4 w-4" />
                     {isSaving ? "Saving..." : "Save Media"}
@@ -473,3 +479,4 @@ export default function LinguaClipApp() {
     </div>
   );
 }
+
