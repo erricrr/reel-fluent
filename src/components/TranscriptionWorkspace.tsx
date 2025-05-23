@@ -22,7 +22,6 @@ interface TranscriptionWorkspaceProps {
   mediaSrc?: string;
   currentClipIndex: number;
   onSelectClip: (index: number) => void; 
-  // onNextClip and onPrevClip removed
   onTranscribeAudio: (clipId: string) => Promise<void>;
   onGetFeedback: (clipId: string) => Promise<void>;
   onGetCorrections: (clipId: string) => Promise<void>;
@@ -31,7 +30,6 @@ interface TranscriptionWorkspaceProps {
   isYouTubeVideo: boolean;
   language: string;
   isAudioSource?: boolean;
-  // Props for ClipDurationSelector
   clipSegmentationDuration: number;
   onClipDurationChange: (duration: string) => void;
   isLoading: boolean;
@@ -61,7 +59,6 @@ export default function TranscriptionWorkspace({
   mediaSrc,
   currentClipIndex,
   onSelectClip, 
-  // onNextClip, onPrevClip removed
   onTranscribeAudio,
   onGetFeedback,
   onGetCorrections,
@@ -82,6 +79,8 @@ export default function TranscriptionWorkspace({
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
+    // If user transcription is empty, ensure "manual" tab is active
+    // and AI tools requiring input are not attempted.
     if (!currentClip.userTranscription || currentClip.userTranscription.trim() === "") {
       setActiveTab("manual");
     }
@@ -103,6 +102,7 @@ export default function TranscriptionWorkspace({
       await onTranscribeAudio(currentClip.id);
     } catch (error) {
       console.warn("Transcription error in workspace:", error);
+      // Toast is likely handled in LinguaClipApp
     }
   };
 
@@ -174,7 +174,7 @@ export default function TranscriptionWorkspace({
         break;
       case 'missing':
          style = "text-gray-500 dark:text-gray-400 opacity-70";
-         content = `[${token.suggestion || token.token}]`;
+         content = `[${token.suggestion || token.token}]`; // Show suggestion if missing, otherwise the token from automated
         break;
       default:
         break;
@@ -194,20 +194,6 @@ export default function TranscriptionWorkspace({
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
       <div className="lg:w-1/2 w-full space-y-4">
-        <Button
-          onClick={handleTranscribe}
-          disabled={isAutomatedTranscriptionLoading || isYouTubeVideo || (isAudioSource && !mediaSrc)}
-          className="w-full"
-          variant="default"
-        >
-          {isAutomatedTranscriptionLoading ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Mic className="mr-2 h-4 w-4" />
-          )}
-          {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe This Clip (AI)"}
-          {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
-        </Button>
         <VideoPlayer
           src={mediaSrc}
           startTime={currentClip?.startTime}
@@ -230,6 +216,20 @@ export default function TranscriptionWorkspace({
           isYouTubeVideo={isYouTubeVideo}
           formatSecondsToMMSS={formatSecondsToMMSS}
         />
+        <Button
+          onClick={handleTranscribe}
+          disabled={isAutomatedTranscriptionLoading || isYouTubeVideo || (isAudioSource && !mediaSrc)}
+          className="w-full"
+          variant="default"
+        >
+          {isAutomatedTranscriptionLoading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Mic className="mr-2 h-4 w-4" />
+          )}
+          {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe This Clip (AI)"}
+          {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
+        </Button>
       </div>
 
       <div className="lg:w-1/2 w-full">
@@ -278,7 +278,7 @@ export default function TranscriptionWorkspace({
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                     {isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
                     {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
-                    {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the player to generate.</p>}
+                    {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select a clip and click "Transcribe This Clip (AI)" to generate.</p>}
                   </ScrollArea>
                 </div>
 
