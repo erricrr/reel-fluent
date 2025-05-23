@@ -14,7 +14,7 @@ interface VideoPlayerProps {
   onLoadedMetadata?: (duration: number) => void;
   onEnded?: () => void;
   className?: string;
-  isAudioSource?: boolean; // New prop
+  isAudioSource?: boolean;
 }
 
 export default function VideoPlayer({
@@ -25,7 +25,7 @@ export default function VideoPlayer({
   onLoadedMetadata,
   onEnded,
   className,
-  isAudioSource = false, // Default to false
+  isAudioSource = false,
 }: VideoPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
@@ -34,26 +34,41 @@ export default function VideoPlayer({
     if (media && src) {
       if (media.src !== src) {
         media.src = src;
-        media.load(); 
+        media.load();
       }
 
       const handleLoadedMetadata = () => {
         if (onLoadedMetadata) {
           onLoadedMetadata(media.duration);
         }
-        media.currentTime = startTime; 
+        media.currentTime = startTime;
       };
 
       const handleTimeUpdate = () => {
         if (onTimeUpdate) {
           onTimeUpdate(media.currentTime);
         }
-        if (endTime !== undefined && media.currentTime >= endTime) {
-          media.pause();
-          if (onEnded) onEnded(); 
+
+        // Check if endTime is defined and is a finite number
+        if (typeof endTime === 'number' && isFinite(endTime)) {
+          // If current time has reached or exceeded the clip's end time
+          if (media.currentTime >= endTime) {
+            if (!media.paused) {
+              media.pause();
+            }
+            // After pausing, if currentTime has overshot endTime, clamp it back to endTime.
+            // This ensures the player's UI doesn't show a time greater than the clip's boundary.
+            if (media.currentTime > endTime) {
+              media.currentTime = endTime;
+            }
+
+            if (onEnded) { // This prop is not currently used by parent, but good to have
+              onEnded();
+            }
+          }
         }
       };
-      
+
       const handleMediaEnded = () => {
         if (onEnded) onEnded();
       };
@@ -61,8 +76,9 @@ export default function VideoPlayer({
       media.addEventListener("loadedmetadata", handleLoadedMetadata);
       media.addEventListener("timeupdate", handleTimeUpdate);
       media.addEventListener("ended", handleMediaEnded);
-      
-      if (media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) { 
+
+      // If media is already loaded (e.g. src didn't change but startTime/endTime did)
+      if (media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) {
          media.currentTime = startTime;
       }
 
@@ -73,11 +89,13 @@ export default function VideoPlayer({
       };
     }
   }, [src, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded]);
-  
+
   useEffect(() => {
     const media = mediaRef.current;
+    // This effect ensures that if startTime or endTime props change for an already loaded media,
+    // and the currentTime is outside the new bounds, it jumps to the new startTime.
     if (media && media.src && media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) {
-        if (media.currentTime < startTime || (endTime && media.currentTime > endTime)) {
+        if (media.currentTime < startTime || (typeof endTime === 'number' && isFinite(endTime) && media.currentTime > endTime)) {
              media.currentTime = startTime;
         }
     }
@@ -88,7 +106,7 @@ export default function VideoPlayer({
     return (
       <Card className={cn(
         "flex items-center justify-center bg-muted",
-        isAudioSource ? "h-24" : "aspect-video", // Different height for audio
+        isAudioSource ? "h-24" : "aspect-video",
         className
       )}>
         <CardContent className="p-0">
@@ -97,7 +115,7 @@ export default function VideoPlayer({
       </Card>
     );
   }
-  
+
   if (src.includes("youtube.com/watch") || src.includes("youtu.be/")) {
     let videoId = '';
     if (src.includes("youtube.com/watch")) {
@@ -108,11 +126,15 @@ export default function VideoPlayer({
     }
 
     if (videoId) {
-      const embedSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endTime && isFinite(endTime) ? `&end=${Math.floor(endTime)}` : ''}&autoplay=0&controls=1`;
+      // For YouTube, startTime and endTime are handled by URL parameters.
+      // Ensure endTime is finite before adding to URL.
+      const endParam = (typeof endTime === 'number' && isFinite(endTime)) ? `&end=${Math.floor(endTime)}` : '';
+      const embedSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endParam}&autoplay=0&controls=1`;
       return (
         <Card className={cn("overflow-hidden aspect-video", className)}>
           <CardContent className="p-0 h-full">
             <iframe
+              key={embedSrc} // Add key to force re-render if src changes significantly
               width="100%"
               height="100%"
               src={embedSrc}
@@ -137,8 +159,8 @@ export default function VideoPlayer({
 
   if (isAudioSource) {
     return (
-      <Card className={cn("overflow-hidden", className)}> {/* No aspect-video for audio */}
-        <CardContent className="p-2 h-full flex items-center justify-center"> {/* Adjust padding/layout as needed */}
+      <Card className={cn("overflow-hidden", className)}>
+        <CardContent className="p-2 h-full flex items-center justify-center">
           <audio ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
             Your browser does not support the audio tag.
           </audio>
@@ -157,4 +179,3 @@ export default function VideoPlayer({
     </Card>
   );
 }
-
