@@ -17,11 +17,11 @@ const CorrectionTokenSchema = z.object({
   status: z.enum(["correct", "incorrect", "extra", "missing"]).describe(
     "Status of the token compared to the automated transcription: " +
     "'correct' if it matches (including accents/diacritics), " +
-    "'incorrect' if it's a mismatched word at the same position (e.g. spelling error, or incorrect/missing accents), " +
+    "'incorrect' if it's a mismatched word at the same position (e.g. spelling error, or incorrect/missing accents/diacritics), " +
     "'extra' if it's an added word by the user not in the automated, " +
     "'missing' if a word from automated is not in user's."
   ),
-  suggestion: z.string().optional().describe("The correct word (including accents) from the automated transcription if status is 'incorrect' or 'missing'.")
+  suggestion: z.string().optional().describe("The correct word (including accents/diacritics) from the automated transcription if status is 'incorrect' or 'missing'.")
 });
 export type CorrectionToken = z.infer<typeof CorrectionTokenSchema>;
 
@@ -63,11 +63,11 @@ const prompt = ai.definePrompt({
 Key requirements for the 'comparisonResult':
 - It must be a single, ordered array of tokens.
 - Each token must reflect its status relative to the automated transcription at that specific point in the sequence.
-- Pay strict attention to spelling, accents, diacritics, and punctuation. Treat punctuation marks as separate tokens.
+- Pay EXTREMELY strict attention to spelling, accents, diacritics, and punctuation. Treat punctuation marks as separate tokens. Any deviation in accents or diacritics from the automated transcription must result in an 'incorrect' status for the user's token, with the 'suggestion' field containing the correctly accented word from the automated transcription.
 
 Token Status Definitions and Handling:
 - 'correct': The user's token matches the automated token at the same position (including case, accents, and diacritics). The 'token' field is the user's token.
-- 'incorrect': The user's token is present but differs from the automated token at the same position (e.g., spelling error, incorrect/missing accent). The 'token' field is the user's token. The 'suggestion' field MUST contain the token from the automated transcription.
+- 'incorrect': The user's token is present but differs from the automated token at the same position (e.g., spelling error, incorrect/missing accent or diacritic). The 'token' field is the user's token. The 'suggestion' field MUST contain the corresponding token from the automated transcription.
 - 'extra': The user's token is present, but there is no corresponding token at that position in the automated transcription (e.g., user added a word). The 'token' field should be the user's extra word.
 - 'missing': A token is present in the automated transcription, but no corresponding token exists in the user's transcription at that position. The 'token' field MUST be the missing token from the automated transcription, and the 'suggestion' field MUST also contain this same token.
 

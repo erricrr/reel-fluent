@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Loader2, FileDiff, Languages } from "lucide-react"; // Changed Mic to Sparkles, Added Languages
+import { Sparkles, Loader2, FileDiff, Languages } from "lucide-react";
 import ClipNavigation from "./ClipNavigation"; 
 import ClipDurationSelector from "./ClipDurationSelector";
 import type { Clip } from '@/lib/videoUtils';
@@ -24,7 +24,7 @@ interface TranscriptionWorkspaceProps {
   onSelectClip: (index: number) => void; 
   onTranscribeAudio: (clipId: string) => Promise<void>;
   onGetCorrections: (clipId: string) => Promise<void>;
-  onTranslateToEnglish: (clipId: string) => Promise<void>; // Changed from onGetFeedback
+  onTranslateToEnglish: (clipId: string) => Promise<void>;
   onRemoveClip: (clipId: string) => void;
   onUserTranscriptionChange: (clipId: string, newUserTranscription: string) => void;
   isYouTubeVideo: boolean;
@@ -62,7 +62,7 @@ export default function TranscriptionWorkspace({
   onSelectClip, 
   onTranscribeAudio,
   onGetCorrections,
-  onTranslateToEnglish, // Changed from onGetFeedback
+  onTranslateToEnglish,
   onRemoveClip,
   onUserTranscriptionChange,
   isYouTubeVideo,
@@ -81,10 +81,11 @@ export default function TranscriptionWorkspace({
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-    if (!currentClip.userTranscription || currentClip.userTranscription.trim() === "") {
+    // If AI tools were active but user transcription becomes empty (e.g. clip change), switch back to manual
+    if (activeTab === "ai" && (!currentClip.userTranscription || currentClip.userTranscription.trim() === "")) {
       setActiveTab("manual");
     }
-  }, [currentClip]);
+  }, [currentClip, activeTab]);
 
 
   const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -109,7 +110,7 @@ export default function TranscriptionWorkspace({
     }
   };
 
-  const handleTranslate = async () => { // Changed from handleFeedback
+  const handleTranslate = async () => {
     if (!currentClip.automatedTranscription || currentClip.automatedTranscription.startsWith("Error:") || currentClip.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Cannot Translate", description: "Please ensure automated transcription is successful first."});
       return;
@@ -119,8 +120,9 @@ export default function TranscriptionWorkspace({
        return;
     }
     try {
-      await onTranslateToEnglish(currentClip.id); // Changed from onGetFeedback
-    } catch (error) {
+      await onTranslateToEnglish(currentClip.id);
+    } catch (error)
+{
       console.warn("Translation error in workspace:", error);
     }
   };
@@ -156,7 +158,7 @@ export default function TranscriptionWorkspace({
   
   const isAutomatedTranscriptionError = currentClip.automatedTranscription && (currentClip.automatedTranscription.startsWith("Error:"));
   const isAutomatedTranscriptionLoading = currentClip.automatedTranscription === "Transcribing..."; 
-  const isTranslationLoading = currentClip.englishTranslation === "Translating..."; // Changed
+  const isTranslationLoading = currentClip.englishTranslation === "Translating...";
   const isCorrectionsLoading = Array.isArray(currentClip.comparisonResult) && currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Comparing...";
   
   const canGetCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
@@ -167,36 +169,39 @@ export default function TranscriptionWorkspace({
 
 
   const renderCorrectionToken = (token: CorrectionToken, index: number) => {
-    let style = "";
-    let content = token.token;
-    let suggestionContent = "";
+    let userTokenStyle = "";
+    let suggestionSpan: React.ReactNode = null;
 
     switch (token.status) {
       case 'correct':
-        style = "text-green-600 dark:text-green-400";
+        userTokenStyle = "text-green-600 dark:text-green-400";
         break;
       case 'incorrect':
-        style = "text-red-600 dark:text-red-400 line-through";
+        userTokenStyle = "text-red-600 dark:text-red-400 line-through";
         if (token.suggestion) {
-          suggestionContent = ` (${token.suggestion})`;
+          suggestionSpan = <span className="text-green-600 dark:text-green-400"> {token.suggestion}</span>;
         }
         break;
       case 'extra':
-        style = "text-blue-600 dark:text-blue-400 opacity-80 italic";
+        userTokenStyle = "text-blue-600 dark:text-blue-400 opacity-80 italic";
+        // token.token = `+${token.token}`; // Prefixing directly modifies data, avoid if possible, handle in render
         break;
       case 'missing':
-         style = "text-gray-500 dark:text-gray-400 opacity-70";
-         content = `[${token.suggestion || token.token}]`; 
+         userTokenStyle = "text-gray-500 dark:text-gray-400 opacity-70";
+         // token.token = `[${token.token}]`; // Prefixing directly modifies data, avoid if possible, handle in render
         break;
       default:
         break;
     }
+
+    let displayToken = token.token;
+    if (token.status === 'extra') displayToken = `+${token.token}`;
+    if (token.status === 'missing') displayToken = `[${token.token}]`;
+    
     return (
       <span key={index}>
-        <span className={style}>{content}</span>
-        {token.status === 'incorrect' && token.suggestion &&
-          <span className="text-green-600 dark:text-green-400">{suggestionContent}</span>
-        }
+        <span className={userTokenStyle}>{displayToken}</span>
+        {suggestionSpan}
         {' '}
       </span>
     );
@@ -251,7 +256,7 @@ export default function TranscriptionWorkspace({
         <Tabs defaultValue="manual" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="manual" disabled={disableTextarea}>Your Transcription</TabsTrigger>
-            <TabsTrigger value="ai" disabled={!userTranscriptionInput.trim() && !currentClip.automatedTranscription && disableTextarea}>AI Tools</TabsTrigger>
+            <TabsTrigger value="ai" disabled={disableTextarea || (!userTranscriptionInput.trim() && !currentClip.automatedTranscription )}>AI Tools</TabsTrigger>
           </TabsList>
 
           <TabsContent value="manual" className="mt-4">
@@ -260,7 +265,7 @@ export default function TranscriptionWorkspace({
                 <CardTitle>Type What You Hear</CardTitle>
                 <CardDescription>
                   Listen to Clip {currentClipIndex + 1} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                  and type the dialogue. The "AI Tools" tab unlocks after you type and automated transcription is available.
+                  and type the dialogue. The "AI Tools" tab unlocks after you type or if automated transcription is available.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -276,7 +281,7 @@ export default function TranscriptionWorkspace({
                <CardFooter className="flex-col items-stretch gap-2">
                  <Button
                     onClick={() => setActiveTab("ai")}
-                    disabled={!userTranscriptionInput.trim() && !currentClip.automatedTranscription && disableTextarea}
+                    disabled={disableTextarea || (!userTranscriptionInput.trim() && !currentClip.automatedTranscription)}
                     variant="outline"
                   >
                    Go to AI Tools
@@ -298,6 +303,16 @@ export default function TranscriptionWorkspace({
                     {isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
                     {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
                     {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "Transcribe Clip {currentClipIndex + 1} (AI)" to generate.</p>}
+                  </ScrollArea>
+                </div>
+                
+                <div>
+                  <h3 className="font-semibold mb-1 text-foreground">Your Input:</h3>
+                  <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30">
+                     {userTranscriptionInput ? 
+                        <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> : 
+                        <p className="text-sm text-muted-foreground">You haven't typed anything for this clip yet.</p>
+                     }
                   </ScrollArea>
                 </div>
 
@@ -338,15 +353,15 @@ export default function TranscriptionWorkspace({
                 <div>
                   <h3 className="font-semibold mb-2 text-foreground">English Translation:</h3>
                    <Button
-                    onClick={handleTranslate} // Changed from handleFeedback
+                    onClick={handleTranslate}
                     disabled={isTranslationLoading || !canTranslate || disableCurrentClipAIActions}
                     className="w-full mb-2"
                     variant="outline"
                   >
-                    {isTranslationLoading ? ( // Changed
+                    {isTranslationLoading ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <Languages className="mr-2 h-4 w-4" /> // Changed Icon
+                      <Languages className="mr-2 h-4 w-4" />
                     )}
                     {isTranslationLoading ? "Translating..." : "Translate to English"} 
                     {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
