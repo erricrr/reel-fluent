@@ -34,14 +34,6 @@ export default function Header() {
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">LinguaClip</h1>
         </div>
         <div className="flex items-center gap-2 md:gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-          >
-            {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-          </Button>
           {loading ? (
              <Button variant="outline" disabled>Loading...</Button>
           ) : user ? (
@@ -72,6 +64,14 @@ export default function Header() {
               <UserCircle className="mr-2 h-5 w-5" /> Sign In
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          >
+            {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+          </Button>
         </div>
       </div>
     </header>

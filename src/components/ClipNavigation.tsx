@@ -66,9 +66,9 @@ export default function ClipNavigation({
         </h3>
         {currentClip && !isYouTubeVideo && (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2 py-1 h-auto"
+            className="text-xs text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground px-2 py-1 h-auto"
             onClick={() => onRemoveClip(currentClip.id)}
             aria-label="Remove this clip"
           >
