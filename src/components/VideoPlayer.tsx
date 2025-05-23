@@ -17,7 +17,7 @@ interface VideoPlayerProps {
   onEnded?: () => void;
   className?: string;
   isAudioSource?: boolean;
-  currentClipIndex?: number; // Added for dynamic label
+  currentClipIndex?: number; 
 }
 
 export default function VideoPlayer({
@@ -29,7 +29,7 @@ export default function VideoPlayer({
   onEnded,
   className,
   isAudioSource = false,
-  currentClipIndex, // Added for dynamic label
+  currentClipIndex, 
 }: VideoPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const [isLooping, setIsLooping] = useState(false);
@@ -59,12 +59,13 @@ export default function VideoPlayer({
     if (!media || isYouTube) {
       return;
     }
+    // If current time is already past end, reset to end and pause.
     if (typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime) {
       media.currentTime = endTime; 
       if (!media.paused) {
         media.pause();
       }
-    } else if (media.currentTime < startTime) {
+    } else if (media.currentTime < startTime) { // If before start, set to start
       media.currentTime = startTime;
     }
   }, [isYouTube, startTime, endTime]);
@@ -82,20 +83,22 @@ export default function VideoPlayer({
     }
 
     if (typeof endTime === 'number' && isFinite(endTime)) {
-      const threshold = 0.2; 
+      const threshold = 0.2; // Small buffer to catch the end event more reliably
       if (media.currentTime >= endTime - threshold) {
         if (isLooping) {
           media.currentTime = startTime;
           media.play().catch(error => {
+            // This can happen if the user interacts quickly or if the browser has autoplay restrictions
             console.warn("Error attempting to loop playback:", error);
-            media.pause(); 
-            media.currentTime = startTime; 
+            media.pause(); // Ensure it's paused if play fails
+            media.currentTime = startTime; // Reset to start time
           });
         } else {
-          media.currentTime = endTime; 
+          media.currentTime = endTime; // Clamp to exact end time
           if (!media.paused) {
-            media.pause(); 
+            media.pause(); // Ensure it's paused
           }
+          // Trigger onEnded only if not looping and we are at the exact end time
           if (onEnded && !isLooping && Math.abs(media.currentTime - endTime) < 0.1) {
             onEnded();
           }
@@ -109,13 +112,20 @@ export default function VideoPlayer({
     const media = mediaRef.current;
     if (!media || isYouTube) return;
 
+    // This event fires when the media naturally reaches its true end
+    // If we are looping a segment, our timeupdate handler should catch it first.
+    // This is more of a fallback.
     if (isLooping) {
       media.currentTime = startTime;
       media.play().catch(error => console.warn("Loop playback error on ended event:", error));
     } else {
+      // If not looping, make sure it's at the clip's end time if defined
+      if(typeof endTime === 'number' && isFinite(endTime)){
+        media.currentTime = endTime;
+      }
       if (onEnded) onEnded();
     }
-  }, [isYouTube, startTime, isLooping, onEnded]);
+  }, [isYouTube, startTime, endTime, isLooping, onEnded]);
 
 
   useEffect(() => {
@@ -124,39 +134,47 @@ export default function VideoPlayer({
       return;
     }
     
+    // This function is called when the media's metadata (like duration) is loaded.
     const localHandleLoadedMetadata = () => {
       if (!media) return;
       if (onLoadedMetadata) {
-        onLoadedMetadata(media.duration); 
+        onLoadedMetadata(media.duration); // Report actual media duration
       }
+      // Always set currentTime to startTime when metadata is loaded for the segment
       media.currentTime = startTime;
-      enforceClipBoundaryOnPlay();
+      enforceClipBoundaryOnPlay(); // Check boundaries immediately
     };
     
     media.addEventListener("loadedmetadata", localHandleLoadedMetadata);
     media.addEventListener("timeupdate", handleTimeUpdate);
-    media.addEventListener("ended", handleMediaEnded); 
+    media.addEventListener("ended", handleMediaEnded); // Native ended event
     media.addEventListener('play', enforceClipBoundaryOnPlay);
     media.addEventListener('playing', enforceClipBoundaryOnPlay);
 
+    // If the src attribute of the media element is different from effectiveSrc, update it.
+    // This happens for new files or when media fragments change the src.
     if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
-        media.src = effectiveSrc; 
-        media.load(); 
-    } else if (media.readyState >= 1) { 
+        media.src = effectiveSrc; // This will trigger a load
+        media.load(); // Explicitly tell the browser to load the new source
+    } else if (media.readyState >= 1) { // HAVE_METADATA or more
+        // If src is the same but startTime might have changed (e.g. navigating clips)
         if(media.currentTime !== startTime) {
             media.currentTime = startTime;
         }
-        enforceClipBoundaryOnPlay(); 
+        enforceClipBoundaryOnPlay(); // Check boundaries immediately
     }
 
 
     return () => {
+      // Cleanup: remove event listeners when the component unmounts or dependencies change
       media.removeEventListener("loadedmetadata", localHandleLoadedMetadata);
       media.removeEventListener("timeupdate", handleTimeUpdate);
       media.removeEventListener("ended", handleMediaEnded);
       media.removeEventListener('play', enforceClipBoundaryOnPlay);
       media.removeEventListener('playing', enforceClipBoundaryOnPlay);
     };
+  // mediaKey ensures this effect re-runs if src, startTime, or endTime change.
+  // Other dependencies are callbacks that should be stable if memoized, or their change implies a logical re-setup.
   }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay]);
 
 
@@ -164,7 +182,7 @@ export default function VideoPlayer({
     return (
       <Card className={cn(
         "flex items-center justify-center bg-muted",
-        isAudioSource ? "h-24" : "aspect-video",
+        isAudioSource ? "h-24" : "aspect-video", // Different base height for audio
         className
       )}>
         <CardContent className="p-0">
@@ -190,7 +208,7 @@ export default function VideoPlayer({
         <Card className={cn("overflow-hidden aspect-video", className)}>
           <CardContent className="p-0 h-full">
             <iframe
-              key={embedYTSrc} 
+              key={embedYTSrc} // Use the full src as key for YouTube
               width="100%"
               height="100%"
               src={embedYTSrc}
@@ -213,15 +231,14 @@ export default function VideoPlayer({
     }
   }
 
-  const cardContentPadding = !isYouTube ? "p-0 pb-0" : "p-0";
   const rootCardClasses = cn(
     "overflow-hidden",
-    isAudioSource ? "h-auto" : "aspect-video", // Let audio card size naturally
+    // isAudioSource ? "h-auto" : "aspect-video", // Let audio card size naturally for now
     className
   );
   const contentClasses = cn(
     "h-full",
-    isAudioSource ? "p-2 flex items-center justify-center" : "p-0 pb-0" // Padding for audio controls
+    isAudioSource ? "p-2 flex items-center justify-center" : "aspect-video p-0 pb-0" 
   );
 
 
@@ -233,11 +250,11 @@ export default function VideoPlayer({
             Your browser does not support the audio tag.
           </audio>
         </CardContent>
-        {!isYouTube && (
+        {!isYouTube && ( // This condition will always be true here since isAudioSource implies !isYouTube
           <CardFooter className="py-2 px-2 border-t">
             <div className="flex items-center space-x-2">
               <Checkbox
-                id={`loop-toggle-${mediaKey}`}
+                id={`loop-toggle-${mediaKey}`} // Unique ID based on mediaKey
                 checked={isLooping}
                 onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
               />
@@ -251,18 +268,19 @@ export default function VideoPlayer({
     );
   }
 
+  // Non-YouTube Video
   return (
     <Card className={rootCardClasses}>
-      <CardContent className={cn(contentClasses, !isAudioSource && "aspect-video")}>
+      <CardContent className={contentClasses}>
         <video key={mediaKey} ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
           Your browser does not support the video tag.
         </video>
       </CardContent>
-       {!isYouTube && (
+       {!isYouTube && ( // This condition will also be true here
         <CardFooter className="py-2 px-2 border-t">
           <div className="flex items-center space-x-2">
             <Checkbox
-              id={`loop-toggle-${mediaKey}`} 
+              id={`loop-toggle-${mediaKey}`} // Unique ID based on mediaKey
               checked={isLooping}
               onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
             />
@@ -275,3 +293,4 @@ export default function VideoPlayer({
     </Card>
   );
 }
+

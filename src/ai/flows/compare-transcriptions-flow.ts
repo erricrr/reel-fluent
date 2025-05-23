@@ -13,15 +13,24 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const CorrectionTokenSchema = z.object({
-  token: z.string().describe("A word or punctuation mark from the transcription. For 'missing' status, this is the token from the automated transcription. For 'extra', it's the user's token. For 'correct'/'incorrect', it's the user's token being evaluated."),
-  status: z.enum(["correct", "incorrect", "extra", "missing"]).describe(
-    "Status of the token compared to the automated transcription: " +
-    "'correct' if it matches (including accents/diacritics), " +
-    "'incorrect' if it's a mismatched word at the same position (e.g. spelling error, or incorrect/missing accents/diacritics), " +
-    "'extra' if it's an added word by the user not in the automated, " +
-    "'missing' if a word from automated is not in user's."
+  token: z.string().describe(
+    "A word or punctuation mark. " +
+    "For 'correct' and 'incorrect': it's the user's token. " +
+    "For 'extra': it's the user's extra token. " +
+    "For 'missing': it's the token from the automated transcription that the user missed."
   ),
-  suggestion: z.string().optional().describe("The correct word (including accents/diacritics) from the automated transcription if status is 'incorrect' or 'missing'.")
+  status: z.enum(["correct", "incorrect", "extra", "missing"]).describe(
+    "Status of the token: " +
+    "'correct' if user's token matches automated token perfectly (case, accents, etc.). " +
+    "'incorrect' if user's token is at the same position as an automated token but differs (spelling, case, accent). 'suggestion' MUST be provided. " +
+    "'extra' if user's token has no corresponding token in the automated transcription. " +
+    "'missing' if an automated token has no corresponding token in the user's transcription. 'suggestion' MUST be provided and be the same as 'token'."
+  ),
+  suggestion: z.string().optional().describe(
+    "The correct token from the automated transcription. " +
+    "MUST be provided if status is 'incorrect'. " +
+    "MUST be provided and be identical to 'token' if status is 'missing'."
+  )
 });
 export type CorrectionToken = z.infer<typeof CorrectionTokenSchema>;
 
@@ -42,7 +51,7 @@ export type CompareTranscriptionsInput = z.infer<
 >;
 
 const CompareTranscriptionsOutputSchema = z.object({
-  comparisonResult: z.array(CorrectionTokenSchema).describe("An array of tokens representing the comparison between user and automated transcriptions, including accent/diacritic accuracy."),
+  comparisonResult: z.array(CorrectionTokenSchema).describe("An array of tokens representing the one-to-one alignment and comparison between user and automated transcriptions. Punctuation marks MUST be treated as separate tokens."),
 });
 export type CompareTranscriptionsOutput = z.infer<
   typeof CompareTranscriptionsOutputSchema
@@ -58,34 +67,61 @@ const prompt = ai.definePrompt({
   name: 'compareTranscriptionsPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
-  prompt: `You are a language learning assistant. Your primary task is to meticulously compare a 'User Transcription' with an 'Automated Transcription' and produce a single, sequential list of 'CorrectionToken' objects in the 'comparisonResult' field. This list must accurately represent a token-by-token alignment of the user's input against the automated version, highlighting all differences.
+  prompt: `You are a highly meticulous language learning assistant. Your SOLE task is to compare a 'User Transcription' with an 'Automated Transcription' text. You MUST produce a single, sequential array of 'CorrectionToken' objects in the 'comparisonResult' field. This array represents a token-by-token alignment.
 
-Key requirements for the 'comparisonResult':
-- It must be a single, ordered array of tokens.
-- Each token must reflect its status relative to the automated transcription at that specific point in the sequence.
-- Pay EXTREMELY strict attention to spelling, accents, diacritics, and punctuation. Treat punctuation marks as separate tokens. Any deviation in accents or diacritics from the automated transcription must result in an 'incorrect' status for the user's token, with the 'suggestion' field containing the correctly accented word from the automated transcription.
+IMPORTANT RULES:
+1.  **Tokenization**: Treat every word AND every punctuation mark (e.g., '.', ',', '!', '?') as a separate token.
+2.  **Strictness**: Be EXTREMELY strict. Case, spelling, accents, and diacritics MUST match EXACTLY for a token to be 'correct'.
+3.  **Sequential Output**: The 'comparisonResult' array must follow the sequence of the aligned transcriptions.
 
 Token Status Definitions and Handling:
-- 'correct': The user's token matches the automated token at the same position (including case, accents, and diacritics). The 'token' field is the user's token.
-- 'incorrect': The user's token is present but differs from the automated token at the same position (e.g., spelling error, incorrect/missing accent or diacritic). The 'token' field is the user's token. The 'suggestion' field MUST contain the corresponding token from the automated transcription.
-- 'extra': The user's token is present, but there is no corresponding token at that position in the automated transcription (e.g., user added a word). The 'token' field should be the user's extra word.
-- 'missing': A token is present in the automated transcription, but no corresponding token exists in the user's transcription at that position. The 'token' field MUST be the missing token from the automated transcription, and the 'suggestion' field MUST also contain this same token.
+-   **'correct'**:
+    *   User's token exactly matches the automated token at the same position (including case, accents, and diacritics).
+    *   'token' field: The user's matching token.
+    *   'suggestion' field: Not applicable, should be absent.
+-   **'incorrect'**:
+    *   User's token is present at the same position as an automated token, but differs (e.g., spelling error, case mismatch, incorrect/missing accent or diacritic).
+    *   'token' field: The user's incorrect token.
+    *   'suggestion' field: MUST contain the corresponding, correct token from the automated transcription.
+-   **'extra'**:
+    *   User's token is present, but there is no corresponding token at that aligned position in the automated transcription (user added a word/punctuation).
+    *   'token' field: The user's extra token.
+    *   'suggestion' field: Not applicable, should be absent.
+-   **'missing'**:
+    *   An automated token is present, but no corresponding token exists in the user's transcription at that aligned position (user missed a word/punctuation).
+    *   'token' field: MUST be the missing token from the automated transcription.
+    *   'suggestion' field: MUST be the missing token from the automated transcription (same as 'token').
 
-Methodology:
-Conceptually, you should tokenize both transcriptions. Then, align these sequences to identify matches, mismatches, insertions (user 'extra' tokens), and deletions (user 'missing' tokens relative to automated). The final 'comparisonResult' should be this aligned sequence.
-
-Example 1 (Punctuation and Spelling):
-User Transcription: "Hello worl."
-Automated Transcription: "Hello, world!"
+Example 1 (Punctuation, Spelling, Case):
+User Transcription: "Hello worl. How are You"
+Automated Transcription: "Hello, world! How are you?"
 Language: english
 Expected 'comparisonResult' output: [
   { "token": "Hello", "status": "correct" },
   { "token": ",", "status": "missing", "suggestion": "," },
   { "token": "worl", "status": "incorrect", "suggestion": "world" },
-  { "token": ".", "status": "incorrect", "suggestion": "!" }
+  { "token": ".", "status": "incorrect", "suggestion": "!" },
+  { "token": "How", "status": "correct" }, // Assuming case doesn't make it incorrect, if case matters, this would be incorrect. Let's assume for this example, case mismatch makes it incorrect
+  // { "token": "How", "status": "incorrect", "suggestion": "how" }, // If case matters
+  { "token": "are", "status": "correct" },
+  { "token": "You", "status": "incorrect", "suggestion": "you" },
+  { "token": "?", "status": "missing", "suggestion": "?" }
+]
+(Clarification for above example: Let's enforce strict case matching. So 'You' vs 'you' is 'incorrect')
+Revised Example 1 Output (Strict Case):
+[
+  { "token": "Hello", "status": "correct" },
+  { "token": ",", "status": "missing", "suggestion": "," },
+  { "token": "worl", "status": "incorrect", "suggestion": "world" },
+  { "token": ".", "status": "incorrect", "suggestion": "!" },
+  { "token": "How", "status": "incorrect", "suggestion": "how" },
+  { "token": "are", "status": "correct" },
+  { "token": "You", "status": "incorrect", "suggestion": "you" },
+  { "token": "?", "status": "missing", "suggestion": "?" }
 ]
 
-Example 2 (Accent/Diacritic Correction):
+
+Example 2 (Accent/Diacritic Correction - STRICT):
 User Transcription: "Xin chao ban. Toi la hoc sinh."
 Automated Transcription: "Xin chào bạn. Tôi là học sinh."
 Language: vietnamese
