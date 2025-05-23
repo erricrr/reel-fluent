@@ -4,7 +4,7 @@
 import { firestoreAdmin } from '@/lib/firebaseAdmin';
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
-import { FieldValue } from 'firebase-admin/firestore'; // Import FieldValue
+// import { FieldValue } from 'firebase-admin/firestore'; // TEMPORARILY COMMENTED OUT to resolve module loading issues. Re-enable when firebase-admin is correctly installed.
 
 interface SaveMediaItemArgs {
   userId: string;
@@ -20,7 +20,8 @@ interface SaveMediaItemArgs {
     endTime: number;
     userTranscription: string | null;
     automatedTranscription: string | null;
-    feedback: string | null;
+    feedback: string | null; // Old feedback field, potentially for removal later
+    englishTranslation: string | null; // New translation field
     comparisonResult: CorrectionToken[] | null;
   }>;
 }
@@ -32,8 +33,8 @@ export async function saveMediaItemAction(
   args: SaveMediaItemArgs
 ): Promise<{ success: boolean; message: string; mediaId?: string }> {
   if (!firestoreAdmin) {
-    console.error('Firestore Admin is not initialized. Cannot save media item.');
-    return { success: false, message: 'Server error: Database connection failed.' };
+    console.warn('Firestore Admin is not initialized. Cannot save media item. Firebase might be disabled or not configured.');
+    return { success: false, message: 'Server error: Database connection failed or not configured.' };
   }
 
   if (args.mediaType !== 'url' && args.mediaDuration > MAX_MEDIA_DURATION_MINUTES_FOR_SAVE * 60) {
@@ -65,11 +66,14 @@ export async function saveMediaItemAction(
       language: args.language,
       clipSegmentationDuration: args.clipSegmentationDuration,
       clips: args.clips,
-      savedAt: FieldValue.serverTimestamp(), // Use imported FieldValue
+      // TEMPORARY CHANGE: Using ISOString due to module resolution issues with FieldValue.
+      // Revert to FieldValue.serverTimestamp() when firebase-admin is correctly installed and Firebase is enabled.
+      savedAt: new Date().toISOString(), 
+      // savedAt: FieldValue.serverTimestamp(), // Original code using Firestore server timestamp
     });
 
     return { success: true, message: 'Media item saved successfully!', mediaId: newMediaItemRef.id };
-  } catch (error) { // Added missing opening curly brace
+  } catch (error) {
     console.error('Error saving media item to Firestore:', error);
     let errorMessage = 'Failed to save media item due to a server error.';
     if (error instanceof Error) {
