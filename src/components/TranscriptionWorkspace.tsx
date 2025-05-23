@@ -227,7 +227,7 @@ export default function TranscriptionWorkspace({
           ) : (
             <Mic className="mr-2 h-4 w-4" />
           )}
-          {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe This Clip (AI)"}
+          {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1} (AI)`}
           {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
         </Button>
       </div>
@@ -278,7 +278,7 @@ export default function TranscriptionWorkspace({
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                     {isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
                     {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
-                    {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select a clip and click "Transcribe This Clip (AI)" to generate.</p>}
+                    {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select a clip and click "Transcribe Clip {currentClipIndex + 1} (AI)" to generate.</p>}
                   </ScrollArea>
                 </div>
 
@@ -355,6 +355,3 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
-    
-
-    
