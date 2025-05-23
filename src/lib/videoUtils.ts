@@ -57,34 +57,36 @@ export function generateClips(duration: number, clipLength: number, language: st
 }
 
 /**
- * Extracts audio from a segment of a video source URL and returns it as a Base64 Data URI.
- * This function creates a temporary video element to perform the extraction.
- * @param videoSrcUrl The URL of the video source (e.g., from URL.createObjectURL).
+ * Extracts audio from a segment of a media source URL and returns it as a Base64 Data URI.
+ * This function creates a temporary media element to perform the extraction.
+ * @param mediaSrcUrl The URL of the media source (e.g., from URL.createObjectURL).
  * @param startTime The start time of the segment in seconds.
  * @param endTime The end time of the segment in seconds.
+ * @param sourceType The type of the media source ('audio' or 'video').
  * @returns A promise that resolves with the audio data URI (e.g., "data:audio/webm;base64,...") or null if extraction fails.
  */
 export async function extractAudioFromVideoSegment(
-  videoSrcUrl: string,
+  mediaSrcUrl: string,
   startTime: number,
-  endTime: number
+  endTime: number,
+  sourceType: 'audio' | 'video' = 'video' // Default to 'video' for safety, but should be specified
 ): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    const videoElement = document.createElement('video');
-    videoElement.crossOrigin = "anonymous";
-    videoElement.preload = "auto"; // Hint to browser to load metadata
+    const mediaElement = document.createElement(sourceType);
+    mediaElement.crossOrigin = "anonymous";
+    mediaElement.preload = "auto"; // Hint to browser to load metadata
 
     const cleanup = () => {
       // Remove event listeners to prevent memory leaks
-      videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
-      videoElement.removeEventListener('error', onErrorHandler);
-      videoElement.removeEventListener('stalled', onErrorHandler);
-      // If video element was added to DOM (it's not here), remove it
+      mediaElement.removeEventListener('loadedmetadata', onLoadedMetadata);
+      mediaElement.removeEventListener('error', onErrorHandler);
+      mediaElement.removeEventListener('stalled', onErrorHandler);
+      // If media element was added to DOM (it's not here), remove it
       // Revoke object URL if created by this function (it's not here, src is passed in)
     };
 
     const onErrorHandler = (event: Event | string) => {
-      let eventType = 'Unknown video error';
+      let eventType = 'Unknown media error';
       let errorCode = 'N/A';
       let errorMessage = 'No specific error message.';
 
@@ -94,25 +96,28 @@ export async function extractAudioFromVideoSegment(
         eventType = (event as Event).type;
       }
 
-      if (videoElement.error) {
-        errorCode = String(videoElement.error.code);
-        errorMessage = videoElement.error.message || 'No specific error message from video element.';
+      // Type assertion to access the 'error' property
+      const htmlMediaElement = mediaElement as HTMLVideoElement | HTMLAudioElement;
+      if (htmlMediaElement.error) {
+        errorCode = String(htmlMediaElement.error.code);
+        errorMessage = htmlMediaElement.error.message || 'No specific error message from media element.';
         eventType += ` (Code: ${errorCode})`;
       }
       
-      console.warn(`Video error during audio extraction setup. Event Type: ${eventType}, Original Event:`, event, `Video Element Error: {code: ${errorCode}, message: "${errorMessage}"}`);
+      console.warn(`Media error during audio extraction setup. Source Type: ${sourceType}, Event Type: ${eventType}, Original Event:`, event, `Media Element Error: {code: ${errorCode}, message: "${errorMessage}"}`);
       
       cleanup();
-      reject(new Error(`Video error during audio extraction: ${eventType}. Message: ${errorMessage}`));
+      reject(new Error(`Media error during audio extraction: ${eventType}. Message: ${errorMessage}`));
     };
 
     const onLoadedMetadata = () => {
-      console.log("Temporary video metadata loaded for audio extraction.");
-      videoElement.currentTime = startTime;
+      console.log(`Temporary ${sourceType} metadata loaded for audio extraction.`);
+      mediaElement.currentTime = startTime;
 
-      if (!videoElement.captureStream && !(videoElement as any).mozCaptureStream) { // Added mozCaptureStream for Firefox
+      const mediaElementAsVideo = mediaElement as HTMLVideoElement; // For captureStream, which is on HTMLMediaElement
+      if (!mediaElementAsVideo.captureStream && !(mediaElementAsVideo as any).mozCaptureStream) { 
         cleanup();
-        return reject(new Error("Browser does not support video.captureStream() for audio extraction."));
+        return reject(new Error(`Browser does not support ${sourceType}.captureStream() for audio extraction.`));
       }
 
       const segmentDuration = (endTime - startTime) * 1000;
@@ -122,24 +127,24 @@ export async function extractAudioFromVideoSegment(
       }
 
       try {
-        const stream = videoElement.captureStream ? videoElement.captureStream() : (videoElement as any).mozCaptureStream(); // Added mozCaptureStream for Firefox
+        const stream = mediaElementAsVideo.captureStream ? mediaElementAsVideo.captureStream() : (mediaElementAsVideo as any).mozCaptureStream();
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length === 0) {
           cleanup();
-          return reject(new Error("No audio tracks found in the video for extraction."));
+          return reject(new Error(`No audio tracks found in the ${sourceType} for extraction.`));
         }
         
         const audioStream = new MediaStream(audioTracks);
         
-        // Prefer 'audio/webm;codecs=opus' if available, fallback to 'audio/webm'
-        const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+        const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/aac'];
         let selectedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
 
         if (typeof MediaRecorder === "undefined" || !selectedMimeType) {
             cleanup();
-            return reject(new Error(`MediaRecorder API not supported or none of the tested MIME types (${mimeTypes.join(', ')}) are supported by your browser.`));
+            return reject(new Error(`MediaRecorder API not supported or none of the tested MIME types (${mimeTypes.join(', ')}) are supported by your browser for ${sourceType}.`));
         }
-
+        
+        console.log(`Using MIME type for MediaRecorder: ${selectedMimeType}`);
         const recorder = new MediaRecorder(audioStream, { mimeType: selectedMimeType });
         const chunks: Blob[] = [];
 
@@ -153,8 +158,6 @@ export async function extractAudioFromVideoSegment(
           cleanup();
           if (chunks.length === 0) {
             console.warn("Audio extraction: No data recorded. This might happen if the media segment is too short or silent.");
-            // Depending on desired behavior, you might reject or resolve with null/empty.
-            // For now, let's treat it as a failure to get meaningful audio.
             reject(new Error("No audio data recorded from the segment."));
             return;
           }
@@ -177,35 +180,36 @@ export async function extractAudioFromVideoSegment(
         };
 
         recorder.start();
-        videoElement.muted = true; // Mute playback of the temporary element
-        videoElement.play().then(() => {
+        mediaElement.muted = true; // Mute playback of the temporary element
+        mediaElement.play().then(() => {
           setTimeout(() => {
             if (recorder.state === "recording") {
               recorder.stop();
             }
-            videoElement.pause();
+            mediaElement.pause();
           }, segmentDuration + 200); // Add a small buffer
         }).catch(playError => {
           cleanup();
-          console.warn("Error playing temporary video for recording:", playError);
+          console.warn(`Error playing temporary ${sourceType} for recording:`, playError);
           if (recorder.state === "recording") {
             recorder.stop(); // Attempt to stop recorder even if play fails
           }
-          reject(new Error(`Failed to play video for audio extraction: ${(playError as Error).message}. This can happen if the video format is not fully supported.`));
+          reject(new Error(`Failed to play ${sourceType} for audio extraction: ${(playError as Error).message}. This can happen if the media format is not fully supported.`));
         });
 
-      } catch (error) {
+      } catch (error)
+      {
         cleanup();
-        console.warn("Error setting up MediaRecorder for audio extraction:", error);
+        console.warn(`Error setting up MediaRecorder for ${sourceType} audio extraction:`, error);
         reject(new Error(`Setup error for audio extraction: ${(error as Error).message}`));
       }
     };
 
-    videoElement.addEventListener('loadedmetadata', onLoadedMetadata);
-    videoElement.addEventListener('error', onErrorHandler);
-    videoElement.addEventListener('stalled', onErrorHandler); // Handle cases where loading might stall
+    mediaElement.addEventListener('loadedmetadata', onLoadedMetadata);
+    mediaElement.addEventListener('error', onErrorHandler);
+    mediaElement.addEventListener('stalled', onErrorHandler); // Handle cases where loading might stall
 
-    videoElement.src = videoSrcUrl;
-    videoElement.load(); // Explicitly call load to trigger metadata loading
+    mediaElement.src = mediaSrcUrl;
+    mediaElement.load(); // Explicitly call load to trigger metadata loading
   });
 }
