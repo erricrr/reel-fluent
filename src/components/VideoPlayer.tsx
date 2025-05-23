@@ -2,7 +2,7 @@
 "use client";
 
 import type * as React from 'react';
-import { useEffect, useRef, useCallback } from "react"; // Added useCallback
+import { useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -29,22 +29,51 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
 
-  // Memoize handlers to ensure stable references for add/removeEventListener
-  // unless their dependencies (startTime, endTime, onEnded, onTimeUpdate) change.
+  // Construct effective source URL
+  const getEffectiveSrc = useCallback(() => {
+    if (!src) return undefined;
+    if (src.includes("youtube.com/") || src.includes("youtu.be/")) {
+      return src; // YouTube URLs are handled by iframe params
+    }
+
+    const sTime = typeof startTime === 'number' && isFinite(startTime) ? Math.floor(startTime) : 0;
+    // For #t fragment, endTime is optional. If provided, it's the end point.
+    // If not, playback goes to the end of the media from sTime.
+    // Our JS logic will still enforce the clip's specific endTime.
+    const eTime = typeof endTime === 'number' && isFinite(endTime) ? Math.floor(endTime) : undefined;
+
+    if (eTime !== undefined) {
+      return `${src}#t=${sTime},${eTime}`;
+    }
+    // If eTime is not well-defined (e.g. Infinity for YT, or if not needed for this strategy)
+    // Fallback to just start time, our JS logic will handle the end.
+    // However, for best results with media fragments, providing both is better if `endTime` is finite.
+    // Given our app logic, `endTime` should generally be finite for non-YT sources.
+    return `${src}#t=${sTime}${eTime ? `,${eTime}` : ''}`;
+  }, [src, startTime, endTime]);
+
+  const effectiveSrc = getEffectiveSrc();
+
+  // Key is critical: forces React to re-mount the media element if effectiveSrc changes.
+  const mediaKey = effectiveSrc;
+
+
   const enforceClipBoundaryOnPlay = useCallback(() => {
     const media = mediaRef.current;
-    if (!media || !src || (src.includes("youtube.com") || src.includes("youtu.be/"))) {
+    if (!media || !effectiveSrc || (effectiveSrc.includes("youtube.com") || effectiveSrc.includes("youtu.be/"))) {
       return;
     }
+    // Player's current time is always relative to the full media if #t doesn't change media.duration
+    // So, we use the absolute startTime and endTime from props.
     if (typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime) {
-      media.currentTime = endTime;
+      media.currentTime = endTime; // Clamp and pause
       if (!media.paused) {
         media.pause();
       }
     } else if (media.currentTime < startTime) {
-      media.currentTime = startTime;
+      media.currentTime = startTime; // Jump to start if before
     }
-  }, [src, startTime, endTime]);
+  }, [effectiveSrc, startTime, endTime]);
 
   const handleTimeUpdate = useCallback(() => {
     const media = mediaRef.current;
@@ -54,42 +83,43 @@ export default function VideoPlayer({
       onTimeUpdate(media.currentTime);
     }
 
-    if (!(src?.includes("youtube.com") || src?.includes("youtu.be/"))) {
+    if (!(effectiveSrc?.includes("youtube.com") || effectiveSrc?.includes("youtu.be/"))) {
       if (typeof endTime === 'number' && isFinite(endTime)) {
         if (media.currentTime >= endTime) {
-          media.currentTime = endTime;
+          media.currentTime = endTime; // Clamp time
           if (!media.paused) {
-            media.pause();
+            media.pause(); // Pause
           }
-          if (onEnded) {
+          if (onEnded) { // Consider onEnded only if at the actual boundary
             onEnded();
           }
         }
       }
     }
-  }, [src, endTime, onTimeUpdate, onEnded]);
+  }, [effectiveSrc, endTime, onTimeUpdate, onEnded]);
 
 
   const handleMediaEnded = useCallback(() => {
+    // This native 'ended' event might fire if the #t fragment reaches its end,
+    // or if the whole media ends. Our onEnded prop is more for clip end.
     if (onEnded) onEnded();
   }, [onEnded]);
 
 
   useEffect(() => {
     const media = mediaRef.current;
-    if (!media || !src) {
+    if (!media || !effectiveSrc) { // Check effectiveSrc instead of src
       return;
     }
 
     const localHandleLoadedMetadata = () => {
       if (!media) return;
       if (onLoadedMetadata) {
-        onLoadedMetadata(media.duration);
+        onLoadedMetadata(media.duration); // This duration might be of the fragment or full media
       }
-      // Always set currentTime to startTime once metadata is loaded
-      // This is crucial for new elements created by key change
+      // Set currentTime based on the absolute startTime prop
       media.currentTime = startTime;
-      enforceClipBoundaryOnPlay(); // Check boundaries immediately
+      enforceClipBoundaryOnPlay();
     };
     
     media.addEventListener("loadedmetadata", localHandleLoadedMetadata);
@@ -98,23 +128,22 @@ export default function VideoPlayer({
     media.addEventListener('play', enforceClipBoundaryOnPlay);
     media.addEventListener('playing', enforceClipBoundaryOnPlay);
 
-    // If src prop changes, update element src and load
-    // currentSrc reflects what the browser is actually using/loaded
-    if (media.currentSrc !== src && media.src !== src) { // Check both to be safe
-      media.src = src;
-      media.load(); // This will trigger 'loadedmetadata' where currentTime is set
-    } else {
-      // Src is the same, but element might be new (due to key) or startTime/endTime changed
-      // If already loaded, set currentTime directly
-      if (media.readyState >= media.HAVE_METADATA) {
-        if (media.currentTime !== startTime) { // Avoid unnecessary seeks
-          media.currentTime = startTime;
+    // If effectiveSrc prop changes (due to src, startTime, or endTime changing),
+    // the `key={mediaKey}` should cause a re-mount.
+    // This effect will then run on the new element.
+    // We always set the src and load for the new/re-mounted element.
+    if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
+        media.src = effectiveSrc;
+        media.load(); // This will trigger 'loadedmetadata'
+    } else if (media.readyState >= media.HAVE_METADATA) {
+        // If src is somehow the same but element re-mounted (e.g. from HMR or odd React behavior)
+        // or if just startTime/endTime props changed without changing effectiveSrc enough to re-key (less likely with current key)
+        if(media.currentTime !== startTime) {
+            media.currentTime = startTime;
         }
         enforceClipBoundaryOnPlay();
-      }
-      // If not yet loaded (e.g. new keyed element not yet through metadata), 
-      // 'loadedmetadata' listener above will handle setting currentTime.
     }
+
 
     return () => {
       media.removeEventListener("loadedmetadata", localHandleLoadedMetadata);
@@ -123,10 +152,10 @@ export default function VideoPlayer({
       media.removeEventListener('play', enforceClipBoundaryOnPlay);
       media.removeEventListener('playing', enforceClipBoundaryOnPlay);
     };
-  }, [src, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay]); // Added memoized handlers to deps
+  }, [effectiveSrc, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay]);
 
 
-  if (!src) {
+  if (!effectiveSrc) { // Check effectiveSrc
     return (
       <Card className={cn(
         "flex items-center justify-center bg-muted",
@@ -140,27 +169,26 @@ export default function VideoPlayer({
     );
   }
 
-  if (src.includes("youtube.com/watch") || src.includes("youtu.be/")) {
+  if (effectiveSrc.includes("youtube.com/watch") || effectiveSrc.includes("youtu.be/")) {
     let videoId = '';
-    if (src.includes("youtube.com/watch")) {
-      const urlParams = new URLSearchParams(new URL(src).search);
+    if (effectiveSrc.includes("youtube.com/watch")) {
+      const urlParams = new URLSearchParams(new URL(effectiveSrc).search);
       videoId = urlParams.get("v") || '';
-    } else if (src.includes("youtu.be/")) {
-      videoId = new URL(src).pathname.substring(1);
+    } else if (effectiveSrc.includes("youtu.be/")) {
+      videoId = new URL(effectiveSrc).pathname.substring(1);
     }
 
     if (videoId) {
-      // Ensure endTime is a whole number for YouTube URL
       const endParam = (typeof endTime === 'number' && isFinite(endTime)) ? `&end=${Math.floor(endTime)}` : '';
-      const embedSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endParam}&autoplay=0&controls=1&rel=0`;
+      const embedYTSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endParam}&autoplay=0&controls=1&rel=0`;
       return (
         <Card className={cn("overflow-hidden aspect-video", className)}>
           <CardContent className="p-0 h-full">
             <iframe
-              key={embedSrc} // Keyed by full embedSrc to force reload on any param change
+              key={embedYTSrc} 
               width="100%"
               height="100%"
-              src={embedSrc}
+              src={embedYTSrc}
               title="YouTube video player"
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -180,9 +208,6 @@ export default function VideoPlayer({
     }
   }
 
-  // Key is critical: forces React to re-mount the media element if src, startTime, or endTime change.
-  // This ensures a "fresh" element state for each clip segment.
-  const mediaKey = `${src}-${startTime}-${endTime}`;
 
   if (isAudioSource) {
     return (
