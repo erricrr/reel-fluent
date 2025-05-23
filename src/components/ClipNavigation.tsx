@@ -15,6 +15,7 @@ interface ClipNavigationProps {
   onRemoveClip: (clipId: string) => void;
   isYouTubeVideo: boolean; 
   formatSecondsToMMSS: (seconds: number) => string;
+  disableRemove?: boolean; // To disable the remove button from parent
 }
 
 export default function ClipNavigation({
@@ -24,33 +25,31 @@ export default function ClipNavigation({
   onRemoveClip,
   isYouTubeVideo,
   formatSecondsToMMSS,
+  disableRemove = false,
 }: ClipNavigationProps) {
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const activeClipRef = React.useRef<HTMLButtonElement>(null);
 
   React.useEffect(() => {
     if (activeClipRef.current && scrollContainerRef.current?.parentElement) {
-      // Using parentElement for scrollArea's viewport
       const scrollViewport = scrollContainerRef.current.parentElement;
       if (!scrollViewport) return;
 
       const activeElement = activeClipRef.current;
       
       const viewportRect = scrollViewport.getBoundingClientRect();
-      // const activeRect = activeElement.getBoundingClientRect(); // Not strictly needed for this scroll logic
-
       const scrollLeft = scrollViewport.scrollLeft;
-      const activeElementOffsetLeft = activeElement.offsetLeft; // Position relative to the scrollable container
+      const activeElementOffsetLeft = activeElement.offsetLeft; 
       const activeElementWidth = activeElement.offsetWidth;
-      const scrollMargin = 16; // Increased margin to account for focus ring and padding
+      const scrollMargin = 16; 
 
       if (activeElementOffsetLeft < scrollLeft + scrollMargin) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft - scrollMargin; // Scroll to bring left edge into view
+        scrollViewport.scrollLeft = activeElementOffsetLeft - scrollMargin; 
       } else if (activeElementOffsetLeft + activeElementWidth > scrollLeft + viewportRect.width - scrollMargin) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + scrollMargin; // Scroll to bring right edge into view
+        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + scrollMargin; 
       }
     }
-  }, [currentClipIndex, clips]); // Rerun when clips array changes too, e.g. after removal
+  }, [currentClipIndex, clips]); 
 
   if (!clips || clips.length === 0) {
     return null;
@@ -71,6 +70,7 @@ export default function ClipNavigation({
             className="text-xs text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground px-2 py-1 h-auto"
             onClick={() => onRemoveClip(currentClip.id)}
             aria-label="Remove this clip"
+            disabled={disableRemove} // Use the passed disableRemove prop
           >
             <Trash2Icon className="h-3 w-3 mr-1" /> Remove Current Clip
           </Button>
@@ -78,21 +78,21 @@ export default function ClipNavigation({
       </div>
 
       <ScrollArea className="w-full whitespace-nowrap rounded-md">
-        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-3.5"> {/* Changed pb-2.5 to pb-3.5 */}
+        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-3.5">
           {clips.map((clip, index) => (
             <Button
               key={clip.id}
               ref={index === currentClipIndex ? activeClipRef : null}
               variant={index === currentClipIndex ? "default" : "outline"}
               className={cn(
-                "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group", // Added 'group'
+                "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group", 
                 index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
               )}
               onClick={() => onSelectClip(index)}
             >
               <div className="flex flex-col items-start text-left">
                 <div className="flex items-center gap-1.5">
-                  <Film className="h-4 w-4 text-inherit" /> {/* Ensure icon inherits color */}
+                  <Film className="h-4 w-4 text-inherit" /> 
                   <span className="font-semibold text-xs">
                     Clip {index + 1}
                   </span>
@@ -101,7 +101,7 @@ export default function ClipNavigation({
                   "text-xs", 
                   index === currentClipIndex 
                     ? "text-primary-foreground/80" 
-                    : "text-muted-foreground group-hover:text-accent-foreground" // Changed for hover
+                    : "text-muted-foreground group-hover:text-accent-foreground" 
                 )}>
                   {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
                 </span>
