@@ -32,7 +32,7 @@ const isConfigSufficient = requiredKeys.every(key => {
 });
 
 if (!isConfigSufficient) {
-  console.error(
+  console.warn( // Changed from console.error
     'One or more Firebase configuration values are missing or invalid. Please check your .env.local file. Ensure all required NEXT_PUBLIC_FIREBASE_... variables are set with non-empty values and that you have restarted your development server. Firebase will not be initialized.'
   );
   // app, auth, firestore will remain undefined
@@ -57,11 +57,10 @@ if (!isConfigSufficient) {
       auth = getAuth(app);
       firestore = getFirestore(app);
     } else {
-       // This case should ideally not be reached if isConfigSufficient is true and initializeApp doesn't throw
-      console.error("Firebase app could not be initialized or retrieved despite sufficient config. Auth and Firestore services will be unavailable.");
+      console.warn("Firebase app could not be initialized or retrieved despite sufficient config. Auth and Firestore services will be unavailable.");
     }
   } catch (error) {
-    console.error('Critical error during Firebase initialization process:', error);
+    console.warn('Critical error during Firebase initialization process:', error); // Changed from console.error
     // Ensure app, auth, and firestore are explicitly undefined on error
     app = undefined;
     auth = undefined;
@@ -70,3 +69,4 @@ if (!isConfigSufficient) {
 }
 
 export { app, auth, firestore };
+
