@@ -2,26 +2,26 @@
 "use client";
 
 import type * as React from 'react';
-import { useState, useEffect } from "react";
-import VideoPlayer from "./VideoPlayer";
+import { useState, useEffect, useRef } from "react";
+import VideoPlayer, { type VideoPlayerRef } from "./VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Loader2, FileDiff, Languages } from "lucide-react";
-import ClipNavigation from "./ClipNavigation"; 
+import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon } from "lucide-react";
+import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
-import { useToast } from "@/hooks/use-toast"; 
+import { useToast } from "@/hooks/use-toast";
 
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
   clips: Clip[];
   mediaSrc?: string;
   currentClipIndex: number;
-  onSelectClip: (index: number) => void; 
+  onSelectClip: (index: number) => void;
   onTranscribeAudio: (clipId: string) => Promise<void>;
   onGetCorrections: (clipId: string) => Promise<void>;
   onTranslateToEnglish: (clipId: string) => Promise<void>;
@@ -32,9 +32,9 @@ interface TranscriptionWorkspaceProps {
   isAudioSource?: boolean;
   clipSegmentationDuration: number;
   onClipDurationChange: (duration: string) => void;
-  isLoadingMedia: boolean; 
-  isSavingMedia: boolean;  
-  isAnyClipTranscribing: boolean; 
+  isLoadingMedia: boolean;
+  isSavingMedia: boolean;
+  isAnyClipTranscribing: boolean;
 }
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -59,7 +59,7 @@ export default function TranscriptionWorkspace({
   clips,
   mediaSrc,
   currentClipIndex,
-  onSelectClip, 
+  onSelectClip,
   onTranscribeAudio,
   onGetCorrections,
   onTranslateToEnglish,
@@ -77,16 +77,16 @@ export default function TranscriptionWorkspace({
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState("manual");
   const { toast } = useToast();
+  const videoPlayerRef = useRef<VideoPlayerRef>(null);
+  const [isCurrentClipPlaying, setIsCurrentClipPlaying] = useState(false);
 
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-    // If AI tools were active but user transcription becomes empty (e.g. clip change), switch back to manual
-    if (activeTab === "ai" && (!currentClip.userTranscription || currentClip.userTranscription.trim() === "")) {
+    if (activeTab === "ai" && (!currentClip.userTranscription?.trim() && !currentClip.automatedTranscription)) {
       setActiveTab("manual");
     }
   }, [currentClip, activeTab]);
-
 
   const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -99,7 +99,7 @@ export default function TranscriptionWorkspace({
       toast({variant: "destructive", title: "Transcription Unavailable", description: `Transcription is only available for uploaded ${isAudioSource ? 'audio' : 'video'} files.`});
       return;
     }
-    if (isAnyClipTranscribing) { 
+    if (isAnyClipTranscribing) {
       toast({variant: "destructive", title: "Processing...", description: "Another transcription is already in progress."});
       return;
     }
@@ -147,6 +147,15 @@ export default function TranscriptionWorkspace({
     }
   };
 
+  const togglePlayPause = () => {
+    if (!videoPlayerRef.current) return;
+    if (videoPlayerRef.current.getIsPlaying()) {
+      videoPlayerRef.current.pause();
+    } else {
+      videoPlayerRef.current.play();
+    }
+  };
+
 
   if (!currentClip) {
     return (
@@ -155,16 +164,16 @@ export default function TranscriptionWorkspace({
       </div>
     );
   }
-  
+
   const isAutomatedTranscriptionError = currentClip.automatedTranscription && (currentClip.automatedTranscription.startsWith("Error:"));
-  const isAutomatedTranscriptionLoading = currentClip.automatedTranscription === "Transcribing..."; 
+  const isAutomatedTranscriptionLoading = currentClip.automatedTranscription === "Transcribing...";
   const isTranslationLoading = currentClip.englishTranslation === "Translating...";
   const isCorrectionsLoading = Array.isArray(currentClip.comparisonResult) && currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Comparing...";
-  
+
   const canGetCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
   const canTranslate = currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo && !isAutomatedTranscriptionLoading;
 
-  const disableTextarea = isLoadingMedia || isSavingMedia; 
+  const disableTextarea = isLoadingMedia || isSavingMedia;
   const disableCurrentClipAIActions = isAutomatedTranscriptionLoading || isLoadingMedia || isSavingMedia;
 
 
@@ -184,11 +193,9 @@ export default function TranscriptionWorkspace({
         break;
       case 'extra':
         userTokenStyle = "text-blue-600 dark:text-blue-400 opacity-80 italic";
-        // token.token = `+${token.token}`; // Prefixing directly modifies data, avoid if possible, handle in render
         break;
       case 'missing':
          userTokenStyle = "text-gray-500 dark:text-gray-400 opacity-70";
-         // token.token = `[${token.token}]`; // Prefixing directly modifies data, avoid if possible, handle in render
         break;
       default:
         break;
@@ -197,7 +204,7 @@ export default function TranscriptionWorkspace({
     let displayToken = token.token;
     if (token.status === 'extra') displayToken = `+${token.token}`;
     if (token.status === 'missing') displayToken = `[${token.token}]`;
-    
+
     return (
       <span key={index}>
         <span className={userTokenStyle}>{displayToken}</span>
@@ -212,18 +219,20 @@ export default function TranscriptionWorkspace({
     <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
       <div className="lg:w-1/2 w-full space-y-4">
         <VideoPlayer
+          ref={videoPlayerRef}
           src={mediaSrc}
           startTime={currentClip?.startTime}
           endTime={currentClip?.endTime}
           className="shadow-lg rounded-lg"
-          isAudioSource={isAudioSource} 
+          isAudioSource={isAudioSource}
           currentClipIndex={currentClipIndex}
+          onPlayStateChange={setIsCurrentClipPlaying}
         />
         <div className="space-y-3 p-3 bg-card rounded-lg shadow">
-            <ClipDurationSelector 
-                selectedDuration={clipSegmentationDuration} 
-                onDurationChange={onClipDurationChange} 
-                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing || isYouTubeVideo} 
+            <ClipDurationSelector
+                selectedDuration={clipSegmentationDuration}
+                onDurationChange={onClipDurationChange}
+                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing || isYouTubeVideo}
             />
         </div>
         <ClipNavigation
@@ -233,7 +242,7 @@ export default function TranscriptionWorkspace({
           onRemoveClip={onRemoveClip}
           isYouTubeVideo={isYouTubeVideo}
           formatSecondsToMMSS={formatSecondsToMMSS}
-          disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing} 
+          disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
         />
         <Button
           onClick={handleTranscribe}
@@ -241,10 +250,10 @@ export default function TranscriptionWorkspace({
           className="w-full"
           variant="default"
         >
-          {isAutomatedTranscriptionLoading ? ( 
+          {isAutomatedTranscriptionLoading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
-            <Sparkles className="mr-2 h-4 w-4" /> 
+            <Sparkles className="mr-2 h-4 w-4" />
           )}
           {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1} (AI)`}
           {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
@@ -269,6 +278,20 @@ export default function TranscriptionWorkspace({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                 <div className="flex items-center gap-2 mb-2">
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={togglePlayPause}
+                        disabled={disableTextarea || !mediaSrc || isYouTubeVideo}
+                        aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
+                    >
+                        {isCurrentClipPlaying ? <PauseIcon className="h-5 w-5" /> : <PlayIcon className="h-5 w-5" />}
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                        {isCurrentClipPlaying ? "Playing..." : "Paused"} (Clip {currentClipIndex + 1})
+                    </span>
+                </div>
                 <Textarea
                   placeholder="Start typing..."
                   value={userTranscriptionInput}
@@ -305,12 +328,12 @@ export default function TranscriptionWorkspace({
                     {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "Transcribe Clip {currentClipIndex + 1} (AI)" to generate.</p>}
                   </ScrollArea>
                 </div>
-                
+
                 <div>
                   <h3 className="font-semibold mb-1 text-foreground">Your Input:</h3>
                   <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30">
-                     {userTranscriptionInput ? 
-                        <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> : 
+                     {userTranscriptionInput ?
+                        <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> :
                         <p className="text-sm text-muted-foreground">You haven't typed anything for this clip yet.</p>
                      }
                   </ScrollArea>
@@ -363,19 +386,19 @@ export default function TranscriptionWorkspace({
                     ) : (
                       <Languages className="mr-2 h-4 w-4" />
                     )}
-                    {isTranslationLoading ? "Translating..." : "Translate to English"} 
+                    {isTranslationLoading ? "Translating..." : "Translate to English"}
                     {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
                     {!isYouTubeVideo && isAutomatedTranscriptionError && <span className="text-xs ml-1">(Fix Transcription First)</span>}
                     {isAutomatedTranscriptionLoading && <span className="text-xs ml-1">(Wait for transcription)</span>}
                   </Button>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
-                     {isTranslationLoading ? ( 
+                     {isTranslationLoading ? (
                        <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
-                     ) : currentClip.englishTranslation === null || currentClip.englishTranslation === undefined ? ( 
+                     ) : currentClip.englishTranslation === null || currentClip.englishTranslation === undefined ? (
                        <p className="text-sm text-muted-foreground">Click "Translate to English" above after AI transcription is complete.</p>
-                     ) : currentClip.englishTranslation === "" ? ( 
+                     ) : currentClip.englishTranslation === "" ? (
                         <p className="text-sm">Translation complete. No specific output or translation was empty.</p>
-                     ) : currentClip.englishTranslation.startsWith("Error:") ? ( 
+                     ) : currentClip.englishTranslation.startsWith("Error:") ? (
                         <p className="text-sm text-destructive">{currentClip.englishTranslation}</p>
                      ) : (
                        <p className="text-sm whitespace-pre-wrap">{currentClip.englishTranslation}</p>
@@ -390,3 +413,5 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
+
+    
