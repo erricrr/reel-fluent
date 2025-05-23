@@ -2,8 +2,10 @@
 "use client";
 
 import type * as React from 'react';
-import { useEffect, useRef, useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 interface VideoPlayerProps {
@@ -28,52 +30,42 @@ export default function VideoPlayer({
   isAudioSource = false,
 }: VideoPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
+  const [isLooping, setIsLooping] = useState(false);
 
-  // Construct effective source URL
   const getEffectiveSrc = useCallback(() => {
     if (!src) return undefined;
     if (src.includes("youtube.com/") || src.includes("youtu.be/")) {
-      return src; // YouTube URLs are handled by iframe params
+      return src; 
     }
-
     const sTime = typeof startTime === 'number' && isFinite(startTime) ? Math.floor(startTime) : 0;
-    // For #t fragment, endTime is optional. If provided, it's the end point.
-    // If not, playback goes to the end of the media from sTime.
-    // Our JS logic will still enforce the clip's specific endTime.
     const eTime = typeof endTime === 'number' && isFinite(endTime) ? Math.floor(endTime) : undefined;
 
     if (eTime !== undefined) {
       return `${src}#t=${sTime},${eTime}`;
     }
-    // If eTime is not well-defined (e.g. Infinity for YT, or if not needed for this strategy)
-    // Fallback to just start time, our JS logic will handle the end.
-    // However, for best results with media fragments, providing both is better if `endTime` is finite.
-    // Given our app logic, `endTime` should generally be finite for non-YT sources.
     return `${src}#t=${sTime}${eTime ? `,${eTime}` : ''}`;
   }, [src, startTime, endTime]);
 
   const effectiveSrc = getEffectiveSrc();
+  const mediaKey = `${effectiveSrc}-${startTime}-${endTime}`; // Ensure key changes if src or times change
 
-  // Key is critical: forces React to re-mount the media element if effectiveSrc changes.
-  const mediaKey = effectiveSrc;
+  const isYouTube = effectiveSrc?.includes("youtube.com/") || effectiveSrc?.includes("youtu.be/");
 
 
   const enforceClipBoundaryOnPlay = useCallback(() => {
     const media = mediaRef.current;
-    if (!media || !effectiveSrc || (effectiveSrc.includes("youtube.com") || effectiveSrc.includes("youtu.be/"))) {
+    if (!media || isYouTube) {
       return;
     }
-    // Player's current time is always relative to the full media if #t doesn't change media.duration
-    // So, we use the absolute startTime and endTime from props.
     if (typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime) {
-      media.currentTime = endTime; // Clamp and pause
+      media.currentTime = endTime; 
       if (!media.paused) {
         media.pause();
       }
     } else if (media.currentTime < startTime) {
-      media.currentTime = startTime; // Jump to start if before
+      media.currentTime = startTime;
     }
-  }, [effectiveSrc, startTime, endTime]);
+  }, [isYouTube, startTime, endTime]);
 
   const handleTimeUpdate = useCallback(() => {
     const media = mediaRef.current;
@@ -83,65 +75,81 @@ export default function VideoPlayer({
       onTimeUpdate(media.currentTime);
     }
 
-    if (!(effectiveSrc?.includes("youtube.com") || effectiveSrc?.includes("youtu.be/"))) {
-      if (typeof endTime === 'number' && isFinite(endTime)) {
-        if (media.currentTime >= endTime) {
-          media.currentTime = endTime; // Clamp time
+    if (isYouTube) {
+      return; // Native YouTube player handles its own looping via URL params if set
+    }
+
+    if (typeof endTime === 'number' && isFinite(endTime)) {
+      // Use a small threshold (e.g., 0.2 seconds) before endTime to trigger loop/end
+      const threshold = 0.2; 
+      if (media.currentTime >= endTime - threshold) {
+        if (isLooping) {
+          media.currentTime = startTime;
+          media.play().catch(error => {
+            console.warn("Error attempting to loop playback:", error);
+            media.pause(); // Ensure it's paused if play fails
+            media.currentTime = startTime; // Reset time again
+          });
+        } else {
+          media.currentTime = endTime; 
           if (!media.paused) {
-            media.pause(); // Pause
+            media.pause(); 
           }
-          if (onEnded) { // Consider onEnded only if at the actual boundary
+          if (onEnded && !isLooping && Math.abs(media.currentTime - endTime) < 0.1) {
             onEnded();
           }
         }
       }
     }
-  }, [effectiveSrc, endTime, onTimeUpdate, onEnded]);
+  }, [isYouTube, startTime, endTime, onTimeUpdate, onEnded, isLooping]);
 
 
   const handleMediaEnded = useCallback(() => {
-    // This native 'ended' event might fire if the #t fragment reaches its end,
-    // or if the whole media ends. Our onEnded prop is more for clip end.
-    if (onEnded) onEnded();
-  }, [onEnded]);
+    const media = mediaRef.current;
+    if (!media || isYouTube) return;
+
+    if (isLooping) {
+      media.currentTime = startTime;
+      media.play().catch(error => console.warn("Loop playback error on ended event:", error));
+    } else {
+      if (onEnded) onEnded();
+    }
+  }, [isYouTube, startTime, isLooping, onEnded]);
 
 
   useEffect(() => {
     const media = mediaRef.current;
-    if (!media || !effectiveSrc) { // Check effectiveSrc instead of src
+    if (!media || !effectiveSrc) { 
       return;
     }
-
+    
+    // This logic primarily runs when the element is mounted or `mediaKey` changes
     const localHandleLoadedMetadata = () => {
       if (!media) return;
       if (onLoadedMetadata) {
-        onLoadedMetadata(media.duration); // This duration might be of the fragment or full media
+        onLoadedMetadata(media.duration); 
       }
-      // Set currentTime based on the absolute startTime prop
       media.currentTime = startTime;
       enforceClipBoundaryOnPlay();
     };
     
     media.addEventListener("loadedmetadata", localHandleLoadedMetadata);
     media.addEventListener("timeupdate", handleTimeUpdate);
-    media.addEventListener("ended", handleMediaEnded);
+    media.addEventListener("ended", handleMediaEnded); // For native end, to potentially loop
     media.addEventListener('play', enforceClipBoundaryOnPlay);
     media.addEventListener('playing', enforceClipBoundaryOnPlay);
 
-    // If effectiveSrc prop changes (due to src, startTime, or endTime changing),
-    // the `key={mediaKey}` should cause a re-mount.
-    // This effect will then run on the new element.
-    // We always set the src and load for the new/re-mounted element.
+    // Explicitly set src and load if the mediaKey (and thus effectiveSrc) changed,
+    // or if it's the initial setup.
     if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
-        media.src = effectiveSrc;
-        media.load(); // This will trigger 'loadedmetadata'
-    } else if (media.readyState >= media.HAVE_METADATA) {
-        // If src is somehow the same but element re-mounted (e.g. from HMR or odd React behavior)
-        // or if just startTime/endTime props changed without changing effectiveSrc enough to re-key (less likely with current key)
+        media.src = effectiveSrc; // Set the potentially new fragment URL
+        media.load(); 
+    } else if (media.readyState >= 1) { // HAVE_METADATA or more
+        // If src is the same but startTime might have changed (e.g. navigating clips)
         if(media.currentTime !== startTime) {
             media.currentTime = startTime;
         }
-        enforceClipBoundaryOnPlay();
+        enforceClipBoundaryOnPlay(); // Ensure it respects boundaries if already playable
     }
 
 
@@ -152,10 +160,10 @@ export default function VideoPlayer({
       media.removeEventListener('play', enforceClipBoundaryOnPlay);
       media.removeEventListener('playing', enforceClipBoundaryOnPlay);
     };
-  }, [effectiveSrc, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay]);
+  }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay]);
 
 
-  if (!effectiveSrc) { // Check effectiveSrc
+  if (!effectiveSrc) {
     return (
       <Card className={cn(
         "flex items-center justify-center bg-muted",
@@ -169,7 +177,7 @@ export default function VideoPlayer({
     );
   }
 
-  if (effectiveSrc.includes("youtube.com/watch") || effectiveSrc.includes("youtu.be/")) {
+  if (isYouTube) {
     let videoId = '';
     if (effectiveSrc.includes("youtube.com/watch")) {
       const urlParams = new URLSearchParams(new URL(effectiveSrc).search);
@@ -179,6 +187,8 @@ export default function VideoPlayer({
     }
 
     if (videoId) {
+      // For YouTube, looping is controlled by loop=1&playlist=VIDEO_ID
+      // The 'isLooping' state here won't directly control it. This UI toggle is for HTML5 media.
       const endParam = (typeof endTime === 'number' && isFinite(endTime)) ? `&end=${Math.floor(endTime)}` : '';
       const embedYTSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endParam}&autoplay=0&controls=1&rel=0`;
       return (
@@ -191,7 +201,7 @@ export default function VideoPlayer({
               src={embedYTSrc}
               title="YouTube video player"
               frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
             ></iframe>
           </CardContent>
@@ -208,26 +218,56 @@ export default function VideoPlayer({
     }
   }
 
+  const cardContentPadding = !isYouTube ? "p-0 pb-0" : "p-0";
+
 
   if (isAudioSource) {
     return (
       <Card className={cn("overflow-hidden", className)}>
-        <CardContent className="p-2 h-full flex items-center justify-center">
+        <CardContent className={cardContentPadding  + " h-full flex items-center justify-center"}>
           <audio key={mediaKey} ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
             Your browser does not support the audio tag.
           </audio>
         </CardContent>
+        {!isYouTube && (
+          <CardFooter className="py-2 px-2 border-t">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id={`loop-toggle-${mediaKey}`}
+                checked={isLooping}
+                onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
+              />
+              <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
+                Loop Clip
+              </Label>
+            </div>
+          </CardFooter>
+        )}
       </Card>
     );
   }
 
   return (
-    <Card className={cn("aspect-video overflow-hidden", className)}>
-      <CardContent className="p-0 h-full">
+    <Card className={cn("overflow-hidden", isAudioSource ? "" : "aspect-video", className)}>
+      <CardContent className={cardContentPadding + " h-full"}>
         <video key={mediaKey} ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
           Your browser does not support the video tag.
         </video>
       </CardContent>
+       {!isYouTube && (
+        <CardFooter className="py-2 px-2 border-t">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id={`loop-toggle-${mediaKey}`} // Use a unique ID based on mediaKey
+              checked={isLooping}
+              onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
+            />
+            <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
+              Loop Clip
+            </Label>
+          </div>
+        </CardFooter>
+      )}
     </Card>
   );
 }
