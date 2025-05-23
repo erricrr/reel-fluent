@@ -37,9 +37,8 @@ export default function ClipNavigation({
       const activeElement = activeClipRef.current;
       
       const viewportRect = scrollViewport.getBoundingClientRect();
-      const activeRect = activeElement.getBoundingClientRect();
+      // const activeRect = activeElement.getBoundingClientRect(); // Not strictly needed for this scroll logic
 
-      // Calculate scroll position relative to the viewport
       const scrollLeft = scrollViewport.scrollLeft;
       const activeElementOffsetLeft = activeElement.offsetLeft; // Position relative to the scrollable container
       const activeElementWidth = activeElement.offsetWidth;
@@ -79,7 +78,7 @@ export default function ClipNavigation({
       </div>
 
       <ScrollArea className="w-full whitespace-nowrap rounded-md">
-        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pb-2.5"> {/* Added px-1 for padding */}
+        <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-2.5"> {/* Added pt-1 for top padding */}
           {clips.map((clip, index) => (
             <Button
               key={clip.id}
