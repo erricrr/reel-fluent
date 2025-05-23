@@ -6,35 +6,51 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
+import ClipDurationSelector from "./ClipDurationSelector"; // New import
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileVideo, X as XIcon, FileAudio } from "lucide-react";
+import { FileVideo, X as XIcon, FileAudio, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { generateClips, extractAudioFromVideoSegment, type Clip } from "@/lib/videoUtils";
+import { generateClips, type Clip } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
 import { transcriptionFeedback } from "@/ai/flows/transcription-feedback";
 import { compareTranscriptions, type CompareTranscriptionsOutput } from "@/ai/flows/compare-transcriptions-flow";
+import { useAuth } from '@/contexts/AuthContext';
+import { saveMediaItemAction } from '@/app/actions';
+
+const MAX_MEDIA_DURATION_MINUTES = 10;
 
 export default function LinguaClipApp() {
   const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [sourceUrl, setSourceUrl] = useState<string | undefined>(undefined); // Used for YouTube or direct video URLs
-  const [mediaSrc, setMediaSrc] = useState<string | undefined>(undefined); // Object URL for files, or direct URL
+  const [sourceUrl, setSourceUrl] = useState<string | undefined>(undefined);
+  const [mediaSrc, setMediaSrc] = useState<string | undefined>(undefined);
   const [mediaDisplayName, setMediaDisplayName] = useState<string | null>(null);
   const [mediaDuration, setMediaDuration] = useState<number>(0);
+  
   const [clips, setClips] = useState<Clip[]>([]);
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
+  
   const [language, setLanguage] = useState<string>("vietnamese");
-  const [comparisonResult, setComparisonResult] = useState<CompareTranscriptionsOutput['comparisonResult'] | null>(null);
+  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60); // New state, default 60s
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | null>(null);
-
-
+  
   const processingIdRef = useRef<number>(0);
-
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const isYouTubeVideo = sourceUrl?.includes("youtube.com") || sourceUrl?.includes("youtu.be") || false;
+
+  const updateClipData = (clipId: string, data: Partial<Omit<Clip, 'id' | 'startTime' | 'endTime'>>) => {
+    setClips(prevClips =>
+      prevClips.map(clip =>
+        clip.id === clipId ? { ...clip, ...data } : clip
+      )
+    );
+  };
 
   const resetAppState = useCallback(() => {
     processingIdRef.current += 1; 
@@ -47,8 +63,8 @@ export default function LinguaClipApp() {
     setClips([]);
     setCurrentClipIndex(0);
     setIsLoading(false);
-    setComparisonResult(null);
     setCurrentSourceType(null);
+    setClipSegmentationDuration(60); // Reset clip duration on clear
   }, []);
 
   const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
@@ -74,8 +90,9 @@ export default function LinguaClipApp() {
       if (isYouTubeVideo) {
         if (processingIdRef.current !== currentProcessingId) return; 
         setMediaDisplayName(displayName);
-        setClips([{ id: 'yt-full', startTime: 0, endTime: Infinity }]);
-        setMediaDuration(Infinity);
+        const initialYtClips = generateClips(Infinity, clipSegmentationDuration); // Use selected duration
+        setClips(initialYtClips.map(clip => ({...clip, userTranscription: '', automatedTranscription: null, feedback: null, comparisonResult: null})));
+        setMediaDuration(Infinity); // Placeholder for YouTube duration
         setIsLoading(false);
         toast({ title: "YouTube Video Loaded", description: "Viewing YouTube video. Transcription/clip features are limited." });
         return;
@@ -91,80 +108,67 @@ export default function LinguaClipApp() {
     setMediaDisplayName(displayName);
 
     if (currentMediaSrc && !isYouTubeVideo) {
-      if (source.file?.type.startsWith("video/")) {
-        const tempVideo = document.createElement('video');
-        tempVideo.onloadedmetadata = () => {
-            if (processingIdRef.current !== currentProcessingId) return;
-            setMediaDuration(tempVideo.duration);
-            const generatedClips = generateClips(tempVideo.duration);
-            setClips(generatedClips);
-            if (generatedClips.length > 0) {
-              toast({ title: "Video Processed", description: `${generatedClips.length} clips generated.` });
-            } else {
-              toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips. Video may be too short or invalid." });
-            }
-            setIsLoading(false);
-        };
-        tempVideo.onerror = () => {
-            if (processingIdRef.current !== currentProcessingId) return;
-            toast({ variant: "destructive", title: "Error", description: "Could not load video metadata." });
-            setIsLoading(false);
-            resetAppState();
-        };
-        tempVideo.src = currentMediaSrc;
-        tempVideo.load();
-      } else if (source.file?.type.startsWith("audio/")) {
-        const tempAudio = document.createElement('audio');
-        tempAudio.onloadedmetadata = () => {
-            if (processingIdRef.current !== currentProcessingId) return;
-            setMediaDuration(tempAudio.duration);
-            const generatedClips = generateClips(tempAudio.duration);
-            setClips(generatedClips);
-            if (generatedClips.length > 0) {
-              toast({ title: "Audio File Processed", description: `${generatedClips.length} clips generated.` });
-            } else {
-              toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips. Audio may be too short or invalid." });
-            }
-            setIsLoading(false);
-        };
-        tempAudio.onerror = () => {
-            if (processingIdRef.current !== currentProcessingId) return;
-            toast({ variant: "destructive", title: "Error", description: "Could not load audio metadata." });
-            setIsLoading(false);
-            resetAppState();
-        };
-        tempAudio.src = currentMediaSrc;
-        tempAudio.load();
-      } else if (source.url) { // Direct video URL (non-YouTube)
-        const tempVideo = document.createElement('video');
-        tempVideo.onloadedmetadata = () => {
-            if (processingIdRef.current !== currentProcessingId) return;
-            setMediaDuration(tempVideo.duration);
-            const generatedClips = generateClips(tempVideo.duration);
-            setClips(generatedClips);
-             if (generatedClips.length > 0) {
-              toast({ title: "Video URL Processed", description: `${generatedClips.length} clips generated.` });
-            } else {
-              toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips for video URL." });
-            }
-            setIsLoading(false);
-        };
-        tempVideo.onerror = () => {
-            if (processingIdRef.current !== currentProcessingId) return;
-            toast({ variant: "destructive", title: "Error", description: "Could not load video URL metadata." });
-            setIsLoading(false);
-            resetAppState();
-        };
-        tempVideo.src = currentMediaSrc; // This is source.url
-        tempVideo.load();
-      }
+      const mediaElement = document.createElement(currentSourceType === 'audio' ? 'audio' : 'video');
+      mediaElement.onloadedmetadata = () => {
+          if (processingIdRef.current !== currentProcessingId) return;
+          setMediaDuration(mediaElement.duration);
+          const generatedClips = generateClips(mediaElement.duration, clipSegmentationDuration); // Use selected duration
+          setClips(generatedClips.map(clip => ({...clip, userTranscription: '', automatedTranscription: null, feedback: null, comparisonResult: null})));
+
+          if (generatedClips.length > 0) {
+            toast({ title: `${currentSourceType === 'audio' ? 'Audio' : 'Video'} Processed`, description: `${generatedClips.length} clips generated.` });
+          } else {
+            toast({ variant: "destructive", title: "Processing Error", description: `Could not generate clips. ${currentSourceType === 'audio' ? 'Audio' : 'Video'} may be too short or invalid.` });
+          }
+          setIsLoading(false);
+      };
+      mediaElement.onerror = () => {
+          if (processingIdRef.current !== currentProcessingId) return;
+          toast({ variant: "destructive", title: "Error", description: `Could not load ${currentSourceType === 'audio' ? 'audio' : 'video'} metadata.` });
+          setIsLoading(false);
+          resetAppState();
+      };
+      mediaElement.src = currentMediaSrc;
+      mediaElement.load();
     } else if (!currentMediaSrc && !isYouTubeVideo) { 
         if (processingIdRef.current !== currentProcessingId) return;
         setIsLoading(false);
         toast({ variant: "destructive", title: "Error", description: "Media source became unavailable." });
     }
-  }, [toast, resetAppState, isYouTubeVideo]);
+  }, [resetAppState, isYouTubeVideo, toast, clipSegmentationDuration, currentSourceType]);
 
+  // Effect to regenerate clips when clipSegmentationDuration changes and media is loaded
+  useEffect(() => {
+    if (mediaSrc && mediaDuration > 0 && !isYouTubeVideo) {
+      processingIdRef.current += 1; // Invalidate previous attempts
+      const currentProcessingId = processingIdRef.current;
+
+      setIsLoading(true);
+      const generatedClips = generateClips(mediaDuration, clipSegmentationDuration);
+      
+      if (processingIdRef.current !== currentProcessingId) return; // Check if stale
+
+      setClips(generatedClips.map(clip => ({...clip, userTranscription: '', automatedTranscription: null, feedback: null, comparisonResult: null})));
+      setCurrentClipIndex(0); // Reset to first clip
+      if (generatedClips.length > 0) {
+        toast({ title: "Clips Regenerated", description: `${generatedClips.length} clips generated with new duration.` });
+      } else {
+        toast({ variant: "destructive", title: "Processing Error", description: "Could not regenerate clips with new duration." });
+      }
+      setIsLoading(false);
+    } else if (mediaSrc && isYouTubeVideo && mediaDuration === Infinity) { // Handle YouTube duration change
+        processingIdRef.current += 1;
+        const currentProcessingId = processingIdRef.current;
+        setIsLoading(true);
+        const generatedClips = generateClips(Infinity, clipSegmentationDuration);
+         if (processingIdRef.current !== currentProcessingId) return;
+        setClips(generatedClips.map(clip => ({...clip, userTranscription: '', automatedTranscription: null, feedback: null, comparisonResult: null})));
+        setCurrentClipIndex(0);
+        toast({ title: "Clip View Updated", description: "YouTube clip segment view updated for new duration." });
+        setIsLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipSegmentationDuration, mediaSrc]); // Rerun when clipSegmentationDuration or mediaSrc changes
 
   useEffect(() => {
     let objectUrlToRevoke: string | undefined;
@@ -174,105 +178,123 @@ export default function LinguaClipApp() {
     return () => {
       if (objectUrlToRevoke) {
         URL.revokeObjectURL(objectUrlToRevoke);
-        console.log("Revoked ObjectURL:", objectUrlToRevoke);
       }
     };
   }, [sourceFile, mediaSrc]);
 
-
   const handleNextClip = () => {
     if (currentClipIndex < clips.length - 1) {
       setCurrentClipIndex(currentClipIndex + 1);
-      setComparisonResult(null);
     }
   };
 
   const handlePrevClip = () => {
     if (currentClipIndex > 0) {
       setCurrentClipIndex(currentClipIndex - 1);
-      setComparisonResult(null);
     }
   };
 
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
-    setComparisonResult(null);
+    // Reset transcriptions and feedback for all clips if language changes
+    setClips(prevClips => prevClips.map(clip => ({
+      ...clip,
+      userTranscription: clip.language === newLanguage ? clip.userTranscription : '', // Keep user input if lang is same, else clear
+      automatedTranscription: null,
+      feedback: null,
+      comparisonResult: null,
+      language: newLanguage // Store language with clip if desired
+    })));
+  };
+  
+  const handleClipDurationChange = (newDurationValue: string) => {
+    const newDuration = parseInt(newDurationValue, 10);
+    if (!isNaN(newDuration) && (newDuration === 30 || newDuration === 60)) {
+      setClipSegmentationDuration(newDuration);
+    }
   };
 
-  const handleTranscribeAudio = async (): Promise<string | null> => {
-    const currentClipToTranscribe = clips[currentClipIndex];
-    setComparisonResult(null);
+  const handleUserTranscriptionChange = (clipId: string, newUserTranscription: string) => {
+    updateClipData(clipId, { userTranscription: newUserTranscription });
+  };
+
+  const handleTranscribeAudio = async (clipId: string): Promise<void> => {
+    const currentClipToTranscribe = clips.find(c => c.id === clipId);
     if (!mediaSrc || isYouTubeVideo || !currentClipToTranscribe) {
-      toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure an uploaded video/audio and clip are active."});
-      return null;
+      toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure an uploaded media file and clip are active."});
+      return;
     }
+    
+    updateClipData(clipId, { automatedTranscription: null, feedback: null, comparisonResult: null }); // Clear previous results
 
     let audioDataUri: string | null = null;
     try {
-        // mediaSrc here is the object URL for the full uploaded file, or the direct URL
         audioDataUri = await extractAudioFromVideoSegment(mediaSrc, currentClipToTranscribe.startTime, currentClipToTranscribe.endTime);
     } catch (error) {
         console.error("Audio extraction failed:", error);
         toast({variant: "destructive", title: "Audio Extraction Failed", description: (error as Error).message || "Could not extract audio for transcription."});
-        return null;
+        updateClipData(clipId, { automatedTranscription: "Error: Audio extraction failed." });
+        return;
     }
 
     if (!audioDataUri) {
         toast({variant: "destructive", title: "Transcription Error", description: "Failed to obtain audio data for transcription."});
-        return null;
+        updateClipData(clipId, { automatedTranscription: "Error: No audio data." });
+        return;
     }
 
     try {
       const result = await transcribeAudio({ audioDataUri, language });
+      updateClipData(clipId, { automatedTranscription: result.transcription });
       toast({ title: "Transcription Successful" });
-      return result.transcription;
     } catch (error) {
       console.error("AI Transcription error:", error);
       toast({ variant: "destructive", title: "AI Error", description: "Failed to transcribe audio." });
-      return "Error: Could not transcribe audio.";
+      updateClipData(clipId, { automatedTranscription: "Error: Could not transcribe audio." });
     }
   };
 
-  const handleGetFeedback = async (userTranscription: string, automatedTranscription: string): Promise<string | null> => {
-     if (isYouTubeVideo) {
-      toast({variant: "destructive", title: "Feedback Error", description: "Feedback is not available for YouTube videos."});
-      return null;
+  const handleGetFeedback = async (clipId: string): Promise<void> => {
+    const currentClipForFeedback = clips.find(c => c.id === clipId);
+    if (isYouTubeVideo || !currentClipForFeedback || !currentClipForFeedback.userTranscription || !currentClipForFeedback.automatedTranscription) {
+      toast({variant: "destructive", title: "Feedback Error", description: "Ensure transcription is available and you've typed something."});
+      return;
     }
+    updateClipData(clipId, { feedback: null });
     try {
       const result = await transcriptionFeedback({
-        userTranscription,
-        automatedTranscription,
+        userTranscription: currentClipForFeedback.userTranscription,
+        automatedTranscription: currentClipForFeedback.automatedTranscription,
         language,
       });
+      updateClipData(clipId, { feedback: result.feedback });
       toast({ title: "Feedback Generated" });
-      return result.feedback;
     } catch (error) {
       console.error("AI Feedback error:", error);
       toast({ variant: "destructive", title: "AI Error", description: "Failed to generate feedback." });
-      return "Error: Could not generate feedback.";
+      updateClipData(clipId, { feedback: "Error: Could not generate feedback." });
     }
   };
 
-  const handleGetCorrections = async (userTranscription: string, automatedTranscription: string): Promise<CompareTranscriptionsOutput['comparisonResult'] | null> => {
-    if (isYouTubeVideo) {
-      toast({variant: "destructive", title: "Comparison Error", description: "Comparison is not available for YouTube videos."});
-      return null;
+  const handleGetCorrections = async (clipId: string): Promise<void> => {
+    const currentClipForCorrections = clips.find(c => c.id === clipId);
+     if (isYouTubeVideo || !currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription) {
+      toast({variant: "destructive", title: "Comparison Error", description: "Ensure transcription is available and you've typed something."});
+      return;
     }
-    setComparisonResult(null);
+    updateClipData(clipId, { comparisonResult: null });
     try {
       const result = await compareTranscriptions({
-        userTranscription,
-        automatedTranscription,
+        userTranscription: currentClipForCorrections.userTranscription,
+        automatedTranscription: currentClipForCorrections.automatedTranscription,
         language,
       });
-      setComparisonResult(result.comparisonResult);
+      updateClipData(clipId, { comparisonResult: result.comparisonResult });
       toast({ title: "Comparison Complete" });
-      return result.comparisonResult;
     } catch (error) {
       console.error("AI Comparison error:", error);
       toast({ variant: "destructive", title: "AI Error", description: "Failed to generate comparison." });
-      setComparisonResult([{ token: "Error generating comparison.", status: "incorrect" }]);
-      return null;
+      updateClipData(clipId, { comparisonResult: [{ token: "Error generating comparison.", status: "incorrect", suggestion: "N/A" }] });
     }
   };
 
@@ -284,15 +306,13 @@ export default function LinguaClipApp() {
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
     if (newClips.length === 0) {
-      // If all clips from an audio or video file are removed, reset the app state.
-      if (sourceFile?.type.startsWith('audio/') || sourceFile?.type.startsWith('video/')) {
+      if (currentSourceType === 'video' || currentSourceType === 'audio') {
         resetAppState();
         toast({ title: "Media Cleared", description: "All clips have been removed and the media file has been cleared." });
         return;
       }
-      setClips([]);
+      setClips([]); // For URLs, just clear clips, don't reset everything.
       setCurrentClipIndex(0);
-      setComparisonResult(null);
     } else {
       let newCurrentIdx = currentClipIndex;
       if (removedClipOriginalIndex < currentClipIndex) {
@@ -304,12 +324,54 @@ export default function LinguaClipApp() {
 
       setClips(newClips);
       setCurrentClipIndex(newCurrentIdx);
-      setComparisonResult(null);
     }
     toast({ title: "Clip Removed", description: "The selected clip has been removed from the list." });
   };
+  
+  const handleSaveMedia = async () => {
+    if (!user || !mediaSrc || !mediaDisplayName || clips.length === 0) {
+      toast({ variant: "destructive", title: "Cannot Save", description: "Ensure you are logged in and media is loaded with clips." });
+      return;
+    }
+    if (mediaDuration > MAX_MEDIA_DURATION_MINUTES * 60 && !isYouTubeVideo) {
+      toast({ variant: "destructive", title: "Cannot Save", description: `Media duration exceeds the ${MAX_MEDIA_DURATION_MINUTES}-minute limit.` });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const result = await saveMediaItemAction({
+        userId: user.uid,
+        mediaUrl: sourceUrl || (sourceFile ? 'uploaded_file' : 'unknown_source'), // For uploaded, might store path from Firebase Storage later
+        mediaDisplayName: mediaDisplayName,
+        mediaDuration: mediaDuration,
+        mediaType: currentSourceType || 'unknown',
+        language: language,
+        clipSegmentationDuration: clipSegmentationDuration,
+        clips: clips.map(c => ({ // Only save relevant fields, not the full object if it has internal state
+            id: c.id,
+            startTime: c.startTime,
+            endTime: c.endTime,
+            userTranscription: c.userTranscription,
+            automatedTranscription: c.automatedTranscription,
+            feedback: c.feedback,
+            comparisonResult: c.comparisonResult,
+        })),
+      });
+      if (result.success) {
+        toast({ title: "Media Saved", description: result.message });
+      } else {
+        toast({ variant: "destructive", title: "Save Failed", description: result.message });
+      }
+    } catch (error) {
+      console.error("Error saving media:", error);
+      toast({ variant: "destructive", title: "Save Error", description: "An unexpected error occurred while saving." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
+  const currentClip = clips[currentClipIndex];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -330,23 +392,38 @@ export default function LinguaClipApp() {
                     <XIcon className="h-5 w-5" />
                   </Button>
                 </div>
-                <Button onClick={resetAppState} variant="outline" className="w-full">
-                  Clear Loaded Media
-                </Button>
-                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc} />
+                   <ClipDurationSelector selectedDuration={clipSegmentationDuration} onDurationChange={handleClipDurationChange} disabled={isLoading || !mediaSrc} />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Button onClick={resetAppState} variant="outline" className="w-full sm:w-auto">
+                        Clear Loaded Media
+                    </Button>
+                    {user && mediaSrc && clips.length > 0 && (
+                        <Button onClick={handleSaveMedia} disabled={isSaving || isLoading} className="w-full sm:w-auto">
+                        <Save className="mr-2 h-4 w-4" />
+                        {isSaving ? "Saving..." : "Save Media"}
+                        </Button>
+                    )}
+                </div>
               </div>
             ) : (
               <>
                 <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading} />
-                <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc} />
+                    <ClipDurationSelector selectedDuration={clipSegmentationDuration} onDurationChange={handleClipDurationChange} disabled={isLoading || !mediaSrc} />
+                </div>
               </>
             )}
           </CardContent>
         </Card>
 
-        {mediaSrc && clips.length > 0 && (
+        {mediaSrc && clips.length > 0 && currentClip && (
           <TranscriptionWorkspace
-            mediaSrc={mediaSrc}
+            key={currentClip.id} // Ensure re-render when clip changes substantially
+            currentClip={currentClip}
             clips={clips}
             currentClipIndex={currentClipIndex}
             onNextClip={handleNextClip}
@@ -355,7 +432,7 @@ export default function LinguaClipApp() {
             onGetFeedback={handleGetFeedback}
             onGetCorrections={handleGetCorrections}
             onRemoveClip={handleRemoveClip}
-            comparisonResult={comparisonResult}
+            onUserTranscriptionChange={handleUserTranscriptionChange}
             isYouTubeVideo={isYouTubeVideo}
             language={language}
             isAudioSource={currentSourceType === 'audio'}
@@ -373,5 +450,3 @@ export default function LinguaClipApp() {
     </div>
   );
 }
-
-    

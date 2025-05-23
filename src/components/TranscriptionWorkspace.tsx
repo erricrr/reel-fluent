@@ -11,19 +11,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, Mic, Sparkles, Loader2, FileDiff, Trash2 as Trash2Icon } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
-import type { CorrectionToken, CompareTranscriptionsOutput } from '@/ai/flows/compare-transcriptions-flow';
+import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 
 interface TranscriptionWorkspaceProps {
-  mediaSrc?: string;
-  clips: Clip[];
+  currentClip: Clip;
+  clips: Clip[]; // To get total number of clips
   currentClipIndex: number;
   onNextClip: () => void;
   onPrevClip: () => void;
-  onTranscribeAudio: () => Promise<string | null>;
-  onGetFeedback: (userTranscription: string, automatedTranscription: string) => Promise<string | null>;
-  onGetCorrections: (userTranscription: string, automatedTranscription: string) => Promise<CompareTranscriptionsOutput['comparisonResult'] | null>;
+  onTranscribeAudio: (clipId: string) => Promise<void>;
+  onGetFeedback: (clipId: string) => Promise<void>;
+  onGetCorrections: (clipId: string) => Promise<void>;
   onRemoveClip: (clipId: string) => void;
-  comparisonResult: CompareTranscriptionsOutput['comparisonResult'] | null;
+  onUserTranscriptionChange: (clipId: string, newUserTranscription: string) => void;
   isYouTubeVideo: boolean;
   language: string;
   isAudioSource?: boolean;
@@ -47,7 +47,7 @@ const formatSecondsToMMSS = (totalSeconds: number): string => {
 
 
 export default function TranscriptionWorkspace({
-  mediaSrc,
+  currentClip,
   clips,
   currentClipIndex,
   onNextClip,
@@ -56,55 +56,54 @@ export default function TranscriptionWorkspace({
   onGetFeedback,
   onGetCorrections,
   onRemoveClip,
-  comparisonResult,
+  onUserTranscriptionChange,
   isYouTubeVideo,
-  language,
+  language, // Keep language for context, even if clip has its own
   isAudioSource = false,
 }: TranscriptionWorkspaceProps) {
-  const [userTranscription, setUserTranscription] = useState("");
-  const [automatedTranscription, setAutomatedTranscription] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [isLoadingTranscription, setIsLoadingTranscription] = useState(false);
   const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
   const [isLoadingCorrections, setIsLoadingCorrections] = useState(false);
   const [activeTab, setActiveTab] = useState("manual");
 
-
-  const currentClip = clips[currentClipIndex];
-
+  // Sync local input with currentClip.userTranscription from props
   useEffect(() => {
-    setUserTranscription("");
-    setAutomatedTranscription(null);
-    setFeedback(null);
+    setUserTranscriptionInput(currentClip.userTranscription || "");
+    // Reset loading states when clip changes. AI results are now part of currentClip.
     setIsLoadingTranscription(false);
     setIsLoadingFeedback(false);
     setIsLoadingCorrections(false);
-    setActiveTab("manual"); 
-  }, [currentClipIndex, mediaSrc, language, clips]);
+    if (!currentClip.userTranscription) {
+        setActiveTab("manual"); // If new clip has no user input, go to manual tab
+    }
+  }, [currentClip]);
+
+
+  const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setUserTranscriptionInput(newValue);
+    onUserTranscriptionChange(currentClip.id, newValue);
+  };
 
   const handleTranscribe = async () => {
     if (!currentClip || isYouTubeVideo) {
       alert(`Transcription is only available for uploaded ${isAudioSource ? 'audio' : 'video'} files and active clips.`);
       return;
     }
-    
     setIsLoadingTranscription(true);
-    setAutomatedTranscription(null); 
-    setFeedback(null);
-    
     try {
-      const transcription = await onTranscribeAudio();
-      setAutomatedTranscription(transcription);
+      await onTranscribeAudio(currentClip.id);
     } catch (error) {
       console.error("Transcription error in workspace:", error);
-      setAutomatedTranscription("Error during transcription. Check console or notifications.");
+      // Error handling is now done in LinguaClipApp which updates the clip's automatedTranscription
     } finally {
       setIsLoadingTranscription(false);
     }
   };
 
   const handleFeedback = async () => {
-    if (!userTranscription.trim() || !automatedTranscription || isAutomatedTranscriptionError) {
+    if (!userTranscriptionInput.trim() || !currentClip.automatedTranscription || currentClip.automatedTranscription.startsWith("Error:")) {
       alert("Please provide your transcription and ensure automated transcription is available and does not contain errors.");
       return;
     }
@@ -113,23 +112,21 @@ export default function TranscriptionWorkspace({
        return;
     }
     setIsLoadingFeedback(true);
-    setFeedback(null);
     try {
-      let newFeedback = await onGetFeedback(userTranscription, automatedTranscription);
-      if (newFeedback === "") {
-        newFeedback = "AI analysis complete. No specific suggestions found.";
+      await onGetFeedback(currentClip.id);
+      let newFeedback = currentClip.feedback;
+      if (newFeedback === "") { // Check updated currentClip.feedback from parent
+        // This case might need to be handled in parent if feedback becomes ""
       }
-      setFeedback(newFeedback);
     } catch (error) {
       console.error("Feedback error in workspace:", error);
-      setFeedback("Error generating feedback. Check console or notifications.");
     } finally {
       setIsLoadingFeedback(false);
     }
   };
 
   const handleCorrections = async () => {
-    if (!userTranscription.trim() || !automatedTranscription || isAutomatedTranscriptionError) {
+    if (!userTranscriptionInput.trim() || !currentClip.automatedTranscription || currentClip.automatedTranscription.startsWith("Error:")) {
       alert("Please provide your transcription and ensure automated transcription is available and does not contain errors.");
       return;
     }
@@ -139,7 +136,7 @@ export default function TranscriptionWorkspace({
     }
     setIsLoadingCorrections(true);
     try {
-      await onGetCorrections(userTranscription, automatedTranscription);
+      await onGetCorrections(currentClip.id);
     } catch (error) {
       console.error("Corrections error in workspace:", error);
     } finally {
@@ -148,7 +145,7 @@ export default function TranscriptionWorkspace({
   };
 
 
-  if (!mediaSrc || clips.length === 0 || !currentClip) { 
+  if (!currentClip) { 
     return (
       <div className="text-center py-10 text-muted-foreground">
         <p>Load a video or audio file and ensure clips are generated to begin.</p>
@@ -156,28 +153,43 @@ export default function TranscriptionWorkspace({
     );
   }
 
-  const isAutomatedTranscriptionError = automatedTranscription && automatedTranscription.startsWith("Error:");
-  const canGetFeedbackOrCorrections = userTranscription.trim() && automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
+  const isAutomatedTranscriptionError = currentClip.automatedTranscription && currentClip.automatedTranscription.startsWith("Error:");
+  const canGetFeedbackOrCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
 
   const renderCorrectionToken = (token: CorrectionToken, index: number) => {
+    let style = "";
+    let content = token.token;
+    let suggestionContent = "";
+
     switch (token.status) {
       case 'correct':
-        return <span key={index} className="text-green-600 dark:text-green-400">{token.token} </span>;
+        style = "text-green-600 dark:text-green-400";
+        break;
       case 'incorrect':
-        return (
-          <span key={index}>
-            <span className="text-red-600 dark:text-red-400 line-through">{token.token}</span>
-            {token.suggestion && <span className="text-green-600 dark:text-green-400"> ({token.suggestion})</span>}
-            {' '}
-          </span>
-        );
+        style = "text-red-600 dark:text-red-400 line-through";
+        if (token.suggestion) {
+          suggestionContent = ` (${token.suggestion})`;
+        }
+        break;
       case 'extra':
-        return <span key={index} className="text-blue-600 dark:text-blue-400 opacity-80"><em>{token.token}</em> </span>;
+        style = "text-blue-600 dark:text-blue-400 opacity-80 italic";
+        break;
       case 'missing':
-        return <span key={index} className="text-gray-500 dark:text-gray-400 opacity-70">[{token.suggestion || token.token}] </span>;
+         style = "text-gray-500 dark:text-gray-400 opacity-70";
+         content = `[${token.suggestion || token.token}]`; // Show the missing token itself
+        break;
       default:
-        return <span key={index}>{token.token} </span>;
+        break;
     }
+    return (
+      <span key={index}>
+        <span className={style}>{content}</span>
+        {token.status === 'incorrect' && token.suggestion && 
+          <span className="text-green-600 dark:text-green-400">{suggestionContent}</span>
+        }
+        {' '}
+      </span>
+    );
   };
 
 
@@ -188,7 +200,7 @@ export default function TranscriptionWorkspace({
           onClick={handleTranscribe} 
           disabled={isLoadingTranscription || isYouTubeVideo} 
           className="w-full"
-          variant="outline"
+          variant="default" // More prominent
         >
           {isLoadingTranscription ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -199,12 +211,11 @@ export default function TranscriptionWorkspace({
           {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
         </Button>
         <VideoPlayer
-          src={mediaSrc}
+          src={currentClip.mediaSrc} // Assuming mediaSrc is passed to clip or available globally
           startTime={currentClip?.startTime}
           endTime={currentClip?.endTime}
           className="shadow-lg rounded-lg"
-          // Pass isAudioSource to VideoPlayer if you want it to render differently for audio
-          // For now, it will use a <video> tag which can play audio.
+          isAudioSource={isAudioSource}
         />
         <div className="flex justify-between items-center p-2 bg-card rounded-lg shadow">
           <Button onClick={onPrevClip} disabled={currentClipIndex === 0} variant="outline" size="icon">
@@ -245,7 +256,7 @@ export default function TranscriptionWorkspace({
         <Tabs defaultValue="manual" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="manual">Your Transcription</TabsTrigger>
-            <TabsTrigger value="ai" disabled={!userTranscription.trim()}>AI Tools</TabsTrigger>
+            <TabsTrigger value="ai" disabled={!userTranscriptionInput.trim()}>AI Tools</TabsTrigger>
           </TabsList>
           
           <TabsContent value="manual" className="mt-4">
@@ -257,8 +268,8 @@ export default function TranscriptionWorkspace({
               <CardContent className="space-y-4">
                 <Textarea
                   placeholder="Start typing..."
-                  value={userTranscription}
-                  onChange={(e) => setUserTranscription(e.target.value)}
+                  value={userTranscriptionInput}
+                  onChange={handleUserInputChange}
                   rows={8}
                   className="min-h-[150px] resize-none"
                 />
@@ -266,7 +277,7 @@ export default function TranscriptionWorkspace({
                <CardFooter className="flex-col items-stretch gap-2">
                  <Button 
                     onClick={() => setActiveTab("ai")} 
-                    disabled={!userTranscription.trim()}
+                    disabled={!userTranscriptionInput.trim()}
                     variant="outline"
                   >
                    Go to AI Tools
@@ -286,7 +297,7 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                     {isLoadingTranscription && <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />}
-                    {!isLoadingTranscription && automatedTranscription ? <p className="text-sm">{automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the player to generate.</p>}
+                    {!isLoadingTranscription && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : !isLoadingTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe This Clip (AI)" above the player to generate.</p>}
                   </ScrollArea>
                 </div>
 
@@ -306,16 +317,16 @@ export default function TranscriptionWorkspace({
                     Show Corrections
                     {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
                     {isAutomatedTranscriptionError && <span className="text-xs ml-1">(Fix Transcription First)</span>}
-                    {!userTranscription.trim() && automatedTranscription && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
+                    {!userTranscriptionInput.trim() && currentClip.automatedTranscription && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
                   </Button>
                   <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
                      {isLoadingCorrections ? (
                        <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
-                     ) : comparisonResult === null ? (
+                     ) : currentClip.comparisonResult === null || currentClip.comparisonResult === undefined ? ( // Check for undefined too
                        <p className="text-sm text-muted-foreground">Click "Show Corrections" above after entering your transcription and generating the AI transcription.</p>
                      ) : (
                        <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                         {comparisonResult.map(renderCorrectionToken)}
+                         {currentClip.comparisonResult.map(renderCorrectionToken)}
                         </p>
                      )}
                   </ScrollArea>
@@ -337,15 +348,17 @@ export default function TranscriptionWorkspace({
                     Get General Feedback
                     {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
                     {isAutomatedTranscriptionError && <span className="text-xs ml-1">(Fix Transcription First)</span>}
-                     {!userTranscription.trim() && automatedTranscription && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
+                     {!userTranscriptionInput.trim() && currentClip.automatedTranscription && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
                   </Button>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                      {isLoadingFeedback ? (
                        <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
-                     ) : feedback === null ? (
+                     ) : currentClip.feedback === null || currentClip.feedback === undefined ? ( // Check for undefined
                        <p className="text-sm text-muted-foreground">Click "Get General Feedback" above after entering your transcription.</p>
+                     ) : currentClip.feedback === "" ? (
+                        <p className="text-sm">AI analysis complete. No specific suggestions found.</p>
                      ) : (
-                       <p className="text-sm whitespace-pre-wrap">{feedback}</p>
+                       <p className="text-sm whitespace-pre-wrap">{currentClip.feedback}</p>
                      )}
                   </ScrollArea>
                 </div>

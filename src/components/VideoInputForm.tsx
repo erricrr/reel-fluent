@@ -170,7 +170,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             </Button>
           </div>
            <p className="text-xs text-muted-foreground text-center">
-            Video and audio files will be divided into 1-minute clips. Max 1 file.
+            Video and audio files will be divided into short clips (configurable length). Max 1 file.
           </p>
         </div>
       </TabsContent>
@@ -191,12 +191,10 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Video from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-            Note: For direct video URLs (non-YouTube), the video will be divided into 1-minute clips. YouTube links are primarily for viewing and will not be clipped. Audio URLs are not supported.
+            Note: For direct video URLs (non-YouTube), the video will be divided into short clips (configurable length). YouTube links are primarily for viewing and will not be clipped. Audio URLs are not supported.
           </p>
         </form>
       </TabsContent>
     </Tabs>
   );
 }
-
-    
