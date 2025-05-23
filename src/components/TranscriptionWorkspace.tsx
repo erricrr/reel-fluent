@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, Mic, Sparkles, Loader2, FileDiff, Trash2 as Trash2Icon } from "lucide-react";
+import { Mic, Sparkles, Loader2, FileDiff } from "lucide-react";
+import ClipNavigation from "./ClipNavigation"; 
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import { useToast } from "@/hooks/use-toast"; 
@@ -19,8 +20,9 @@ interface TranscriptionWorkspaceProps {
   clips: Clip[];
   mediaSrc?: string;
   currentClipIndex: number;
-  onNextClip: () => void;
-  onPrevClip: () => void;
+  onSelectClip: (index: number) => void; 
+  onNextClip: () => void; 
+  onPrevClip: () => void; 
   onTranscribeAudio: (clipId: string) => Promise<void>;
   onGetFeedback: (clipId: string) => Promise<void>;
   onGetCorrections: (clipId: string) => Promise<void>;
@@ -53,7 +55,8 @@ export default function TranscriptionWorkspace({
   clips,
   mediaSrc,
   currentClipIndex,
-  onNextClip,
+  onSelectClip, 
+  onNextClip, 
   onPrevClip,
   onTranscribeAudio,
   onGetFeedback,
@@ -71,14 +74,10 @@ export default function TranscriptionWorkspace({
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-    
-    // If the AI tab is active but shouldn't be (e.g., user input cleared), switch to manual
-    if (activeTab === "ai" && (!currentClip.userTranscription || currentClip.userTranscription.trim() === "")) {
-        setActiveTab("manual");
-    } else if (!currentClip.userTranscription || currentClip.userTranscription.trim() === "") {
+    if (!currentClip.userTranscription || currentClip.userTranscription.trim() === "") {
       setActiveTab("manual");
     }
-  }, [currentClip, activeTab]);
+  }, [currentClip]);
 
 
   const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -88,15 +87,14 @@ export default function TranscriptionWorkspace({
   };
 
   const handleTranscribe = async () => {
-    if (!currentClip || isYouTubeVideo) {
+    if (!currentClip || isYouTubeVideo || (isAudioSource && !mediaSrc)) {
       toast({variant: "destructive", title: "Transcription Unavailable", description: `Transcription is only available for uploaded ${isAudioSource ? 'audio' : 'video'} files.`});
       return;
     }
     try {
       await onTranscribeAudio(currentClip.id);
     } catch (error) {
-      console.error("Transcription error in workspace:", error);
-      // Toast for this error should be handled by LinguaClipApp
+      console.warn("Transcription error in workspace:", error);
     }
   };
 
@@ -112,8 +110,7 @@ export default function TranscriptionWorkspace({
     try {
       await onGetFeedback(currentClip.id);
     } catch (error) {
-      console.error("Feedback error in workspace:", error);
-      // Toast for this error should be handled by LinguaClipApp
+      console.warn("Feedback error in workspace:", error);
     }
   };
 
@@ -129,8 +126,7 @@ export default function TranscriptionWorkspace({
     try {
       await onGetCorrections(currentClip.id);
     } catch (error) {
-      console.error("Corrections error in workspace:", error);
-      // Toast for this error should be handled by LinguaClipApp
+      console.warn("Corrections error in workspace:", error);
     }
   };
 
@@ -192,7 +188,7 @@ export default function TranscriptionWorkspace({
       <div className="lg:w-1/2 w-full space-y-4">
         <Button
           onClick={handleTranscribe}
-          disabled={isAutomatedTranscriptionLoading || isYouTubeVideo}
+          disabled={isAutomatedTranscriptionLoading || isYouTubeVideo || (isAudioSource && !mediaSrc)}
           className="w-full"
           variant="default"
         >
@@ -211,39 +207,14 @@ export default function TranscriptionWorkspace({
           className="shadow-lg rounded-lg"
           isAudioSource={isAudioSource} 
         />
-        <div className="flex justify-between items-center p-2 bg-card rounded-lg shadow">
-          <Button onClick={onPrevClip} disabled={currentClipIndex === 0} variant="outline" size="icon">
-            <ChevronLeft className="h-5 w-5" />
-            <span className="sr-only">Previous Clip</span>
-          </Button>
-
-          <div className="text-center space-y-1">
-            <div className="text-sm font-medium text-foreground">
-              Clip {currentClipIndex + 1} of {clips.length}
-              {currentClip && (
-                <span className="ml-2 text-xs text-muted-foreground">
-                  ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                </span>
-              )}
-            </div>
-            {currentClip && onRemoveClip && !isYouTubeVideo && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2 py-1 h-auto"
-                onClick={() => onRemoveClip(currentClip.id)}
-                aria-label="Remove this clip"
-              >
-                <Trash2Icon className="h-3 w-3 mr-1" /> Remove This Clip
-              </Button>
-            )}
-          </div>
-
-          <Button onClick={onNextClip} disabled={currentClipIndex === clips.length - 1 || clips.length === 0} variant="outline" size="icon">
-            <ChevronRight className="h-5 w-5" />
-            <span className="sr-only">Next Clip</span>
-          </Button>
-        </div>
+        <ClipNavigation
+          clips={clips}
+          currentClipIndex={currentClipIndex}
+          onSelectClip={onSelectClip}
+          onRemoveClip={onRemoveClip}
+          isYouTubeVideo={isYouTubeVideo}
+          formatSecondsToMMSS={formatSecondsToMMSS}
+        />
       </div>
 
       <div className="lg:w-1/2 w-full">
@@ -369,4 +340,4 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
-
+    
