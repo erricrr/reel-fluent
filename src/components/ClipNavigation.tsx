@@ -1,7 +1,7 @@
 
 "use client";
 
-import type * as React from 'react';
+import * as React from 'react';
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Film, Trash2 as Trash2Icon } from "lucide-react";
