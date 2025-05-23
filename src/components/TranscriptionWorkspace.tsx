@@ -168,11 +168,7 @@ export default function TranscriptionWorkspace({
   
   const canGetFeedbackOrCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
 
-  // Disable general interactions if app is busy with initial load or saving.
   const disableTextarea = isLoadingMedia || isSavingMedia; 
-  // Disable actions that change clip structure or start new AI transcriptions if any clip is transcribing or app is busy.
-  const disableStructuralActions = isLoadingMedia || isSavingMedia || isAnyClipTranscribing;
-  // Disable AI actions for the current clip if it's processing, or if app is busy.
   const disableCurrentClipAIActions = isAutomatedTranscriptionLoading || isLoadingMedia || isSavingMedia;
 
 
@@ -222,12 +218,13 @@ export default function TranscriptionWorkspace({
           endTime={currentClip?.endTime}
           className="shadow-lg rounded-lg"
           isAudioSource={isAudioSource} 
+          currentClipIndex={currentClipIndex}
         />
         <div className="space-y-3 p-3 bg-card rounded-lg shadow">
             <ClipDurationSelector 
                 selectedDuration={clipSegmentationDuration} 
                 onDurationChange={onClipDurationChange} 
-                disabled={disableStructuralActions || isYouTubeVideo} 
+                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing || isYouTubeVideo} 
             />
         </div>
         <ClipNavigation
@@ -237,8 +234,7 @@ export default function TranscriptionWorkspace({
           onRemoveClip={onRemoveClip}
           isYouTubeVideo={isYouTubeVideo}
           formatSecondsToMMSS={formatSecondsToMMSS}
-          // Disable remove clip button if app is busy or any transcription is active
-          disableRemove={disableStructuralActions} 
+          disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing} 
         />
         <Button
           onClick={handleTranscribe}
@@ -246,7 +242,7 @@ export default function TranscriptionWorkspace({
           className="w-full"
           variant="default"
         >
-          {isAutomatedTranscriptionLoading ? ( // Loading for *this* clip
+          {isAutomatedTranscriptionLoading ? ( 
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <Mic className="mr-2 h-4 w-4" />

@@ -17,6 +17,7 @@ interface VideoPlayerProps {
   onEnded?: () => void;
   className?: string;
   isAudioSource?: boolean;
+  currentClipIndex?: number; // Added for dynamic label
 }
 
 export default function VideoPlayer({
@@ -28,6 +29,7 @@ export default function VideoPlayer({
   onEnded,
   className,
   isAudioSource = false,
+  currentClipIndex, // Added for dynamic label
 }: VideoPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const [isLooping, setIsLooping] = useState(false);
@@ -47,7 +49,7 @@ export default function VideoPlayer({
   }, [src, startTime, endTime]);
 
   const effectiveSrc = getEffectiveSrc();
-  const mediaKey = `${effectiveSrc}-${startTime}-${endTime}`; // Ensure key changes if src or times change
+  const mediaKey = `${effectiveSrc}-${startTime}-${endTime}`; 
 
   const isYouTube = effectiveSrc?.includes("youtube.com/") || effectiveSrc?.includes("youtu.be/");
 
@@ -76,19 +78,18 @@ export default function VideoPlayer({
     }
 
     if (isYouTube) {
-      return; // Native YouTube player handles its own looping via URL params if set
+      return; 
     }
 
     if (typeof endTime === 'number' && isFinite(endTime)) {
-      // Use a small threshold (e.g., 0.2 seconds) before endTime to trigger loop/end
       const threshold = 0.2; 
       if (media.currentTime >= endTime - threshold) {
         if (isLooping) {
           media.currentTime = startTime;
           media.play().catch(error => {
             console.warn("Error attempting to loop playback:", error);
-            media.pause(); // Ensure it's paused if play fails
-            media.currentTime = startTime; // Reset time again
+            media.pause(); 
+            media.currentTime = startTime; 
           });
         } else {
           media.currentTime = endTime; 
@@ -123,7 +124,6 @@ export default function VideoPlayer({
       return;
     }
     
-    // This logic primarily runs when the element is mounted or `mediaKey` changes
     const localHandleLoadedMetadata = () => {
       if (!media) return;
       if (onLoadedMetadata) {
@@ -135,21 +135,18 @@ export default function VideoPlayer({
     
     media.addEventListener("loadedmetadata", localHandleLoadedMetadata);
     media.addEventListener("timeupdate", handleTimeUpdate);
-    media.addEventListener("ended", handleMediaEnded); // For native end, to potentially loop
+    media.addEventListener("ended", handleMediaEnded); 
     media.addEventListener('play', enforceClipBoundaryOnPlay);
     media.addEventListener('playing', enforceClipBoundaryOnPlay);
 
-    // Explicitly set src and load if the mediaKey (and thus effectiveSrc) changed,
-    // or if it's the initial setup.
     if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
-        media.src = effectiveSrc; // Set the potentially new fragment URL
+        media.src = effectiveSrc; 
         media.load(); 
-    } else if (media.readyState >= 1) { // HAVE_METADATA or more
-        // If src is the same but startTime might have changed (e.g. navigating clips)
+    } else if (media.readyState >= 1) { 
         if(media.currentTime !== startTime) {
             media.currentTime = startTime;
         }
-        enforceClipBoundaryOnPlay(); // Ensure it respects boundaries if already playable
+        enforceClipBoundaryOnPlay(); 
     }
 
 
@@ -187,8 +184,6 @@ export default function VideoPlayer({
     }
 
     if (videoId) {
-      // For YouTube, looping is controlled by loop=1&playlist=VIDEO_ID
-      // The 'isLooping' state here won't directly control it. This UI toggle is for HTML5 media.
       const endParam = (typeof endTime === 'number' && isFinite(endTime)) ? `&end=${Math.floor(endTime)}` : '';
       const embedYTSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endParam}&autoplay=0&controls=1&rel=0`;
       return (
@@ -219,12 +214,21 @@ export default function VideoPlayer({
   }
 
   const cardContentPadding = !isYouTube ? "p-0 pb-0" : "p-0";
+  const rootCardClasses = cn(
+    "overflow-hidden",
+    isAudioSource ? "h-auto" : "aspect-video", // Let audio card size naturally
+    className
+  );
+  const contentClasses = cn(
+    "h-full",
+    isAudioSource ? "p-2 flex items-center justify-center" : "p-0 pb-0" // Padding for audio controls
+  );
 
 
   if (isAudioSource) {
     return (
-      <Card className={cn("overflow-hidden", className)}>
-        <CardContent className={cardContentPadding  + " h-full flex items-center justify-center"}>
+      <Card className={rootCardClasses}>
+        <CardContent className={contentClasses}>
           <audio key={mediaKey} ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
             Your browser does not support the audio tag.
           </audio>
@@ -238,7 +242,7 @@ export default function VideoPlayer({
                 onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
               />
               <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
-                Loop Clip
+                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''}
               </Label>
             </div>
           </CardFooter>
@@ -248,8 +252,8 @@ export default function VideoPlayer({
   }
 
   return (
-    <Card className={cn("overflow-hidden", isAudioSource ? "" : "aspect-video", className)}>
-      <CardContent className={cardContentPadding + " h-full"}>
+    <Card className={rootCardClasses}>
+      <CardContent className={cn(contentClasses, !isAudioSource && "aspect-video")}>
         <video key={mediaKey} ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
           Your browser does not support the video tag.
         </video>
@@ -258,12 +262,12 @@ export default function VideoPlayer({
         <CardFooter className="py-2 px-2 border-t">
           <div className="flex items-center space-x-2">
             <Checkbox
-              id={`loop-toggle-${mediaKey}`} // Use a unique ID based on mediaKey
+              id={`loop-toggle-${mediaKey}`} 
               checked={isLooping}
               onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
             />
             <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
-              Loop Clip
+                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''}
             </Label>
           </div>
         </CardFooter>
