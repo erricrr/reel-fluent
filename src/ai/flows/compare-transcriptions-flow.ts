@@ -13,7 +13,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const CorrectionTokenSchema = z.object({
-  token: z.string().describe("A word or punctuation mark from the transcription."),
+  token: z.string().describe("A word or punctuation mark from the transcription. For 'missing' status, this is the token from the automated transcription. For 'extra', it's the user's token. For 'correct'/'incorrect', it's the user's token being evaluated."),
   status: z.enum(["correct", "incorrect", "extra", "missing"]).describe(
     "Status of the token compared to the automated transcription: " +
     "'correct' if it matches (including accents/diacritics), " +
@@ -58,25 +58,26 @@ const prompt = ai.definePrompt({
   name: 'compareTranscriptionsPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
-  prompt: `You are a language learning assistant. Your task is to compare a 'User Transcription' with an 'Automated Transcription'.
-Tokenize both transcriptions (words and punctuation should generally be separate tokens).
-Pay close attention to accents and diacritics. If a word in the user's transcription is spelled correctly but has missing or incorrect accents/diacritics compared to the automated transcription, that word token should be marked as 'incorrect', and the 'suggestion' should be the word with the correct accents/diacritics.
-Produce a single list of tokens for the 'comparisonResult' field that represents a merged, sequential view of the comparison.
+  prompt: `You are a language learning assistant. Your primary task is to meticulously compare a 'User Transcription' with an 'Automated Transcription' and produce a single, sequential list of 'CorrectionToken' objects in the 'comparisonResult' field. This list must accurately represent a token-by-token alignment of the user's input against the automated version, highlighting all differences.
 
-For each token from the user's transcription:
-- If it matches the corresponding token in the automated transcription (including correct accents/diacritics), mark its status as 'correct'.
-- If it is present in the user's transcription but not at a corresponding position in the automated transcription (e.g., user added a word, or automated transcription is shorter), mark it as 'extra'.
-- If it is different from the corresponding token in the automated transcription (e.g., a spelling mistake, or a missing/incorrect accent/diacritic), mark its status as 'incorrect' and provide the 'suggestion' with the word from the automated transcription.
+Key requirements for the 'comparisonResult':
+- It must be a single, ordered array of tokens.
+- Each token must reflect its status relative to the automated transcription at that specific point in the sequence.
+- Pay strict attention to spelling, accents, diacritics, and punctuation. Treat punctuation marks as separate tokens.
 
-If the user's transcription is missing tokens that are present in the automated transcription, you MUST insert tokens into the 'comparisonResult' list with status 'missing' at the appropriate positions. For these 'missing' tokens, the 'token' field should contain the word/punctuation from the automated transcription, and the 'suggestion' field should also contain this same word/punctuation.
+Token Status Definitions and Handling:
+- 'correct': The user's token matches the automated token at the same position (including case, accents, and diacritics). The 'token' field is the user's token.
+- 'incorrect': The user's token is present but differs from the automated token at the same position (e.g., spelling error, incorrect/missing accent). The 'token' field is the user's token. The 'suggestion' field MUST contain the token from the automated transcription.
+- 'extra': The user's token is present, but there is no corresponding token at that position in the automated transcription (e.g., user added a word). The 'token' field should be the user's extra word.
+- 'missing': A token is present in the automated transcription, but no corresponding token exists in the user's transcription at that position. The 'token' field MUST be the missing token from the automated transcription, and the 'suggestion' field MUST also contain this same token.
 
-The goal is to have a single sequential list of tokens that allows the user to see their transcription aligned with the automated one, highlighting all differences including additions, omissions, direct mistakes, and accent/diacritic errors.
+Methodology:
+Conceptually, you should tokenize both transcriptions. Then, align these sequences to identify matches, mismatches, insertions (user 'extra' tokens), and deletions (user 'missing' tokens relative to automated). The final 'comparisonResult' should be this aligned sequence.
 
 Example 1 (Punctuation and Spelling):
 User Transcription: "Hello worl."
 Automated Transcription: "Hello, world!"
 Language: english
-
 Expected 'comparisonResult' output: [
   { "token": "Hello", "status": "correct" },
   { "token": ",", "status": "missing", "suggestion": "," },
@@ -88,7 +89,6 @@ Example 2 (Accent/Diacritic Correction):
 User Transcription: "Xin chao ban. Toi la hoc sinh."
 Automated Transcription: "Xin chào bạn. Tôi là học sinh."
 Language: vietnamese
-
 Expected 'comparisonResult' output: [
   { "token": "Xin", "status": "correct" },
   { "token": "chao", "status": "incorrect", "suggestion": "chào" },
@@ -99,6 +99,21 @@ Expected 'comparisonResult' output: [
   { "token": "hoc", "status": "incorrect", "suggestion": "học" },
   { "token": "sinh", "status": "correct" },
   { "token": ".", "status": "correct" }
+]
+
+Example 3 (Missing, Incorrect, and Extra Tokens):
+User Transcription: "I like eat apple and banana."
+Automated Transcription: "I like to eat apples and bananas"
+Language: english
+Expected 'comparisonResult' output: [
+  { "token": "I", "status": "correct" },
+  { "token": "like", "status": "correct" },
+  { "token": "to", "status": "missing", "suggestion": "to"},
+  { "token": "eat", "status": "correct" },
+  { "token": "apple", "status": "incorrect", "suggestion": "apples" },
+  { "token": "and", "status": "correct" },
+  { "token": "banana", "status": "incorrect", "suggestion": "bananas" },
+  { "token": ".", "status": "extra" }
 ]
 
 User Transcription: {{{userTranscription}}}
