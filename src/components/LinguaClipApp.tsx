@@ -6,7 +6,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
-import ClipDurationSelector from "./ClipDurationSelector";
+// Removed ClipDurationSelector import from here
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -200,7 +200,7 @@ export default function LinguaClipApp() {
         setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipSegmentationDuration, language, mediaDuration]); 
+  }, [clipSegmentationDuration, language, mediaDuration]); // Removed mediaSrc from dependencies as it might cause loops if it changes frequently for non-YT videos
 
 
   useEffect(() => {
@@ -211,7 +211,6 @@ export default function LinguaClipApp() {
     return () => {
       if (objectUrlToRevoke) {
         URL.revokeObjectURL(objectUrlToRevoke);
-        // console.log("Revoked Object URL:", objectUrlToRevoke); // Keep for debugging if needed
       }
     };
   }, [sourceFile, mediaSrc]); 
@@ -221,18 +220,6 @@ export default function LinguaClipApp() {
       setCurrentClipIndex(index);
     }
   };
-
-  const handleNextClip = () => {
-    if (currentClipIndex < clips.length - 1) {
-      setCurrentClipIndex(currentClipIndex + 1);
-    }
-  };
-  const handlePrevClip = () => {
-    if (currentClipIndex > 0) {
-      setCurrentClipIndex(currentClipIndex - 1); 
-    }
-  };
-
 
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
@@ -432,7 +419,7 @@ export default function LinguaClipApp() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc || isSaving} />
-                   <ClipDurationSelector selectedDuration={clipSegmentationDuration} onDurationChange={handleClipDurationChange} disabled={isLoading || !mediaSrc || isSaving} />
+                   {/* ClipDurationSelector removed from here */}
                 </div>
                  {user && mediaSrc && clips.length > 0 && (currentSourceType !== 'url' || !isYouTubeVideo) && (
                     <Button onClick={handleSaveMedia} disabled={isSaving || isLoading} className="w-full sm:w-auto">
@@ -446,7 +433,7 @@ export default function LinguaClipApp() {
                 <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={isLoading || !mediaSrc || isSaving} />
-                    <ClipDurationSelector selectedDuration={clipSegmentationDuration} onDurationChange={handleClipDurationChange} disabled={isLoading || !mediaSrc || isSaving} />
+                    {/* ClipDurationSelector also not here when no media is loaded */}
                 </div>
               </>
             )}
@@ -461,8 +448,7 @@ export default function LinguaClipApp() {
             mediaSrc={mediaSrc} 
             currentClipIndex={currentClipIndex}
             onSelectClip={handleSelectClip} 
-            onNextClip={handleNextClip} 
-            onPrevClip={handlePrevClip} 
+            // onNextClip and onPrevClip removed
             onTranscribeAudio={handleTranscribeAudio}
             onGetFeedback={handleGetFeedback}
             onGetCorrections={handleGetCorrections}
@@ -471,6 +457,11 @@ export default function LinguaClipApp() {
             isYouTubeVideo={isYouTubeVideo}
             language={currentClip.language || language} 
             isAudioSource={currentSourceType === 'audio'}
+            // Props for ClipDurationSelector
+            clipSegmentationDuration={clipSegmentationDuration}
+            onClipDurationChange={handleClipDurationChange}
+            isLoading={isLoading}
+            isSaving={isSaving}
           />
         )}
         {isLoading && !mediaDisplayName && ( 
@@ -485,4 +476,6 @@ export default function LinguaClipApp() {
     </div>
   );
 }
+    
+
     

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Mic, Sparkles, Loader2, FileDiff } from "lucide-react";
 import ClipNavigation from "./ClipNavigation"; 
+import ClipDurationSelector from "./ClipDurationSelector"; // Import ClipDurationSelector
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import { useToast } from "@/hooks/use-toast"; 
@@ -21,8 +22,7 @@ interface TranscriptionWorkspaceProps {
   mediaSrc?: string;
   currentClipIndex: number;
   onSelectClip: (index: number) => void; 
-  onNextClip: () => void; 
-  onPrevClip: () => void; 
+  // onNextClip and onPrevClip removed
   onTranscribeAudio: (clipId: string) => Promise<void>;
   onGetFeedback: (clipId: string) => Promise<void>;
   onGetCorrections: (clipId: string) => Promise<void>;
@@ -31,6 +31,11 @@ interface TranscriptionWorkspaceProps {
   isYouTubeVideo: boolean;
   language: string;
   isAudioSource?: boolean;
+  // Props for ClipDurationSelector
+  clipSegmentationDuration: number;
+  onClipDurationChange: (duration: string) => void;
+  isLoading: boolean;
+  isSaving: boolean;
 }
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -56,8 +61,7 @@ export default function TranscriptionWorkspace({
   mediaSrc,
   currentClipIndex,
   onSelectClip, 
-  onNextClip, 
-  onPrevClip,
+  // onNextClip, onPrevClip removed
   onTranscribeAudio,
   onGetFeedback,
   onGetCorrections,
@@ -66,6 +70,10 @@ export default function TranscriptionWorkspace({
   isYouTubeVideo,
   language,
   isAudioSource = false,
+  clipSegmentationDuration,
+  onClipDurationChange,
+  isLoading,
+  isSaving,
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState("manual");
@@ -207,6 +215,13 @@ export default function TranscriptionWorkspace({
           className="shadow-lg rounded-lg"
           isAudioSource={isAudioSource} 
         />
+        <div className="space-y-3 p-3 bg-card rounded-lg shadow">
+            <ClipDurationSelector 
+                selectedDuration={clipSegmentationDuration} 
+                onDurationChange={onClipDurationChange} 
+                disabled={isLoading || !mediaSrc || isSaving || isYouTubeVideo} 
+            />
+        </div>
         <ClipNavigation
           clips={clips}
           currentClipIndex={currentClipIndex}
@@ -340,4 +355,6 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
+    
+
     
