@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!auth) {
-      console.error("Firebase Auth is not initialized. Auth features will be unavailable.");
+      console.warn("Firebase Auth is not initialized. Auth features will be unavailable."); // Changed from console.error
       setLoading(false);
       // Optionally, show a toast to the user if auth is critical and not just optional
       // toast({ variant: "destructive", title: "Authentication Error", description: "Firebase Auth could not be initialized." });
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     if (!auth) {
       toast({ variant: "destructive", title: "Sign-in Error", description: "Authentication service is not available." });
-      console.error("Attempted to signInWithGoogle, but Firebase Auth is not initialized.");
+      console.warn("Attempted to signInWithGoogle, but Firebase Auth is not initialized."); // Changed from console.error
       return;
     }
     const provider = new GoogleAuthProvider();
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     if (!auth) {
       toast({ variant: "destructive", title: "Sign-out Error", description: "Authentication service is not available." });
-      console.error("Attempted to signOut, but Firebase Auth is not initialized.");
+      console.warn("Attempted to signOut, but Firebase Auth is not initialized."); // Changed from console.error
       return;
     }
     try {
