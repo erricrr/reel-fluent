@@ -38,68 +38,98 @@ export default function VideoPlayer({
       }
 
       const handleLoadedMetadata = () => {
+        if (!media) return;
         if (onLoadedMetadata) {
           onLoadedMetadata(media.duration);
         }
         media.currentTime = startTime;
+        // Initial check to prevent play if startTime is already at/past endTime
+        enforceClipBoundaryOnPlay();
       };
 
       const handleTimeUpdate = () => {
+        if (!media) return;
         if (onTimeUpdate) {
           onTimeUpdate(media.currentTime);
         }
 
-        // Check if endTime is defined and is a finite number
-        if (typeof endTime === 'number' && isFinite(endTime)) {
-          // If current time has reached or exceeded the clip's end time
-          if (media.currentTime >= endTime) {
-            if (!media.paused) {
-              media.pause();
-            }
-            // After pausing, if currentTime has overshot endTime, clamp it back to endTime.
-            // This ensures the player's UI doesn't show a time greater than the clip's boundary.
-            if (media.currentTime > endTime) {
+        // Only apply custom end time logic for non-YouTube sources
+        if (!(src?.includes("youtube.com") || src?.includes("youtu.be/"))) {
+          if (typeof endTime === 'number' && isFinite(endTime)) {
+            if (media.currentTime >= endTime) {
+              // Clamp currentTime to endTime first.
               media.currentTime = endTime;
-            }
-
-            if (onEnded) { // This prop is not currently used by parent, but good to have
-              onEnded();
+              // Then, ensure it's paused.
+              if (!media.paused) {
+                media.pause();
+              }
+              if (onEnded) {
+                onEnded();
+              }
             }
           }
         }
       };
 
       const handleMediaEnded = () => {
+        // This is the native 'ended' event of the media element
         if (onEnded) onEnded();
+      };
+      
+      const enforceClipBoundaryOnPlay = () => {
+        if (!media) return;
+        if (!(src?.includes("youtube.com") || src?.includes("youtu.be/"))) { // Only for non-YouTube
+            if (typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime) {
+                if (!media.paused) {
+                    media.pause();
+                }
+                media.currentTime = endTime; // Ensure it's parked at endTime
+            }
+        }
       };
 
       media.addEventListener("loadedmetadata", handleLoadedMetadata);
       media.addEventListener("timeupdate", handleTimeUpdate);
       media.addEventListener("ended", handleMediaEnded);
+      media.addEventListener('play', enforceClipBoundaryOnPlay);
+      media.addEventListener('playing', enforceClipBoundaryOnPlay);
 
-      // If media is already loaded (e.g. src didn't change but startTime/endTime did)
-      if (media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) {
+
+      if (media.readyState >= (media as HTMLMediaElement).HAVE_METADATA) {
          media.currentTime = startTime;
+         enforceClipBoundaryOnPlay(); // Also check here if media was already loaded
       }
 
       return () => {
         media.removeEventListener("loadedmetadata", handleLoadedMetadata);
         media.removeEventListener("timeupdate", handleTimeUpdate);
         media.removeEventListener("ended", handleMediaEnded);
+        media.removeEventListener('play', enforceClipBoundaryOnPlay);
+        media.removeEventListener('playing', enforceClipBoundaryOnPlay);
       };
     }
   }, [src, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded]);
 
   useEffect(() => {
     const media = mediaRef.current;
-    // This effect ensures that if startTime or endTime props change for an already loaded media,
+    // This effect ensures that if startTime or endTime props change for an already loaded media (non-YouTube),
     // and the currentTime is outside the new bounds, it jumps to the new startTime.
-    if (media && media.src && media.readyState >= (media as HTMLVideoElement).HAVE_METADATA) {
+    if (media && src && !(src?.includes("youtube.com") || src?.includes("youtu.be/")) && media.readyState >= (media as HTMLMediaElement).HAVE_METADATA) {
         if (media.currentTime < startTime || (typeof endTime === 'number' && isFinite(endTime) && media.currentTime > endTime)) {
              media.currentTime = startTime;
+             // If it was playing and now jumped, re-check boundary immediately
+             if (!media.paused) {
+                const currentMedia = media; // Capture for timeout
+                setTimeout(() => { // Allow currentTime to settle after jump
+                    if (typeof endTime === 'number' && isFinite(endTime) && currentMedia.currentTime >= endTime) {
+                        currentMedia.currentTime = endTime;
+                        if(!currentMedia.paused) currentMedia.pause();
+                    }
+                }, 0);
+             }
         }
     }
-  }, [startTime, endTime]);
+  }, [src, startTime, endTime]); // Added src to dependencies as it's used in the condition
 
 
   if (!src) {
@@ -126,15 +156,13 @@ export default function VideoPlayer({
     }
 
     if (videoId) {
-      // For YouTube, startTime and endTime are handled by URL parameters.
-      // Ensure endTime is finite before adding to URL.
       const endParam = (typeof endTime === 'number' && isFinite(endTime)) ? `&end=${Math.floor(endTime)}` : '';
       const embedSrc = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime)}${endParam}&autoplay=0&controls=1`;
       return (
         <Card className={cn("overflow-hidden aspect-video", className)}>
           <CardContent className="p-0 h-full">
             <iframe
-              key={embedSrc} // Add key to force re-render if src changes significantly
+              key={embedSrc} 
               width="100%"
               height="100%"
               src={embedSrc}
@@ -157,11 +185,13 @@ export default function VideoPlayer({
     }
   }
 
+  const mediaKey = `${src}-${startTime}-${endTime}`; // Key to force re-render of media element if segment changes
+
   if (isAudioSource) {
     return (
       <Card className={cn("overflow-hidden", className)}>
         <CardContent className="p-2 h-full flex items-center justify-center">
-          <audio ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
+          <audio key={mediaKey} ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
             Your browser does not support the audio tag.
           </audio>
         </CardContent>
@@ -172,10 +202,11 @@ export default function VideoPlayer({
   return (
     <Card className={cn("aspect-video overflow-hidden", className)}>
       <CardContent className="p-0 h-full">
-        <video ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
+        <video key={mediaKey} ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
           Your browser does not support the video tag.
         </video>
       </CardContent>
     </Card>
   );
 }
+
