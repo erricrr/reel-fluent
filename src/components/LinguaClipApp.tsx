@@ -33,9 +33,9 @@ export default function LinguaClipApp() {
   const [language, setLanguage] = useState<string>("vietnamese");
   const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60); 
 
-  const [isLoading, setIsLoading] = useState<boolean>(false); // For initial media processing
-  const [isSaving, setIsSaving] = useState<boolean>(false); // For saving media to Firebase
-  const [isAnyClipTranscribing, setIsAnyClipTranscribing] = useState<boolean>(false); // If ANY clip is "Transcribing..."
+  const [isLoading, setIsLoading] = useState<boolean>(false); 
+  const [isSaving, setIsSaving] = useState<boolean>(false); 
+  const [isAnyClipTranscribing, setIsAnyClipTranscribing] = useState<boolean>(false); 
   
   const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | 'unknown' | null>(null);
   
@@ -70,9 +70,9 @@ export default function LinguaClipApp() {
     setCurrentClipIndex(0);
     setIsLoading(false);
     setIsSaving(false);
-    // isAnyClipTranscribing will be reset by its own useEffect
     setCurrentSourceType(null);
     setClipSegmentationDuration(60); 
+    // language state persists
   }, []);
 
   const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
@@ -117,7 +117,6 @@ export default function LinguaClipApp() {
         setMediaDisplayName(displayName);
         setCurrentSourceType('url');
         setMediaDuration(Infinity); 
-        // Clips for YT are generated in useEffect
         setIsLoading(false);
         toast({ title: "YouTube Video Loaded", description: "Viewing YouTube video. Transcription/clip features are limited." });
         return;
@@ -168,7 +167,7 @@ export default function LinguaClipApp() {
 
 
   useEffect(() => {
-    if (mediaSrc && mediaDuration > 0) {
+    if (mediaSrc && mediaDuration > 0 && !isYouTubeVideo) { // Ensure not YT and mediaSrc and duration are valid
       processingIdRef.current += 1; 
       const currentProcessingId = processingIdRef.current;
       setIsLoading(true); 
@@ -176,7 +175,7 @@ export default function LinguaClipApp() {
       const newGeneratedClips = generateClips(mediaDuration, clipSegmentationDuration, language);
       
       if (processingIdRef.current !== currentProcessingId) {
-        setIsLoading(false); // ensure loading is reset if superseded
+        setIsLoading(false); 
         return;
       }
 
@@ -191,13 +190,13 @@ export default function LinguaClipApp() {
       setCurrentClipIndex(0); 
 
       if (newGeneratedClips.length > 0) {
-        const mediaTypeForToast = isYouTubeVideo ? "YouTube video" : (currentSourceType || "media");
+        const mediaTypeForToast = currentSourceType || "media";
         toast({ title: "Media Processed", description: `${newGeneratedClips.length} clip(s) generated for ${mediaTypeForToast}.` });
-      } else if (mediaDuration > 0) { // Only show error if duration was positive but no clips
+      } else if (mediaDuration > 0) { 
         toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips for the media." });
       }
       setIsLoading(false);
-    } else if (!mediaSrc && clips.length > 0) { // If mediaSrc is cleared, clear clips
+    } else if (!mediaSrc && clips.length > 0) { 
       setClips([]);
       setCurrentClipIndex(0);
     }
@@ -210,11 +209,14 @@ export default function LinguaClipApp() {
       objectUrlToRevoke = mediaSrc;
     }
     return () => {
-      if (objectUrlToRevoke) {
+      if (objectUrlToRevoke && !isAnyClipTranscribing) {
+        console.log("Revoking object URL (on cleanup or sourceFile/mediaSrc change):", objectUrlToRevoke);
         URL.revokeObjectURL(objectUrlToRevoke);
+      } else if (objectUrlToRevoke && isAnyClipTranscribing) {
+         console.log("Skipping revoke of object URL due to ongoing transcription:", objectUrlToRevoke);
       }
     };
-  }, [sourceFile, mediaSrc]); 
+  }, [sourceFile, mediaSrc, isAnyClipTranscribing]); 
 
   const handleSelectClip = (index: number) => {
     if (index >= 0 && index < clips.length) {
@@ -266,21 +268,27 @@ export default function LinguaClipApp() {
         updateClipData(clipId, { automatedTranscription: "Error: No audio data." });
         return;
     }
+    
+    // Log prefix for debugging
+    console.log("Audio Data URI prefix for AI:", audioDataUri.substring(0, 100));
+    const clipLanguage = (currentClipToTranscribe.language || language).trim();
+    console.log("Language for AI transcription:", clipLanguage);
+
 
     try {
-      const result = await transcribeAudio({ audioDataUri, language: currentClipToTranscribe.language || language });
+      const result = await transcribeAudio({ audioDataUri, language: clipLanguage });
       updateClipData(clipId, { automatedTranscription: result.transcription });
       toast({ title: "Transcription Successful" });
     } catch (error) {
-      console.warn("AI Transcription error:", error);
-      toast({ variant: "destructive", title: "AI Error", description: "Failed to transcribe audio." });
+      console.warn("AI Transcription error in LinguaClipApp:", error); // Log the actual error
+      toast({ variant: "destructive", title: "AI Error", description: "Failed to transcribe audio. Check console for details." });
       updateClipData(clipId, { automatedTranscription: "Error: Could not transcribe audio." });
     }
   };
 
   const handleGetFeedback = async (clipId: string): Promise<void> => {
     const currentClipForFeedback = clips.find(c => c.id === clipId);
-    if (isYouTubeVideo || !currentClipForFeedback || !currentClipForFeedback.userTranscription || !currentClipForFeedback.automatedTranscription || currentClipForFeedback.automatedTranscription.startsWith("Error:")) {
+    if (isYouTubeVideo || !currentClipForFeedback || !currentClipForFeedback.userTranscription || !currentClipForFeedback.automatedTranscription || currentClipForFeedback.automatedTranscription.startsWith("Error:") || currentClipForFeedback.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Feedback Error", description: "Ensure automated transcription is successful and you've typed something."});
       return;
     }
@@ -289,7 +297,7 @@ export default function LinguaClipApp() {
       const result = await transcriptionFeedback({
         userTranscription: currentClipForFeedback.userTranscription,
         automatedTranscription: currentClipForFeedback.automatedTranscription,
-        language: currentClipForFeedback.language || language,
+        language: (currentClipForFeedback.language || language).trim(),
       });
       updateClipData(clipId, { feedback: result.feedback });
       toast({ title: "Feedback Generated" });
@@ -302,7 +310,7 @@ export default function LinguaClipApp() {
 
   const handleGetCorrections = async (clipId: string): Promise<void> => {
     const currentClipForCorrections = clips.find(c => c.id === clipId);
-     if (isYouTubeVideo || !currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:")) {
+     if (isYouTubeVideo || !currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:") || currentClipForCorrections.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Comparison Error", description: "Ensure automated transcription is successful and you've typed something."});
       return;
     }
@@ -311,7 +319,7 @@ export default function LinguaClipApp() {
       const result = await compareTranscriptions({
         userTranscription: currentClipForCorrections.userTranscription,
         automatedTranscription: currentClipForCorrections.automatedTranscription,
-        language: currentClipForCorrections.language || language,
+        language: (currentClipForCorrections.language || language).trim(),
       });
       updateClipData(clipId, { comparisonResult: result.comparisonResult });
       toast({ title: "Comparison Complete" });
@@ -323,7 +331,7 @@ export default function LinguaClipApp() {
   };
 
   const handleRemoveClip = (clipIdToRemove: string) => {
-    if (isAnyClipTranscribing) { // Prevent removal if any transcription is ongoing
+    if (isAnyClipTranscribing) { 
       toast({variant: "destructive", title: "Action Disabled", description: "Cannot remove clips while transcription is in progress."});
       return;
     }
@@ -334,13 +342,11 @@ export default function LinguaClipApp() {
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
     if (newClips.length === 0) {
-      // If removing the last clip of an uploaded file, reset the app fully
       if (currentSourceType === 'video' || currentSourceType === 'audio') {
         resetAppState(); 
         toast({ title: "Media Cleared", description: "All clips have been removed and the media file has been cleared." });
         return;
       }
-      // For URLs (like YouTube), just clear clips
       setClips([]); 
       setCurrentClipIndex(0);
       toast({ title: "All Clips Removed" });
@@ -349,10 +355,8 @@ export default function LinguaClipApp() {
       if (removedClipOriginalIndex < currentClipIndex) {
         newCurrentIdx = Math.max(0, currentClipIndex - 1);
       } else if (removedClipOriginalIndex === currentClipIndex) {
-        // If the removed clip was the current one, select the new clip at the same index (or the last one if it was the last)
         newCurrentIdx = Math.min(currentClipIndex, newClips.length - 1);
       }
-      // Ensure index is within bounds
       newCurrentIdx = Math.max(0, Math.min(newCurrentIdx, newClips.length - 1));
 
       setClips(newClips);
@@ -378,7 +382,7 @@ export default function LinguaClipApp() {
         mediaDisplayName: mediaDisplayName,
         mediaDuration: mediaDuration,
         mediaType: currentSourceType || 'unknown',
-        language: language,
+        language: language, // Overall media language
         clipSegmentationDuration: clipSegmentationDuration,
         clips: clips.map(c => ({ 
             id: c.id,
@@ -388,7 +392,7 @@ export default function LinguaClipApp() {
             automatedTranscription: c.automatedTranscription || null,
             feedback: c.feedback || null,
             comparisonResult: (c.comparisonResult as CorrectionToken[] | null) || null, 
-            language: c.language || language, // Ensure language is part of the saved clip data
+            language: c.language || language, // Clip specific language (could differ if we add per-clip lang later)
         })),
       });
       if (result.success) {
@@ -414,7 +418,7 @@ export default function LinguaClipApp() {
 
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
   const currentClip = clips[currentClipIndex];
-  const appIsGloballyBusy = isLoading || isSaving; // Only initial loading or saving should block user input in textarea
+  const globalAppBusy = isLoading || isSaving;
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -431,15 +435,15 @@ export default function LinguaClipApp() {
                       {mediaDisplayName}
                     </span>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={handleResetAppWithCheck} aria-label="Remove media" disabled={appIsGloballyBusy || isAnyClipTranscribing}>
+                  <Button variant="ghost" size="icon" onClick={handleResetAppWithCheck} aria-label="Remove media" disabled={globalAppBusy || isAnyClipTranscribing}>
                     <XIcon className="h-5 w-5 text-muted-foreground hover:text-foreground" />
                   </Button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={appIsGloballyBusy || isAnyClipTranscribing} />
+                   <LanguageSelector selectedLanguage={language} onLanguageChange={handleLanguageChange} disabled={globalAppBusy || isAnyClipTranscribing || !mediaSrc} />
                 </div>
                  {user && mediaSrc && clips.length > 0 && (currentSourceType !== 'url' || !isYouTubeVideo) && (
-                    <Button onClick={handleSaveMedia} disabled={appIsGloballyBusy || isAnyClipTranscribing} className="w-full sm:w-auto">
+                    <Button onClick={handleSaveMedia} disabled={globalAppBusy || isAnyClipTranscribing} className="w-full sm:w-auto">
                     <Save className="mr-2 h-4 w-4" />
                     {isSaving ? "Saving..." : "Save Media"}
                     </Button>
