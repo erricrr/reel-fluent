@@ -232,6 +232,33 @@ export default function LinguaClipApp() {
         newMediaSrc = source.url;
         determinedSourceType = 'url';
         mediaElementTypeForLoad = 'video';
+
+        // Check if this looks like an unsupported video platform
+        const unsupportedPlatforms = [
+          { name: 'Vimeo', regex: /vimeo\.com/i },
+          { name: 'TikTok', regex: /tiktok\.com/i },
+          { name: 'Instagram', regex: /instagram\.com/i },
+          { name: 'Facebook', regex: /facebook\.com|fb\.watch/i },
+          { name: 'Twitter/X', regex: /twitter\.com|x\.com/i },
+          { name: 'Dailymotion', regex: /dailymotion\.com/i },
+          { name: 'Twitch', regex: /twitch\.tv/i }
+        ];
+
+        const unsupportedPlatform = unsupportedPlatforms.find(platform =>
+          source.url && platform.regex.test(source.url)
+        );
+
+        if (unsupportedPlatform) {
+          if (processingIdRef.current !== currentProcessingId) return;
+          toast({
+            variant: "destructive",
+            title: `${unsupportedPlatform.name} Not Supported`,
+            description: `Currently only YouTube URLs and direct video file links are supported. Please try a YouTube URL or upload the file directly.`
+          });
+          setIsLoading(false);
+          resetAppState();
+          return;
+        }
       }
     } else {
       if (processingIdRef.current !== currentProcessingId) return;

@@ -175,11 +175,11 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
       <TabsContent value="url">
         <form onSubmit={handleUrlSubmit} className="space-y-3">
           <div className="space-y-2">
-            <Label htmlFor="video-url-input">YouTube or direct video URL</Label>
+            <Label htmlFor="video-url-input">YouTube or direct video file URL</Label>
             <Input
               id="video-url-input"
               type="url"
-              placeholder="https://www.youtube.com/watch?v=..."
+              placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isLoading}
@@ -189,7 +189,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Audio from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-           Enter a YouTube or direct media URL. Audio will be extracted for educational language learning purposes only.
+           Supports YouTube URLs and direct links to video/audio files (e.g., .mp4, .webm, .mp3). Other platforms like Vimeo or TikTok are not supported. Audio is extracted for educational language learning only.
            </p>
         </form>
       </TabsContent>
