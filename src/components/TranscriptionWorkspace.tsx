@@ -331,7 +331,7 @@ export default function TranscriptionWorkspace({
             disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe Audio"}
+            {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
           </Button>
         </div>
 
@@ -514,7 +514,7 @@ export default function TranscriptionWorkspace({
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                       {isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
                       {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
-                      {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "Transcribe Clip {currentClipIndex + 1} (AI)" to generate.</p>}
+                      {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "Transcribe Clip {currentClipIndex + 1}" to generate.</p>}
                     </ScrollArea>
                   </div>
 

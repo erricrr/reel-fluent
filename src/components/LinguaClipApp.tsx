@@ -470,32 +470,102 @@ export default function LinguaClipApp() {
       toast({variant: "destructive", title: "Comparison Error", description: "Ensure automated transcription is successful and you've typed something."});
       return;
     }
-    updateClipData(clipId, { comparisonResult: [{token: "Comparing...", status: "correct"}] });
 
-    console.log('LinguaClipApp: Starting comparison with:', {
-      userTranscription: currentClipForCorrections.userTranscription.substring(0, 100) + '...',
-      automatedTranscription: currentClipForCorrections.automatedTranscription.substring(0, 100) + '...',
-      language: (currentClipForCorrections.language || language).trim()
+    // Validate input quality before starting
+    const userText = currentClipForCorrections.userTranscription.trim();
+    const automatedText = currentClipForCorrections.automatedTranscription.trim();
+
+    if (userText.length < 2) {
+      toast({variant: "destructive", title: "Input Too Short", description: "Please enter at least a few characters for meaningful comparison."});
+      return;
+    }
+
+    // Log detailed comparison context for debugging
+    console.log('LinguaClipApp: Starting comparison with detailed context:', {
+      clipId,
+      userTranscription: {
+        length: userText.length,
+        preview: userText.substring(0, 50) + (userText.length > 50 ? '...' : ''),
+        wordCount: userText.split(/\s+/).length
+      },
+      automatedTranscription: {
+        length: automatedText.length,
+        preview: automatedText.substring(0, 50) + (automatedText.length > 50 ? '...' : ''),
+        wordCount: automatedText.split(/\s+/).length
+      },
+      language: (currentClipForCorrections.language || language).trim(),
+      timestamp: new Date().toISOString()
     });
 
+    updateClipData(clipId, { comparisonResult: [{token: "Comparing...", status: "correct"}] });
+
     try {
+      const startTime = Date.now();
+
       const result = await compareTranscriptions({
-        userTranscription: currentClipForCorrections.userTranscription,
-        automatedTranscription: currentClipForCorrections.automatedTranscription,
+        userTranscription: userText,
+        automatedTranscription: automatedText,
         language: (currentClipForCorrections.language || language).trim(),
       });
 
-      console.log('LinguaClipApp: Comparison result received:', {
+      const duration = Date.now() - startTime;
+
+      console.log('LinguaClipApp: Comparison completed successfully:', {
+        clipId,
+        duration: `${duration}ms`,
         resultLength: result.comparisonResult.length,
-        firstFewTokens: result.comparisonResult.slice(0, 5).map(t => ({ token: t.token, status: t.status, suggestion: t.suggestion }))
+        tokenSummary: {
+          correct: result.comparisonResult.filter(t => t.status === 'correct').length,
+          incorrect: result.comparisonResult.filter(t => t.status === 'incorrect').length,
+          missing: result.comparisonResult.filter(t => t.status === 'missing').length,
+          extra: result.comparisonResult.filter(t => t.status === 'extra').length
+        },
+        firstFewTokens: result.comparisonResult.slice(0, 5).map(t => ({
+          token: t.token,
+          status: t.status,
+          suggestion: t.suggestion
+        }))
       });
 
       updateClipData(clipId, { comparisonResult: result.comparisonResult });
-      toast({ title: "Comparison Complete" });
+
+      // Provide more specific success feedback
+      const summary = result.comparisonResult;
+      const correctCount = summary.filter(t => t.status === 'correct').length;
+      const totalCount = summary.length;
+      const accuracy = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+
+      toast({
+        title: "Comparison Complete",
+        description: `${accuracy}% accuracy (${correctCount}/${totalCount} tokens correct)`
+      });
+
     } catch (error) {
-      console.error("LinguaClipApp: AI Comparison error details:", error);
-      toast({ variant: "destructive", title: "AI Error", description: "Failed to generate comparison." });
-      updateClipData(clipId, { comparisonResult: [{ token: "Error generating comparison.", status: "incorrect", suggestion: "N/A" }] });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error("LinguaClipApp: Comparison failed with detailed error:", {
+        clipId,
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        inputLengths: {
+          user: userText.length,
+          automated: automatedText.length
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      toast({
+        variant: "destructive",
+        title: "Comparison Failed",
+        description: `Could not analyze transcription: ${errorMessage.substring(0, 100)}${errorMessage.length > 100 ? '...' : ''}`
+      });
+
+      updateClipData(clipId, {
+        comparisonResult: [{
+          token: "Error: Comparison analysis failed.",
+          status: "incorrect",
+          suggestion: "Please try again or contact support if this persists"
+        }]
+      });
     }
   };
 
