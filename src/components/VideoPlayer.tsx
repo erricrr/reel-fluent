@@ -109,15 +109,10 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     if (!media || isYouTube) {
       return;
     }
-    if (typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime) {
-      media.currentTime = endTime;
-      if (!media.paused) {
-        media.pause();
-      }
-    } else if (media.currentTime < startTime) {
+    if (media.currentTime < startTime) {
       media.currentTime = startTime;
     }
-  }, [isYouTube, startTime, endTime]);
+  }, [isYouTube, startTime]);
 
   const handleTimeUpdate = useCallback(() => {
     const media = mediaRef.current;
@@ -130,8 +125,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     if (isYouTube) return;
 
     if (typeof endTime === 'number' && isFinite(endTime)) {
-      const threshold = 0.2;
-      if (media.currentTime >= endTime - threshold) {
+      if (!media.paused && media.currentTime >= endTime) {
         if (isLooping) {
           media.currentTime = startTime;
           media.play().catch(error => {
@@ -141,10 +135,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
           });
         } else {
           media.currentTime = endTime;
-          if (!media.paused) {
-            media.pause();
-          }
-          if (onEnded && !isLooping && Math.abs(media.currentTime - endTime) < 0.1) {
+          media.pause();
+          if (onEnded && !isLooping) {
             onEnded();
           }
         }

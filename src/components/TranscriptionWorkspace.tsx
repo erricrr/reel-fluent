@@ -121,10 +121,10 @@ export default function TranscriptionWorkspace({
     setPlaybackRate(1.0); // Reset to normal speed when switching clips
   }, [currentClip.id]); // Only run when clip ID changes
 
-  // Poll for current time when playing (less frequent to avoid interference)
+  // Poll for current time continuously (less frequent to avoid interference)
   useEffect(() => {
-    if (!isCurrentClipPlaying || !videoPlayerRef.current) {
-      return; // Don't reset time here
+    if (!videoPlayerRef.current) {
+      return;
     }
 
     const interval = setInterval(() => {
@@ -135,7 +135,7 @@ export default function TranscriptionWorkspace({
     }, 500); // Update every 500ms - much less frequent than onTimeUpdate
 
     return () => clearInterval(interval);
-  }, [isCurrentClipPlaying, currentClip?.startTime]);
+  }, [isCurrentClipPlaying, currentClip?.startTime]); // Keep original dependencies to maintain array size
 
   const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
