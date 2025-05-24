@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import TranslationLanguageSelector from "./TranslationLanguageSelector";
@@ -69,6 +69,14 @@ const formatSecondsToMMSS = (totalSeconds: number): string => {
   }
 };
 
+// Three dots loader component
+const ThreeDotsLoader = ({ className = "" }: { className?: string }) => (
+  <div className={`flex justify-center space-x-1 ${className}`}>
+    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+  </div>
+);
 
 export default function TranscriptionWorkspace({
   currentClip,
@@ -512,7 +520,7 @@ export default function TranscriptionWorkspace({
                   <div>
                     <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
-                      {isAutomatedTranscriptionLoading ? <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" /> : null}
+                      {isAutomatedTranscriptionLoading ? <ThreeDotsLoader className="mx-auto my-4" /> : null}
                       {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
                       {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "Transcribe Clip {currentClipIndex + 1}" to generate.</p>}
                     </ScrollArea>
@@ -540,7 +548,7 @@ export default function TranscriptionWorkspace({
                     </Button>
                     <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
                        {isCorrectionsLoading ? (
-                         <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
+                         <ThreeDotsLoader className="mx-auto my-4" />
                        ) : currentClip.comparisonResult === null || currentClip.comparisonResult === undefined ? (
                          <p className="text-sm text-muted-foreground">Click "Get Corrections" above after entering your transcription and generating the AI transcription.</p>
                        ) : currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Error generating comparison." ? (
@@ -574,7 +582,7 @@ export default function TranscriptionWorkspace({
                     </Button>
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                        {isTranslationLoading ? (
-                         <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
+                         <ThreeDotsLoader className="mx-auto my-4" />
                        ) : !getTranslationForCurrentTarget() ? (
                          <p className="text-sm text-muted-foreground">Click "Translate to {getLanguageLabel(translationTargetLanguage)}" above after AI transcription is complete.</p>
                        ) : getTranslationForCurrentTarget() === "" ? (

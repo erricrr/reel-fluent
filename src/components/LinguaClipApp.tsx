@@ -9,7 +9,7 @@ import ClipDurationSelector from "./ClipDurationSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileVideo, X as XIcon, FileAudio, Save, Loader2 } from "lucide-react";
+import { FileVideo, X as XIcon, FileAudio, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
