@@ -769,10 +769,6 @@ export default function LinguaClipApp() {
                     <Progress value={processingProgress} className="h-2" />
                   </div>
                 )}
-
-                <p className="text-sm text-center text-muted-foreground">
-                  Please wait while we prepare your media for language learning...
-                </p>
               </div>
             </CardContent>
           </Card>

@@ -186,11 +186,11 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             />
           </div>
           <Button type="submit" disabled={isLoading || !url.trim()} className="w-full sm:w-auto">
-            {isLoading ? "Loading..." : "Load Video from URL"}
+            {isLoading ? "Loading..." : "Load Audio from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-            Enter a YouTube URL or direct media URL. YouTube videos will be converted to audio and processed with full clip generation and transcription support.
-          </p>
+           Enter a YouTube or direct media URL. Audio will be extracted for educational language learning purposes only.
+           </p>
         </form>
       </TabsContent>
     </Tabs>
