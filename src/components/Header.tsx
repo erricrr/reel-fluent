@@ -1,4 +1,3 @@
-
 "use client";
 import type * as React from 'react';
 import { Captions, Sun, Moon, LogOut, UserCircle } from 'lucide-react';
@@ -60,9 +59,11 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button variant="outline" onClick={signInWithGoogle}>
-              <UserCircle className="mr-2 h-5 w-5" /> Sign In
-            </Button>
+            // Temporarily commented out - Sign In button
+            // <Button variant="outline" onClick={signInWithGoogle}>
+            //   <UserCircle className="mr-2 h-5 w-5" /> Sign In
+            // </Button>
+            <></>
           )}
           <Button
             variant="ghost"
