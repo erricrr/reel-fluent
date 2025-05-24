@@ -230,8 +230,19 @@ export default function LinguaClipApp() {
       } else {
         displayName = source.url;
         newMediaSrc = source.url;
-        determinedSourceType = 'url';
-        mediaElementTypeForLoad = 'video';
+
+        // Detect if URL points to an audio file based on extension
+        const audioExtensions = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma'];
+        const urlPath = source.url.toLowerCase();
+        const isAudioUrl = audioExtensions.some(ext => urlPath.includes(ext));
+
+        if (isAudioUrl) {
+          determinedSourceType = 'audio';
+          mediaElementTypeForLoad = 'audio';
+        } else {
+          determinedSourceType = 'url';
+          mediaElementTypeForLoad = 'video';
+        }
 
         // Check if this looks like an unsupported video platform
         const unsupportedPlatforms = [

@@ -189,8 +189,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Audio from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-           Supports YouTube URLs and direct links to video/audio files (e.g., .mp4, .webm, .mp3). Other platforms like Vimeo or TikTok are not supported. Audio is extracted for educational language learning only.
-           </p>
+           Supports YouTube URLs and direct links to video/audio files (e.g., .mp4, .webm, .mp3). Audio is extracted for educational language learning only.           </p>
         </form>
       </TabsContent>
     </Tabs>
