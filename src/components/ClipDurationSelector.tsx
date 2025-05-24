@@ -28,7 +28,7 @@ export default function ClipDurationSelector({ selectedDuration, onDurationChang
         value={String(selectedDuration)}
         onValueChange={onDurationChange}
         disabled={disabled}
-        className="flex flex-col sm:flex-row sm:gap-4"
+        className="flex flex-row gap-2 xs:gap-4 flex-wrap"
       >
         {durationOptions.map((option) => (
           <div key={option.value} className="flex items-center space-x-2">
