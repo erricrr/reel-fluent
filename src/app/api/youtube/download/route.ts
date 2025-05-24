@@ -12,7 +12,7 @@ interface YouTubeDownloadRequest {
 }
 
 const TEMP_DIR = path.join(process.cwd(), 'temp-downloads');
-const MAX_DURATION = 600; // 10 minutes max duration
+const MAX_DURATION = 1800; // 30 minutes max duration
 
 // Ensure temp directory exists
 async function ensureTempDir() {
