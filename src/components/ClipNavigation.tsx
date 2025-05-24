@@ -3,7 +3,8 @@
 import * as React from 'react';
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Film, Trash2 as Trash2Icon } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Film, MoreHorizontal, Trash2 as Trash2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Clip } from '@/lib/videoUtils';
 
@@ -90,17 +91,29 @@ export default function ClipNavigation({
         <h3 className="text-sm font-medium text-foreground">
           Clip Navigation ({clips.length > 0 ? currentClipIndex + 1 : 0} of {clips.length})
         </h3>
-        {currentClip && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground px-2 py-1 h-auto"
-            onClick={() => onRemoveClip(currentClip.id)}
-            aria-label="Remove this clip"
-            disabled={disableRemove} // Use the passed disableRemove prop
-          >
-            <Trash2Icon className="h-3 w-3 mr-1" /> Remove Current Clip
-          </Button>
+        {currentClip && clips.length > 1 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                disabled={disableRemove}
+                aria-label="Clip options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="left" align="center" className="w-48">
+              <DropdownMenuItem
+                onClick={() => onRemoveClip(currentClip.id)}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+              >
+                <Trash2Icon className="h-4 w-4 mr-2" />
+                Remove Clip {currentClipIndex + 1}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
