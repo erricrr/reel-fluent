@@ -2,15 +2,16 @@
 
 import type * as React from 'react';
 import { useEffect, useRef, useCallback, useState, useImperativeHandle, forwardRef } from "react";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export interface VideoPlayerRef {
   play: () => void;
   pause: () => void;
   getIsPlaying: () => boolean;
+  getCurrentTime: () => number;
+  seek: (time: number) => void;
+  setPlaybackRate: (rate: number) => void;
 }
 
 interface VideoPlayerProps {
@@ -24,6 +25,7 @@ interface VideoPlayerProps {
   isAudioSource?: boolean;
   currentClipIndex?: number;
   onPlayStateChange?: (isPlaying: boolean) => void; // Callback for play/pause state
+  isLooping?: boolean; // External loop control
 }
 
 // Helper function to format seconds to MM:SS
@@ -54,9 +56,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   isAudioSource = false,
   currentClipIndex,
   onPlayStateChange,
+  isLooping = false,
 }, ref) => {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
-  const [isLooping, setIsLooping] = useState(false);
 
   const getEffectiveSrc = useCallback(() => {
     if (!src) return undefined;
@@ -86,6 +88,19 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     },
     getIsPlaying: () => {
       return mediaRef.current ? !mediaRef.current.paused : false;
+    },
+    getCurrentTime: () => {
+      return mediaRef.current ? mediaRef.current.currentTime : 0;
+    },
+    seek: (time: number) => {
+      if (mediaRef.current) {
+        mediaRef.current.currentTime = time;
+      }
+    },
+    setPlaybackRate: (rate: number) => {
+      if (mediaRef.current) {
+        mediaRef.current.playbackRate = rate;
+      }
     }
   }));
 
@@ -279,20 +294,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
             Your browser does not support the audio tag.
           </audio>
         </CardContent>
-        {!isYouTube && (
-          <CardFooter className="py-2 px-2 border-t">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={`loop-toggle-${mediaKey}`}
-                checked={isLooping}
-                onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
-              />
-              <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
-                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''} ({formatSecondsToMMSS(startTime)} - {formatSecondsToMMSS(endTime || 0)})
-              </Label>
-            </div>
-          </CardFooter>
-        )}
       </Card>
     );
   }
@@ -304,20 +305,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
           Your browser does not support the video tag.
         </video>
       </CardContent>
-       {!isYouTube && (
-        <CardFooter className="py-2 px-2 border-t">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id={`loop-toggle-${mediaKey}`}
-              checked={isLooping}
-              onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
-            />
-            <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
-                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''} ({formatSecondsToMMSS(startTime)} - {formatSecondsToMMSS(endTime || 0)})
-            </Label>
-          </div>
-        </CardFooter>
-      )}
     </Card>
   );
 });

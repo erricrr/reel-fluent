@@ -9,7 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import type { Clip } from '@/lib/videoUtils';
@@ -89,14 +93,35 @@ export default function TranscriptionWorkspace({
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
   const [isCurrentClipPlaying, setIsCurrentClipPlaying] = useState(false);
-
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(currentClip?.startTime || 0);
+  const [isLooping, setIsLooping] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
+    setCurrentPlaybackTime(currentClip?.startTime || 0);
+    setPlaybackRate(1.0); // Reset to normal speed when switching clips
     if (activeTab === "ai" && (!currentClip.userTranscription?.trim() && !currentClip.automatedTranscription)) {
       setActiveTab("manual");
     }
   }, [currentClip, activeTab]);
+
+  // Poll for current time when playing (less frequent to avoid interference)
+  useEffect(() => {
+    if (!isCurrentClipPlaying || !videoPlayerRef.current) {
+      setCurrentPlaybackTime(currentClip?.startTime || 0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (videoPlayerRef.current) {
+        const currentTime = videoPlayerRef.current.getCurrentTime();
+        setCurrentPlaybackTime(currentTime);
+      }
+    }, 500); // Update every 500ms - much less frequent than onTimeUpdate
+
+    return () => clearInterval(interval);
+  }, [isCurrentClipPlaying, currentClip?.startTime]);
 
   const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -153,6 +178,36 @@ export default function TranscriptionWorkspace({
     }
   };
 
+  const handleSeek = (value: number[]) => {
+    if (!videoPlayerRef.current || value.length === 0) return;
+    const seekTime = value[0];
+    videoPlayerRef.current.seek(seekTime);
+    setCurrentPlaybackTime(seekTime);
+  };
+
+  const skipBackward = () => {
+    if (!videoPlayerRef.current) return;
+    const currentTime = videoPlayerRef.current.getCurrentTime();
+    const newTime = Math.max(currentClip.startTime, currentTime - 5); // Skip back 5 seconds
+    videoPlayerRef.current.seek(newTime);
+    setCurrentPlaybackTime(newTime);
+  };
+
+  const skipForward = () => {
+    if (!videoPlayerRef.current) return;
+    const currentTime = videoPlayerRef.current.getCurrentTime();
+    const newTime = Math.min(currentClip.endTime, currentTime + 5); // Skip forward 5 seconds
+    videoPlayerRef.current.seek(newTime);
+    setCurrentPlaybackTime(newTime);
+  };
+
+  const handlePlaybackRateChange = (value: string) => {
+    const rate = parseFloat(value);
+    setPlaybackRate(rate);
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.setPlaybackRate(rate);
+    }
+  };
 
   if (!currentClip) {
     return (
@@ -230,6 +285,7 @@ export default function TranscriptionWorkspace({
             isAudioSource={isAudioSource}
             currentClipIndex={currentClipIndex}
             onPlayStateChange={setIsCurrentClipPlaying}
+            isLooping={isLooping}
           />
           <div className="space-y-3 p-3 bg-card rounded-lg shadow">
               <ClipDurationSelector
@@ -295,19 +351,97 @@ export default function TranscriptionWorkspace({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                   <div className="flex items-center gap-2 mb-2">
-                      <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={togglePlayPause}
+                   <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
+                      {/* Timeline Controls Header */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground">
+                            {isCurrentClipPlaying ? "Playing" : "Paused"} - Clip {currentClipIndex + 1}
+                        </span>
+                        <span className="text-sm font-mono text-primary">
+                            {formatSecondsToMMSS(Math.max(currentClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(currentClip.endTime)}
+                        </span>
+                      </div>
+
+                      {/* Timeline Slider */}
+                      <div className="space-y-2">
+                        <Slider
+                          value={[Math.max(currentClip.startTime, currentPlaybackTime)]}
+                          onValueChange={handleSeek}
+                          min={currentClip.startTime}
+                          max={currentClip.endTime}
+                          step={0.1}
+                          className="w-full"
                           disabled={disableTextarea || !mediaSrc}
-                          aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
-                      >
-                          {isCurrentClipPlaying ? <PauseIcon className="h-5 w-5" /> : <PlayIcon className="h-5 w-5" />}
-                      </Button>
-                      <span className="text-sm text-muted-foreground">
-                          {isCurrentClipPlaying ? "Playing..." : "Paused"} (Clip {currentClipIndex + 1})
-                      </span>
+                        />
+                      </div>
+
+                      {/* Transport Controls */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`loop-toggle-${currentClip.id}`}
+                            checked={isLooping}
+                            onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
+                            disabled={disableTextarea || !mediaSrc}
+                          />
+                          <Label htmlFor={`loop-toggle-${currentClip.id}`} className="text-sm font-normal text-muted-foreground">
+                            Loop
+                          </Label>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={skipBackward}
+                              disabled={disableTextarea || !mediaSrc}
+                              aria-label="Skip back 5 seconds"
+                          >
+                              <SkipBack className="h-4 w-4" />
+                          </Button>
+                          <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={togglePlayPause}
+                              disabled={disableTextarea || !mediaSrc}
+                              aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
+                              className="px-4"
+                          >
+                              {isCurrentClipPlaying ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={skipForward}
+                              disabled={disableTextarea || !mediaSrc}
+                              aria-label="Skip forward 5 seconds"
+                          >
+                              <SkipForward className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-muted-foreground">Speed</span>
+                          <Select
+                            value={playbackRate.toString()}
+                            onValueChange={handlePlaybackRateChange}
+                            disabled={disableTextarea || !mediaSrc}
+                          >
+                            <SelectTrigger className="w-20 h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0.25">0.25x</SelectItem>
+                              <SelectItem value="0.5">0.5x</SelectItem>
+                              <SelectItem value="0.75">0.75x</SelectItem>
+                              <SelectItem value="1">1x</SelectItem>
+                              <SelectItem value="1.25">1.25x</SelectItem>
+                              <SelectItem value="1.5">1.5x</SelectItem>
+                              <SelectItem value="2">2x</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
                   </div>
 
                   <Textarea
