@@ -229,11 +229,6 @@ export default function TranscriptionWorkspace({
           isYouTubeVideo={isYouTubeVideo}
           formatSecondsToMMSS={formatSecondsToMMSS}
           disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-          clipSegmentationDuration={clipSegmentationDuration}
-          onClipDurationChange={onClipDurationChange}
-          isLoadingMedia={isLoadingMedia}
-          isSavingMedia={isSavingMedia}
-          isAnyClipTranscribing={isAnyClipTranscribing}
         />
         <Button
           onClick={handleTranscribe}

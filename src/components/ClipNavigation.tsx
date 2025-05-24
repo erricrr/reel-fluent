@@ -6,7 +6,6 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Film, Trash2 as Trash2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Clip } from '@/lib/videoUtils';
-import ClipDurationSelector from '@/components/ClipDurationSelector';
 
 interface ClipNavigationProps {
   clips: Clip[];
@@ -16,11 +15,6 @@ interface ClipNavigationProps {
   isYouTubeVideo: boolean;
   formatSecondsToMMSS: (seconds: number) => string;
   disableRemove?: boolean; // To disable the remove button from parent
-  clipSegmentationDuration: number;
-  onClipDurationChange: (value: string) => void;
-  isLoadingMedia: boolean;
-  isSavingMedia: boolean;
-  isAnyClipTranscribing: boolean;
 }
 
 export default function ClipNavigation({
@@ -31,11 +25,6 @@ export default function ClipNavigation({
   isYouTubeVideo,
   formatSecondsToMMSS,
   disableRemove = false,
-  clipSegmentationDuration,
-  onClipDurationChange,
-  isLoadingMedia,
-  isSavingMedia,
-  isAnyClipTranscribing,
 }: ClipNavigationProps) {
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const activeClipRef = React.useRef<HTMLButtonElement>(null);
@@ -121,16 +110,6 @@ export default function ClipNavigation({
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-
-      {currentClip && (
-        <div className="flex flex-col gap-4">
-          <ClipDurationSelector
-            selectedDuration={clipSegmentationDuration}
-            onDurationChange={onClipDurationChange}
-            disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-          />
-        </div>
-      )}
     </div>
   );
 }
