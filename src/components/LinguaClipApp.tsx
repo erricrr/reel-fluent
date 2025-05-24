@@ -7,9 +7,9 @@ import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
 import ClipDurationSelector from "./ClipDurationSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileVideo, X as XIcon, FileAudio, Save } from "lucide-react";
+import { FileVideo, X as XIcon, FileAudio, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
@@ -17,7 +17,8 @@ import { translateTranscription } from "@/ai/flows/translate-transcription-flow"
 import { compareTranscriptions, type CorrectionToken } from "@/ai/flows/compare-transcriptions-flow";
 import { useAuth } from '@/contexts/AuthContext';
 import { saveMediaItemAction } from '@/app/actions';
-import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo } from '@/lib/youtubeUtils';
+import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo, type ProgressCallback } from '@/lib/youtubeUtils';
+import { Progress } from "@/components/ui/progress";
 
 const MAX_MEDIA_DURATION_MINUTES = 10;
 
@@ -38,6 +39,11 @@ export default function LinguaClipApp() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isAnyClipTranscribing, setIsAnyClipTranscribing] = useState<boolean>(false);
+
+  // Processing progress state
+  const [processingProgress, setProcessingProgress] = useState<number>(0);
+  const [processingStatus, setProcessingStatus] = useState<string>("");
+  const [isYouTubeProcessing, setIsYouTubeProcessing] = useState<boolean>(false);
 
   const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | 'unknown' | null>(null);
   const [youtubeVideoInfo, setYoutubeVideoInfo] = useState<YouTubeVideoInfo | null>(null);
@@ -87,6 +93,9 @@ export default function LinguaClipApp() {
     setCurrentSourceType(null);
     setYoutubeVideoInfo(null);
     setClipSegmentationDuration(60);
+    setProcessingProgress(0);
+    setProcessingStatus("");
+    setIsYouTubeProcessing(false);
   }, [isAnyClipTranscribing]);
 
   const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
@@ -104,6 +113,8 @@ export default function LinguaClipApp() {
     const currentProcessingId = processingIdRef.current;
 
     setIsLoading(true);
+    setProcessingProgress(10);
+    setProcessingStatus("Initializing media processing...");
     let newMediaSrc: string | undefined = undefined;
     let displayName: string | null = null;
     let determinedSourceType: 'video' | 'audio' | 'url' | 'unknown' = 'unknown';
@@ -112,10 +123,15 @@ export default function LinguaClipApp() {
     if (source.file) {
       setSourceFile(source.file);
       displayName = source.file.name;
+      setProcessingProgress(30);
+      setProcessingStatus("Loading media file...");
+
       try {
         newMediaSrc = URL.createObjectURL(source.file);
         objectUrlRef.current = newMediaSrc;
         console.log("LinguaClipApp: handleSourceLoad CREATED new object URL:", newMediaSrc);
+        setProcessingProgress(40);
+        setProcessingStatus("Analyzing media file...");
       } catch (error) {
         if (processingIdRef.current !== currentProcessingId) return;
         toast({ variant: "destructive", title: "File Error", description: "Could not create a URL for the file." });
@@ -149,16 +165,30 @@ export default function LinguaClipApp() {
 
       if (isYouTubeUrl(source.url)) {
         console.log("LinguaClipApp: Processing YouTube URL:", source.url);
+        setIsYouTubeProcessing(true);
+        setProcessingStatus("Extracting audio from YouTube video...");
 
         try {
           toast({ title: "Processing YouTube Video", description: "Extracting audio from YouTube video..." });
 
-          const { file: audioFile, videoInfo } = await processYouTubeUrl(source.url);
+          // Create status callback for YouTube processing
+          const youtubeStatusCallback = (progress: number, status: string) => {
+            if (processingIdRef.current === currentProcessingId) {
+              setProcessingStatus(status);
+            }
+          };
+
+          const { file: audioFile, videoInfo } = await processYouTubeUrl(source.url, youtubeStatusCallback);
 
           if (processingIdRef.current !== currentProcessingId) {
             setIsLoading(false);
+            setIsYouTubeProcessing(false);
             return;
           }
+
+          setIsYouTubeProcessing(false);
+          setProcessingProgress(50);
+          setProcessingStatus("Processing YouTube audio file...");
 
           setYoutubeVideoInfo(videoInfo);
 
@@ -187,6 +217,7 @@ export default function LinguaClipApp() {
         } catch (error: any) {
           if (processingIdRef.current !== currentProcessingId) return;
           console.error("YouTube processing error:", error);
+          setIsYouTubeProcessing(false);
           toast({
             variant: "destructive",
             title: "YouTube Processing Failed",
@@ -232,8 +263,9 @@ export default function LinguaClipApp() {
              }
              return;
           }
+          setProcessingProgress(60);
+          setProcessingStatus("Loading media metadata...");
           setMediaDuration(tempMediaElement.duration);
-          setIsLoading(false);
       };
       tempMediaElement.onerror = (e) => {
           if (processingIdRef.current !== currentProcessingId) {
@@ -263,6 +295,8 @@ export default function LinguaClipApp() {
     if (mediaSrc && mediaDuration > 0) {
       const currentProcessingId = processingIdRef.current;
       setIsLoading(true);
+      setProcessingProgress(70);
+      setProcessingStatus("Generating clips...");
 
       const newGeneratedClips = generateClips(mediaDuration, clipSegmentationDuration, language);
 
@@ -270,6 +304,9 @@ export default function LinguaClipApp() {
         setIsLoading(false);
         return;
       }
+
+      setProcessingProgress(90);
+      setProcessingStatus("Finalizing clip setup...");
 
       setClips(newGeneratedClips.map(clip => ({
         ...clip,
@@ -283,12 +320,21 @@ export default function LinguaClipApp() {
       setCurrentClipIndex(0);
 
       if (newGeneratedClips.length > 0) {
+        setProcessingProgress(100);
+        setProcessingStatus("Processing complete!");
         const mediaTypeForToast = currentSourceType || "media";
         toast({ title: "Media Processed", description: `${newGeneratedClips.length} clip(s) generated for ${mediaTypeForToast}.` });
+
+        // Show completion for a brief moment before hiding
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 1000);
       } else if (mediaDuration > 0) {
         toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips for the media." });
+        setIsLoading(false);
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     } else if (!mediaSrc && clips.length > 0) {
       setClips([]);
       setCurrentClipIndex(0);
@@ -431,7 +477,7 @@ export default function LinguaClipApp() {
     const newClips = clips.filter(clip => clip.id !== clipIdToRemove);
 
     if (newClips.length === 0) {
-      if (currentSourceType === 'video' || currentSourceType === 'audio') {
+      if (currentSourceType === 'video' || currentSourceType === 'audio' || isYouTubeVideo) {
         console.log("LinguaClipApp: handleRemoveClip - all clips removed, resetting app state.");
         resetAppState();
         toast({ title: "Media Cleared", description: "All clips have been removed and the media file has been cleared." });
@@ -583,9 +629,48 @@ export default function LinguaClipApp() {
           />
         )}
         {isLoading && !mediaDisplayName && (
-          <div className="text-center py-10">
-            <p className="text-lg text-primary animate-pulse">Processing media...</p>
-          </div>
+          <Card className="shadow-lg border-border">
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-center">
+                  <h3 className="text-lg font-semibold text-primary">
+                    {isYouTubeProcessing ? "Extracting YouTube Audio" : "Processing Media"}
+                  </h3>
+                </div>
+
+                {isYouTubeProcessing ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-center space-x-1">
+                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <span className="text-sm text-muted-foreground text-center">
+                        {processingStatus || "Processing YouTube video..."}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        {processingStatus || "Initializing..."}
+                      </span>
+                      <span className="text-sm font-medium text-primary">
+                        {processingProgress}%
+                      </span>
+                    </div>
+                    <Progress value={processingProgress} className="h-2" />
+                  </div>
+                )}
+
+                <p className="text-sm text-center text-muted-foreground">
+                  Please wait while we prepare your media for language learning...
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </main>
       <footer className="py-4 px-4 md:px-8 border-t border-border text-center">

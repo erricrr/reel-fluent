@@ -29,26 +29,54 @@ export default function ClipNavigation({
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const activeClipRef = React.useRef<HTMLButtonElement>(null);
 
-  React.useEffect(() => {
-    if (activeClipRef.current && scrollContainerRef.current?.parentElement) {
-      const scrollViewport = scrollContainerRef.current.parentElement;
-      if (!scrollViewport) return;
+  // Helper function to check if clip is fully visible and scroll if needed
+  const ensureClipVisible = React.useCallback(() => {
+    if (activeClipRef.current && scrollContainerRef.current) {
+      const scrollAreaViewport = scrollContainerRef.current.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
 
-      const activeElement = activeClipRef.current;
+      if (scrollAreaViewport) {
+        const clipButton = activeClipRef.current;
+        const clipLeftRelative = clipButton.offsetLeft;
+        const clipWidth = clipButton.offsetWidth;
+        const scrollLeft = scrollAreaViewport.scrollLeft;
+        const viewportWidth = scrollAreaViewport.clientWidth;
 
-      const viewportRect = scrollViewport.getBoundingClientRect();
-      const scrollLeft = scrollViewport.scrollLeft;
-      const activeElementOffsetLeft = activeElement.offsetLeft;
-      const activeElementWidth = activeElement.offsetWidth;
-      const scrollMargin = 16;
+        const margin = 16;
 
-      if (activeElementOffsetLeft < scrollLeft + scrollMargin) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft - scrollMargin;
-      } else if (activeElementOffsetLeft + activeElementWidth > scrollLeft + viewportRect.width - scrollMargin) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + scrollMargin;
+        // Check if clip is actually not fully visible
+        const isClippedLeft = clipLeftRelative < scrollLeft + margin;
+        const isClippedRight = clipLeftRelative + clipWidth > scrollLeft + viewportWidth - margin;
+
+        // Only scroll if the clip is actually cut off
+        if (isClippedLeft || isClippedRight) {
+          let newScrollLeft = scrollLeft;
+
+          if (isClippedLeft) {
+            newScrollLeft = clipLeftRelative - margin;
+          } else if (isClippedRight) {
+            newScrollLeft = clipLeftRelative + clipWidth - viewportWidth + margin;
+          }
+
+          scrollAreaViewport.scrollTo({
+            left: Math.max(0, newScrollLeft),
+            behavior: 'smooth'
+          });
+        }
       }
     }
-  }, [currentClipIndex, clips]);
+  }, []);
+
+  // Function to handle clip selection
+  const handleClipClick = React.useCallback((index: number) => {
+    // First call the original onSelectClip
+    onSelectClip(index);
+
+    // Only scroll after a small delay to ensure the active state is applied
+    // But only if the clip is not fully visible
+    setTimeout(() => {
+      ensureClipVisible();
+    }, 10);
+  }, [onSelectClip, ensureClipVisible]);
 
   if (!clips || clips.length === 0) {
     return null;
@@ -62,7 +90,7 @@ export default function ClipNavigation({
         <h3 className="text-sm font-medium text-foreground">
           Clip Navigation ({clips.length > 0 ? currentClipIndex + 1 : 0} of {clips.length})
         </h3>
-        {currentClip && !isYouTubeVideo && (
+        {currentClip && (
           <Button
             variant="outline"
             size="sm"
@@ -87,7 +115,7 @@ export default function ClipNavigation({
                 "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group",
                 index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
               )}
-              onClick={() => onSelectClip(index)}
+              onClick={() => handleClipClick(index)}
             >
               <div className="flex flex-col items-start text-left">
                 <div className="flex items-center gap-1.5">
