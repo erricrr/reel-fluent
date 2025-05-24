@@ -46,7 +46,7 @@ export async function downloadYouTubeAudio(
     onProgress?.(0, "Connecting to YouTube...");
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    onProgress?.(0, "Downloading and extracting audio... (this may take 10-30 seconds)");
+    onProgress?.(0, "Downloading and extracting audio... (this may take a moment)");
 
     const response = await fetch('/api/youtube/download', {
       method: 'POST',

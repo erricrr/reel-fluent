@@ -1,5 +1,18 @@
+"use client";
+import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 
-"use client"; 
+// Extend HTMLMediaElement interface to include captureStream method
+declare global {
+  interface HTMLVideoElement {
+    captureStream?(frameRate?: number): MediaStream;
+    mozCaptureStream?(frameRate?: number): MediaStream;
+  }
+
+  interface HTMLAudioElement {
+    captureStream?(frameRate?: number): MediaStream;
+    mozCaptureStream?(frameRate?: number): MediaStream;
+  }
+}
 
 export interface Clip {
   id: string;
@@ -8,17 +21,12 @@ export interface Clip {
   userTranscription?: string | null;
   automatedTranscription?: string | null;
   feedback?: string | null; // Kept for now, though UI repurposes this area
-  englishTranslation?: string | null; // Added
-  comparisonResult?: CorrectionToken[] | null; 
+  englishTranslation?: string | null; // Legacy field - kept for backward compatibility
+  translation?: string | null; // New flexible translation field
+  translationTargetLanguage?: string | null; // Language the translation is in
+  comparisonResult?: CorrectionToken[] | null;
   language?: string;
 }
-
-interface CorrectionToken {
-  token: string;
-  status: "correct" | "incorrect" | "extra" | "missing";
-  suggestion?: string;
-}
-
 
 export function generateClips(duration: number, clipLength: number, language: string): Clip[] {
   if (isNaN(duration) || duration <= 0) {
@@ -38,7 +46,9 @@ export function generateClips(duration: number, clipLength: number, language: st
       userTranscription: null,
       automatedTranscription: null,
       feedback: null,
-      englishTranslation: null, // Added
+      englishTranslation: null, // Legacy field
+      translation: null, // New flexible translation field
+      translationTargetLanguage: null,
       comparisonResult: null,
       language: language,
     });
@@ -81,9 +91,9 @@ export async function extractAudioFromVideoSegment(
         errorMessage = htmlMediaElement.error.message || 'No specific error message from media element.';
         eventType += ` (Code: ${errorCode})`;
       }
-      
+
       console.warn(`Media error during audio extraction setup. Source Type: ${sourceType}, Event Type: ${eventType}, Original Event:`, event, `Media Element Error: {code: ${errorCode}, message: "${errorMessage}"}`);
-      
+
       cleanup();
       reject(new Error(`Media error during audio extraction: ${eventType}. Message: ${errorMessage}`));
     };
@@ -92,8 +102,13 @@ export async function extractAudioFromVideoSegment(
       console.log(`Temporary ${sourceType} metadata loaded for audio extraction. Duration: ${mediaElement.duration}s. Seeking to: ${startTime}s.`);
       mediaElement.currentTime = startTime;
 
-      const mediaElementForCapture = mediaElement as HTMLVideoElement | HTMLAudioElement; 
-      if (!mediaElementForCapture.captureStream && !(mediaElementForCapture as any).mozCaptureStream) { 
+      const mediaElementForCapture = mediaElement as HTMLVideoElement | HTMLAudioElement;
+
+      // Check for captureStream support with proper type handling
+      const hasCaptureStream = 'captureStream' in mediaElementForCapture && typeof mediaElementForCapture.captureStream === 'function';
+      const hasMozCaptureStream = 'mozCaptureStream' in mediaElementForCapture && typeof (mediaElementForCapture as any).mozCaptureStream === 'function';
+
+      if (!hasCaptureStream && !hasMozCaptureStream) {
         cleanup();
         return reject(new Error(`Browser does not support ${sourceType}.captureStream() for audio extraction.`));
       }
@@ -105,15 +120,18 @@ export async function extractAudioFromVideoSegment(
       }
 
       try {
-        const stream = mediaElementForCapture.captureStream ? mediaElementForCapture.captureStream() : (mediaElementForCapture as any).mozCaptureStream();
+        // Use the appropriate capture method with proper type handling
+        const stream = hasCaptureStream
+          ? mediaElementForCapture.captureStream!()
+          : (mediaElementForCapture as any).mozCaptureStream();
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length === 0) {
           cleanup();
           return reject(new Error(`No audio tracks found in the ${sourceType} for extraction.`));
         }
-        
+
         const audioStream = new MediaStream(audioTracks);
-        
+
         const mimeTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/aac'];
         let selectedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
 
@@ -121,7 +139,7 @@ export async function extractAudioFromVideoSegment(
             cleanup();
             return reject(new Error(`MediaRecorder API not supported or none of the tested MIME types (${mimeTypes.join(', ')}) are supported by your browser for ${sourceType}.`));
         }
-        
+
         console.log(`Using MIME type for MediaRecorder: ${selectedMimeType}`);
         const recorder = new MediaRecorder(audioStream, { mimeType: selectedMimeType });
         const chunks: Blob[] = [];
@@ -150,7 +168,7 @@ export async function extractAudioFromVideoSegment(
           };
           reader.readAsDataURL(blob);
         };
-        
+
         recorder.onerror = (event) => {
           cleanup();
           console.warn("MediaRecorder error:", event);
@@ -158,7 +176,7 @@ export async function extractAudioFromVideoSegment(
         };
 
         recorder.start();
-        mediaElement.muted = true; 
+        mediaElement.muted = true;
         mediaElement.play().then(() => {
           console.log(`Temporary ${sourceType} playback started for recording clip: ${startTime}s - ${endTime}s.`);
           setTimeout(() => {
@@ -169,7 +187,7 @@ export async function extractAudioFromVideoSegment(
             if (!mediaElement.paused) {
                mediaElement.pause();
             }
-          }, segmentDuration + 500); 
+          }, segmentDuration + 500);
         }).catch(playError => {
           cleanup();
           console.warn(`Error playing temporary ${sourceType} for recording:`, playError);

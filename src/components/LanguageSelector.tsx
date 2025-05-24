@@ -9,23 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { LANGUAGE_OPTIONS } from "@/lib/languageOptions";
 
 interface LanguageSelectorProps {
   selectedLanguage: string;
   onLanguageChange: (language: string) => void;
   disabled?: boolean;
 }
-
-// A small list of example languages. This could be expanded.
-const languages = [
-  { value: "vietnamese", label: "Vietnamese" },
-  { value: "english", label: "English" },
-  { value: "spanish", label: "Spanish" },
-  { value: "french", label: "French" },
-  { value: "german", label: "German" },
-  { value: "japanese", label: "Japanese" },
-  { value: "korean", label: "Korean" },
-];
 
 export default function LanguageSelector({ selectedLanguage, onLanguageChange, disabled }: LanguageSelectorProps) {
   return (
@@ -35,13 +25,13 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
         value={selectedLanguage}
         onValueChange={onLanguageChange}
         disabled={disabled}
-        
+
       >
         <SelectTrigger id="language-select" className="w-full md:w-[200px]">
           <SelectValue placeholder="Select language" />
         </SelectTrigger>
         <SelectContent>
-          {languages.map((lang) => (
+          {LANGUAGE_OPTIONS.map((lang) => (
             <SelectItem key={lang.value} value={lang.value}>
               {lang.label}
             </SelectItem>

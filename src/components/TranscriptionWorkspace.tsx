@@ -16,9 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
+import TranslationLanguageSelector from "./TranslationLanguageSelector";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import { useToast } from "@/hooks/use-toast";
+import { getLanguageLabel } from "@/lib/languageOptions";
 
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
@@ -28,7 +30,7 @@ interface TranscriptionWorkspaceProps {
   onSelectClip: (index: number) => void;
   onTranscribeAudio: (clipId: string) => Promise<void>;
   onGetCorrections: (clipId: string) => Promise<void>;
-  onTranslateToEnglish: (clipId: string) => Promise<void>;
+  onTranslate: (clipId: string, targetLanguage: string) => Promise<void>;
   onRemoveClip: (clipId: string) => void;
   onUserTranscriptionChange: (clipId: string, newUserTranscription: string) => void;
   isYouTubeVideo: boolean;
@@ -76,7 +78,7 @@ export default function TranscriptionWorkspace({
   onSelectClip,
   onTranscribeAudio,
   onGetCorrections,
-  onTranslateToEnglish,
+  onTranslate,
   onRemoveClip,
   onUserTranscriptionChange,
   isYouTubeVideo,
@@ -89,13 +91,14 @@ export default function TranscriptionWorkspace({
   isAnyClipTranscribing,
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
-  const [activeTab, setActiveTab] = useState("manual");
+  const [activeTab, setActiveTab] = useState<string>("manual");
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
   const [isCurrentClipPlaying, setIsCurrentClipPlaying] = useState(false);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState(currentClip?.startTime || 0);
   const [isLooping, setIsLooping] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1.0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [translationTargetLanguage, setTranslationTargetLanguage] = useState("english");
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
@@ -150,7 +153,7 @@ export default function TranscriptionWorkspace({
       return;
     }
     try {
-      await onTranslateToEnglish(currentClip.id);
+      await onTranslate(currentClip.id, translationTargetLanguage);
     } catch (error) {
       console.warn("Translation error in workspace:", error);
     }
@@ -212,6 +215,22 @@ export default function TranscriptionWorkspace({
     }
   };
 
+  // Helper function to get translation for current target language
+  const getTranslationForCurrentTarget = (): string | null | undefined => {
+    // If target language is english and we have the legacy englishTranslation field, use it
+    if (translationTargetLanguage === 'english' && currentClip.englishTranslation !== undefined) {
+      return currentClip.englishTranslation;
+    }
+
+    // If we have a translation and it matches our target language, use it
+    if (currentClip.translation !== undefined && currentClip.translationTargetLanguage === translationTargetLanguage) {
+      return currentClip.translation;
+    }
+
+    // No translation available for current target
+    return null;
+  };
+
   if (!currentClip) {
     return (
       <div className="text-center py-10 text-muted-foreground">
@@ -222,7 +241,7 @@ export default function TranscriptionWorkspace({
 
   const isAutomatedTranscriptionError = currentClip.automatedTranscription && (currentClip.automatedTranscription.startsWith("Error:"));
   const isAutomatedTranscriptionLoading = currentClip.automatedTranscription === "Transcribing...";
-  const isTranslationLoading = currentClip.englishTranslation === "Translating...";
+  const isTranslationLoading = currentClip.englishTranslation === "Translating..." || currentClip.translation === "Translating...";
   const isCorrectionsLoading = Array.isArray(currentClip.comparisonResult) && currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Comparing...";
 
   // Character threshold logic
@@ -487,7 +506,7 @@ export default function TranscriptionWorkspace({
               <Card>
                 <CardHeader>
                   <CardTitle>Automated Transcription & Analysis</CardTitle>
-                   <CardDescription>View the AI-generated transcription, compare with your input, and get an English translation.</CardDescription>
+                   <CardDescription>View the AI-generated transcription, compare with your input, and translate to your preferred language.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div>
@@ -534,27 +553,36 @@ export default function TranscriptionWorkspace({
                     </ScrollArea>
                   </div>
 
-                  <div>
-                    <h3 className="font-semibold mb-2 text-foreground">English Translation:</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-foreground">Translation:</h3>
+                      <TranslationLanguageSelector
+                        selectedLanguage={translationTargetLanguage}
+                        onLanguageChange={setTranslationTargetLanguage}
+                        disabled={!canTranslate || isTranslationLoading || isAnyClipTranscribing}
+                        label=""
+                        className="w-[140px]"
+                      />
+                    </div>
                      <Button
                       onClick={handleTranslate}
                       disabled={!canTranslate || isTranslationLoading || isAnyClipTranscribing}
                       className="w-full"
                     >
                       <Languages className="mr-2 h-4 w-4" />
-                      {isTranslationLoading ? "Translating..." : "Translate to English"}
+                      {isTranslationLoading ? "Translating..." : `Translate to ${getLanguageLabel(translationTargetLanguage)}`}
                     </Button>
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                        {isTranslationLoading ? (
                          <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
-                       ) : currentClip.englishTranslation === null || currentClip.englishTranslation === undefined ? (
-                         <p className="text-sm text-muted-foreground">Click "Translate to English" above after AI transcription is complete.</p>
-                       ) : currentClip.englishTranslation === "" ? (
+                       ) : !getTranslationForCurrentTarget() ? (
+                         <p className="text-sm text-muted-foreground">Click "Translate to {getLanguageLabel(translationTargetLanguage)}" above after AI transcription is complete.</p>
+                       ) : getTranslationForCurrentTarget() === "" ? (
                           <p className="text-sm">Translation complete. No specific output or translation was empty.</p>
-                       ) : currentClip.englishTranslation.startsWith("Error:") ? (
-                          <p className="text-sm text-destructive">{currentClip.englishTranslation}</p>
+                       ) : getTranslationForCurrentTarget()?.startsWith("Error:") ? (
+                          <p className="text-sm text-destructive">{getTranslationForCurrentTarget()}</p>
                        ) : (
-                         <p className="text-sm whitespace-pre-wrap">{currentClip.englishTranslation}</p>
+                         <p className="text-sm whitespace-pre-wrap">{getTranslationForCurrentTarget()}</p>
                        )}
                     </ScrollArea>
                   </div>

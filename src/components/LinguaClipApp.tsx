@@ -422,24 +422,45 @@ export default function LinguaClipApp() {
     }
   };
 
-  const handleGetEnglishTranslation = async (clipId: string): Promise<void> => { // Renamed
+  const handleTranslate = async (clipId: string, targetLanguage: string): Promise<void> => {
     const currentClipForTranslation = clips.find(c => c.id === clipId);
     if (!currentClipForTranslation || !currentClipForTranslation.automatedTranscription || currentClipForTranslation.automatedTranscription.startsWith("Error:") || currentClipForTranslation.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Translation Error", description: "Ensure automated transcription is successful."});
       return;
     }
-    updateClipData(clipId, { englishTranslation: "Translating..." });
+
+    // Set loading state based on target language
+    if (targetLanguage === 'english') {
+      updateClipData(clipId, { englishTranslation: "Translating..." });
+    } else {
+      updateClipData(clipId, { translation: "Translating...", translationTargetLanguage: targetLanguage });
+    }
+
     try {
-      const result = await translateTranscription({ // New flow call
+      const result = await translateTranscription({
         originalTranscription: currentClipForTranslation.automatedTranscription,
         sourceLanguage: (currentClipForTranslation.language || language).trim(),
+        targetLanguage: targetLanguage,
       });
-      updateClipData(clipId, { englishTranslation: result.translatedText });
+
+      // Update the appropriate field based on target language
+      if (targetLanguage === 'english') {
+        updateClipData(clipId, { englishTranslation: result.translatedText });
+      } else {
+        updateClipData(clipId, { translation: result.translatedText, translationTargetLanguage: targetLanguage });
+      }
+
       toast({ title: "Translation Successful" });
     } catch (error) {
       console.warn("LinguaClipApp: AI Translation error:", error);
       toast({ variant: "destructive", title: "AI Error", description: "Failed to translate transcription." });
-      updateClipData(clipId, { englishTranslation: "Error: Could not translate." });
+
+      // Set error state based on target language
+      if (targetLanguage === 'english') {
+        updateClipData(clipId, { englishTranslation: "Error: Could not translate." });
+      } else {
+        updateClipData(clipId, { translation: "Error: Could not translate.", translationTargetLanguage: targetLanguage });
+      }
     }
   };
 
@@ -450,16 +471,29 @@ export default function LinguaClipApp() {
       return;
     }
     updateClipData(clipId, { comparisonResult: [{token: "Comparing...", status: "correct"}] });
+
+    console.log('LinguaClipApp: Starting comparison with:', {
+      userTranscription: currentClipForCorrections.userTranscription.substring(0, 100) + '...',
+      automatedTranscription: currentClipForCorrections.automatedTranscription.substring(0, 100) + '...',
+      language: (currentClipForCorrections.language || language).trim()
+    });
+
     try {
       const result = await compareTranscriptions({
         userTranscription: currentClipForCorrections.userTranscription,
         automatedTranscription: currentClipForCorrections.automatedTranscription,
         language: (currentClipForCorrections.language || language).trim(),
       });
+
+      console.log('LinguaClipApp: Comparison result received:', {
+        resultLength: result.comparisonResult.length,
+        firstFewTokens: result.comparisonResult.slice(0, 5).map(t => ({ token: t.token, status: t.status, suggestion: t.suggestion }))
+      });
+
       updateClipData(clipId, { comparisonResult: result.comparisonResult });
       toast({ title: "Comparison Complete" });
     } catch (error) {
-      console.warn("LinguaClipApp: AI Comparison error:", error);
+      console.error("LinguaClipApp: AI Comparison error details:", error);
       toast({ variant: "destructive", title: "AI Error", description: "Failed to generate comparison." });
       updateClipData(clipId, { comparisonResult: [{ token: "Error generating comparison.", status: "incorrect", suggestion: "N/A" }] });
     }
@@ -527,7 +561,9 @@ export default function LinguaClipApp() {
             userTranscription: c.userTranscription || null,
             automatedTranscription: c.automatedTranscription || null,
             feedback: c.feedback || null, // Old feedback field
-            englishTranslation: c.englishTranslation || null, // New translation field
+            englishTranslation: c.englishTranslation || null, // Legacy translation field
+            translation: c.translation || null, // New flexible translation field
+            translationTargetLanguage: c.translationTargetLanguage || null, // Target language
             comparisonResult: (c.comparisonResult as CorrectionToken[] | null) || null,
         })),
       });
@@ -615,7 +651,7 @@ export default function LinguaClipApp() {
             onSelectClip={handleSelectClip}
             onTranscribeAudio={handleTranscribeAudio}
             onGetCorrections={handleGetCorrections}
-            onTranslateToEnglish={handleGetEnglishTranslation} // Changed
+            onTranslate={handleTranslate}
             onRemoveClip={handleRemoveClip}
             onUserTranscriptionChange={handleUserTranscriptionChange}
             isYouTubeVideo={isYouTubeVideo}

@@ -1,7 +1,6 @@
-
 'use server';
 /**
- * @fileOverview A Genkit flow to translate a transcription to English.
+ * @fileOverview A Genkit flow to translate a transcription to any target language.
  *
  * - translateTranscription - A function that handles the translation.
  * - TranslateTranscriptionInput - The input type for the function.
@@ -19,13 +18,17 @@ const TranslateTranscriptionInputSchema = z.object({
     .string()
     .describe('The language of the original transcription (e.g., vietnamese).')
     .optional(),
+  targetLanguage: z
+    .string()
+    .describe('The target language to translate to (e.g., english, spanish, etc.). Defaults to english.')
+    .default('english'),
 });
 export type TranslateTranscriptionInput = z.infer<
   typeof TranslateTranscriptionInputSchema
 >;
 
 const TranslateTranscriptionOutputSchema = z.object({
-  translatedText: z.string().describe('The English translation of the input text.'),
+  translatedText: z.string().describe('The translated text in the target language.'),
 });
 export type TranslateTranscriptionOutput = z.infer<
   typeof TranslateTranscriptionOutputSchema
@@ -41,14 +44,15 @@ const prompt = ai.definePrompt({
   name: 'translateTranscriptionPrompt',
   input: {schema: TranslateTranscriptionInputSchema},
   output: {schema: TranslateTranscriptionOutputSchema},
-  prompt: `Translate the following text into English.
+  prompt: `Translate the following text into {{targetLanguage}}.
 If a source language is provided, use it as a hint.
 
 Source Language: {{{sourceLanguage}}}
+Target Language: {{targetLanguage}}
 Original Text:
 {{{originalTranscription}}}
 
-English Translation:
+Translation in {{targetLanguage}}:
 `,
 });
 

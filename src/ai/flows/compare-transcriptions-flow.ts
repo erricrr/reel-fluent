@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview A Genkit flow to compare user and automated transcriptions and highlight differences.
@@ -160,10 +159,15 @@ const compareTranscriptionsFlow = ai.defineFlow(
     // For stability, ensure output and output.comparisonResult are at least defined.
     if (!output || !output.comparisonResult) {
       console.warn('CompareTranscriptionsFlow: AI output was null or comparisonResult was missing. Input:', input);
-      // Return a default error structure or an empty array if preferred
-      return { comparisonResult: [{ token: "Error: AI response was empty or malformed.", status: "incorrect" }] };
+      // Return a properly typed error structure
+      return {
+        comparisonResult: [{
+          token: "Error: AI response was empty or malformed.",
+          status: "incorrect" as const,
+          suggestion: "Please try again"
+        }]
+      } satisfies CompareTranscriptionsOutput;
     }
     return output;
   }
 );
-
