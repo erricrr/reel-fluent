@@ -20,7 +20,7 @@ import { saveMediaItemAction } from '@/app/actions';
 import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo, type ProgressCallback } from '@/lib/youtubeUtils';
 import { Progress } from "@/components/ui/progress";
 
-const MAX_MEDIA_DURATION_MINUTES = 10;
+const MAX_MEDIA_DURATION_MINUTES = 30;
 
 export default function LinguaClipApp() {
   const [sourceFile, setSourceFile] = useState<File | null>(null);

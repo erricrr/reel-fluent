@@ -1,4 +1,3 @@
-
 'use server';
 
 import { firestoreAdmin } from '@/lib/firebaseAdmin';
@@ -27,7 +26,7 @@ interface SaveMediaItemArgs {
 }
 
 const MAX_SAVED_MEDIA_ITEMS = 5;
-const MAX_MEDIA_DURATION_MINUTES_FOR_SAVE = 10;
+const MAX_MEDIA_DURATION_MINUTES_FOR_SAVE = 30;
 
 export async function saveMediaItemAction(
   args: SaveMediaItemArgs
@@ -68,7 +67,7 @@ export async function saveMediaItemAction(
       clips: args.clips,
       // TEMPORARY CHANGE: Using ISOString due to module resolution issues with FieldValue.
       // Revert to FieldValue.serverTimestamp() when firebase-admin is correctly installed and Firebase is enabled.
-      savedAt: new Date().toISOString(), 
+      savedAt: new Date().toISOString(),
       // savedAt: FieldValue.serverTimestamp(), // Original code using Firestore server timestamp
     });
 

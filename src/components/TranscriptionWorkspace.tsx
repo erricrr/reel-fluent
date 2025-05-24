@@ -99,18 +99,21 @@ export default function TranscriptionWorkspace({
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-    setCurrentPlaybackTime(currentClip?.startTime || 0);
-    setPlaybackRate(1.0); // Reset to normal speed when switching clips
     if (activeTab === "ai" && (!currentClip.userTranscription?.trim() && !currentClip.automatedTranscription)) {
       setActiveTab("manual");
     }
   }, [currentClip, activeTab]);
 
+  // Separate useEffect for resetting playback time only when clip changes
+  useEffect(() => {
+    setCurrentPlaybackTime(currentClip?.startTime || 0);
+    setPlaybackRate(1.0); // Reset to normal speed when switching clips
+  }, [currentClip.id]); // Only run when clip ID changes
+
   // Poll for current time when playing (less frequent to avoid interference)
   useEffect(() => {
     if (!isCurrentClipPlaying || !videoPlayerRef.current) {
-      setCurrentPlaybackTime(currentClip?.startTime || 0);
-      return;
+      return; // Don't reset time here
     }
 
     const interval = setInterval(() => {
