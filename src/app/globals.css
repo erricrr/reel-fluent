@@ -1,10 +1,10 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
 }
 
 @layer base {
@@ -95,7 +95,7 @@ body {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    
+
     /* Dark Sidebar specific theme */
     --sidebar-background: 150 10% 12%; /* Slightly darker than main dark bg */
     --sidebar-foreground: 45 15% 90%; /* Slightly lighter beige/gray */
@@ -115,8 +115,18 @@ body {
   * {
     @apply border-border;
   }
+  html {
+    overflow-x: hidden;
+  }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
   }
 }
 
+@layer utilities {
+  .prevent-horizontal-overflow {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}

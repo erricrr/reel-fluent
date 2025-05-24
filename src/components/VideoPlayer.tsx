@@ -1,4 +1,3 @@
-
 "use client";
 
 import type * as React from 'react';
@@ -26,6 +25,23 @@ interface VideoPlayerProps {
   currentClipIndex?: number;
   onPlayStateChange?: (isPlaying: boolean) => void; // Callback for play/pause state
 }
+
+// Helper function to format seconds to MM:SS
+const formatSecondsToMMSS = (totalSeconds: number): string => {
+  if (!isFinite(totalSeconds) || totalSeconds < 0) {
+    return "--:--";
+  }
+  try {
+    const date = new Date(0);
+    date.setSeconds(totalSeconds);
+    const minutes = date.getUTCMinutes();
+    const seconds = date.getUTCSeconds();
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  } catch (e) {
+    console.error("Error formatting seconds to MM:SS:", totalSeconds, e);
+    return "!!:!!";
+  }
+};
 
 const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   src,
@@ -272,7 +288,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
                 onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
               />
               <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
-                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''}
+                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''} ({formatSecondsToMMSS(startTime)} - {formatSecondsToMMSS(endTime || 0)})
               </Label>
             </div>
           </CardFooter>
@@ -297,7 +313,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
               onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
             />
             <Label htmlFor={`loop-toggle-${mediaKey}`} className="text-sm font-normal text-muted-foreground">
-                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''}
+                Loop Clip {currentClipIndex !== undefined ? currentClipIndex + 1 : ''} ({formatSecondsToMMSS(startTime)} - {formatSecondsToMMSS(endTime || 0)})
             </Label>
           </div>
         </CardFooter>
@@ -307,5 +323,3 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 });
 VideoPlayer.displayName = "VideoPlayer";
 export default VideoPlayer;
-
-    
