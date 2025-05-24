@@ -232,11 +232,23 @@ export default function LinguaClipApp() {
         newMediaSrc = source.url;
 
         // Detect if URL points to an audio file based on extension
-        const audioExtensions = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma'];
+        // Note: Only includes formats with good cross-browser support
+        const audioExtensions = ['.mp3', '.wav', '.ogg', '.m4a'];
         const urlPath = source.url.toLowerCase();
         const isAudioUrl = audioExtensions.some(ext => urlPath.includes(ext));
 
-        if (isAudioUrl) {
+        // Check for potentially problematic formats and warn user
+        const problematicFormats = ['.aac', '.flac', '.wma', '.opus'];
+        const isProblematicFormat = problematicFormats.some(ext => urlPath.includes(ext));
+
+        if (isProblematicFormat) {
+          toast({
+            title: "Format Compatibility Warning",
+            description: "This audio format may not work in all browsers. MP3 or WAV are recommended for best compatibility.",
+          });
+        }
+
+        if (isAudioUrl || isProblematicFormat) {
           determinedSourceType = 'audio';
           mediaElementTypeForLoad = 'audio';
         } else {
@@ -315,7 +327,21 @@ export default function LinguaClipApp() {
             return;
           }
           console.warn(`Error loading ${mediaElementTypeForLoad} metadata for ${displayName}:`, e, tempMediaElement.error);
-          toast({ variant: "destructive", title: "Error", description: `Could not load ${determinedSourceType === 'audio' ? 'audio' : 'video'} metadata. The file might be corrupt or in an unsupported format.` });
+
+          // Provide helpful error messages based on context
+          let errorDescription = `Could not load ${determinedSourceType === 'audio' ? 'audio' : 'video'} metadata. The file might be corrupt or in an unsupported format.`;
+
+          if (source.url && determinedSourceType === 'audio') {
+            // Check if it might be an unsupported audio format
+            const lessCompatibleFormats = ['.aac', '.flac', '.wma', '.opus'];
+            const isLessCompatible = lessCompatibleFormats.some(ext => source.url!.toLowerCase().includes(ext));
+
+            if (isLessCompatible) {
+              errorDescription = `This audio format may not be supported by your browser. Try converting to MP3 or WAV for best compatibility.`;
+            }
+          }
+
+          toast({ variant: "destructive", title: "Media Load Error", description: errorDescription });
           setIsLoading(false);
           resetAppState();
       };
