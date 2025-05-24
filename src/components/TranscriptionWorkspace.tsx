@@ -469,7 +469,7 @@ export default function TranscriptionWorkspace({
                   <Textarea
                     className="min-h-24 resize-y"
                     disabled={disableTextarea || !mediaSrc}
-                    placeholder={`Type what you hear in the clip to practice ${language}...`}
+                    placeholder={`Type what you hear in the clip to practice ${language.charAt(0).toUpperCase() + language.slice(1)}...`}
                     value={userTranscriptionInput}
                     onChange={handleUserInputChange}
                   />
