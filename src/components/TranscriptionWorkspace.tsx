@@ -235,7 +235,7 @@ export default function TranscriptionWorkspace({
           className="w-full"
           disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
         >
-          <Mic className="mr-2 h-4 w-4" />
+          <Sparkles className="mr-2 h-4 w-4" />
           {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe Audio"}
         </Button>
       </div>
