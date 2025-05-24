@@ -1,4 +1,3 @@
-
 "use client";
 
 import type * as React from 'react';
@@ -15,6 +14,7 @@ interface ClipDurationSelectorProps {
 }
 
 const durationOptions = [
+  { value: "15", label: "15 Seconds" },
   { value: "30", label: "30 Seconds" },
   { value: "60", label: "1 Minute" },
 ];

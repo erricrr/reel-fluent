@@ -34,7 +34,7 @@ export default function LinguaClipApp() {
   const [currentClipIndex, setCurrentClipIndex] = useState<number>(0);
 
   const [language, setLanguage] = useState<string>("vietnamese");
-  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(60);
+  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(15);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -92,7 +92,7 @@ export default function LinguaClipApp() {
     setIsSaving(false);
     setCurrentSourceType(null);
     setYoutubeVideoInfo(null);
-    setClipSegmentationDuration(60);
+    setClipSegmentationDuration(15);
     setProcessingProgress(0);
     setProcessingStatus("");
     setIsYouTubeProcessing(false);
@@ -428,7 +428,7 @@ export default function LinguaClipApp() {
 
   const handleClipDurationChange = (newDurationValue: string) => {
     const newDuration = parseInt(newDurationValue, 10);
-    if (!isNaN(newDuration) && (newDuration === 30 || newDuration === 60)) {
+    if (!isNaN(newDuration) && (newDuration === 15 || newDuration === 30 || newDuration === 60)) {
       setClipSegmentationDuration(newDuration);
     }
   };
