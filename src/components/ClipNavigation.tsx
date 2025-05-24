@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from 'react';
@@ -7,15 +6,21 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Film, Trash2 as Trash2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Clip } from '@/lib/videoUtils';
+import ClipDurationSelector from '@/components/ClipDurationSelector';
 
 interface ClipNavigationProps {
   clips: Clip[];
   currentClipIndex: number;
   onSelectClip: (index: number) => void;
   onRemoveClip: (clipId: string) => void;
-  isYouTubeVideo: boolean; 
+  isYouTubeVideo: boolean;
   formatSecondsToMMSS: (seconds: number) => string;
   disableRemove?: boolean; // To disable the remove button from parent
+  clipSegmentationDuration: number;
+  onClipDurationChange: (value: string) => void;
+  isLoadingMedia: boolean;
+  isSavingMedia: boolean;
+  isAnyClipTranscribing: boolean;
 }
 
 export default function ClipNavigation({
@@ -26,6 +31,11 @@ export default function ClipNavigation({
   isYouTubeVideo,
   formatSecondsToMMSS,
   disableRemove = false,
+  clipSegmentationDuration,
+  onClipDurationChange,
+  isLoadingMedia,
+  isSavingMedia,
+  isAnyClipTranscribing,
 }: ClipNavigationProps) {
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const activeClipRef = React.useRef<HTMLButtonElement>(null);
@@ -36,20 +46,20 @@ export default function ClipNavigation({
       if (!scrollViewport) return;
 
       const activeElement = activeClipRef.current;
-      
+
       const viewportRect = scrollViewport.getBoundingClientRect();
       const scrollLeft = scrollViewport.scrollLeft;
-      const activeElementOffsetLeft = activeElement.offsetLeft; 
+      const activeElementOffsetLeft = activeElement.offsetLeft;
       const activeElementWidth = activeElement.offsetWidth;
-      const scrollMargin = 16; 
+      const scrollMargin = 16;
 
       if (activeElementOffsetLeft < scrollLeft + scrollMargin) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft - scrollMargin; 
+        scrollViewport.scrollLeft = activeElementOffsetLeft - scrollMargin;
       } else if (activeElementOffsetLeft + activeElementWidth > scrollLeft + viewportRect.width - scrollMargin) {
-        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + scrollMargin; 
+        scrollViewport.scrollLeft = activeElementOffsetLeft + activeElementWidth - viewportRect.width + scrollMargin;
       }
     }
-  }, [currentClipIndex, clips]); 
+  }, [currentClipIndex, clips]);
 
   if (!clips || clips.length === 0) {
     return null;
@@ -85,23 +95,23 @@ export default function ClipNavigation({
               ref={index === currentClipIndex ? activeClipRef : null}
               variant={index === currentClipIndex ? "default" : "outline"}
               className={cn(
-                "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group", 
+                "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group",
                 index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
               )}
               onClick={() => onSelectClip(index)}
             >
               <div className="flex flex-col items-start text-left">
                 <div className="flex items-center gap-1.5">
-                  <Film className="h-4 w-4 text-inherit" /> 
+                  <Film className="h-4 w-4 text-inherit" />
                   <span className="font-semibold text-xs">
                     Clip {index + 1}
                   </span>
                 </div>
                 <span className={cn(
-                  "text-xs", 
-                  index === currentClipIndex 
-                    ? "text-primary-foreground/80" 
-                    : "text-muted-foreground group-hover:text-accent-foreground" 
+                  "text-xs",
+                  index === currentClipIndex
+                    ? "text-primary-foreground/80"
+                    : "text-muted-foreground group-hover:text-accent-foreground"
                 )}>
                   {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
                 </span>
@@ -111,7 +121,16 @@ export default function ClipNavigation({
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+
+      {currentClip && (
+        <div className="flex flex-col gap-4">
+          <ClipDurationSelector
+            selectedDuration={clipSegmentationDuration}
+            onDurationChange={onClipDurationChange}
+            disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+          />
+        </div>
+      )}
     </div>
   );
 }
-    

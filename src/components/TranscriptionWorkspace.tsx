@@ -1,4 +1,3 @@
-
 "use client";
 
 import type * as React from 'react';
@@ -9,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon } from "lucide-react";
+import { Sparkles, Loader2, FileDiff, Languages, PlayIcon, PauseIcon, Mic } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import type { Clip } from '@/lib/videoUtils';
@@ -95,12 +94,8 @@ export default function TranscriptionWorkspace({
   };
 
   const handleTranscribe = async () => {
-    if (!currentClip || isYouTubeVideo || (isAudioSource && !mediaSrc)) {
-      toast({variant: "destructive", title: "Transcription Unavailable", description: `Transcription is only available for uploaded ${isAudioSource ? 'audio' : 'video'} files.`});
-      return;
-    }
-    if (isAnyClipTranscribing) {
-      toast({variant: "destructive", title: "Processing...", description: "Another transcription is already in progress."});
+    if (!currentClip || (isAudioSource && !mediaSrc)) {
+      toast({variant: "destructive", title: "Cannot Transcribe", description: "Please ensure media is loaded and a clip is selected."});
       return;
     }
     try {
@@ -115,14 +110,9 @@ export default function TranscriptionWorkspace({
       toast({variant: "destructive", title: "Cannot Translate", description: "Please ensure automated transcription is successful first."});
       return;
     }
-    if (isYouTubeVideo) {
-       toast({variant: "destructive", title: "Translation Unavailable", description: "Translation is not available for YouTube videos."});
-       return;
-    }
     try {
       await onTranslateToEnglish(currentClip.id);
-    } catch (error)
-{
+    } catch (error) {
       console.warn("Translation error in workspace:", error);
     }
   };
@@ -131,10 +121,6 @@ export default function TranscriptionWorkspace({
     if (!userTranscriptionInput.trim() || !currentClip.automatedTranscription || currentClip.automatedTranscription.startsWith("Error:")) {
       toast({variant: "destructive", title: "Cannot Show Corrections", description: "Please ensure automated transcription is successful and you've entered your transcription."});
       return;
-    }
-    if (isYouTubeVideo) {
-       toast({variant: "destructive", title: "Corrections Unavailable", description: "Corrections are not available for YouTube videos."});
-       return;
     }
      if (currentClip.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Processing...", description: "Transcription for this clip is in progress. Please wait."});
@@ -170,8 +156,8 @@ export default function TranscriptionWorkspace({
   const isTranslationLoading = currentClip.englishTranslation === "Translating...";
   const isCorrectionsLoading = Array.isArray(currentClip.comparisonResult) && currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Comparing...";
 
-  const canGetCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo;
-  const canTranslate = currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isYouTubeVideo && !isAutomatedTranscriptionLoading;
+  const canGetCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError;
+  const canTranslate = currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isAutomatedTranscriptionLoading;
 
   const disableTextarea = isLoadingMedia || isSavingMedia;
   const disableCurrentClipAIActions = isAutomatedTranscriptionLoading || isLoadingMedia || isSavingMedia;
@@ -232,7 +218,7 @@ export default function TranscriptionWorkspace({
             <ClipDurationSelector
                 selectedDuration={clipSegmentationDuration}
                 onDurationChange={onClipDurationChange}
-                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing || isYouTubeVideo}
+                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
             />
         </div>
         <ClipNavigation
@@ -243,21 +229,19 @@ export default function TranscriptionWorkspace({
           isYouTubeVideo={isYouTubeVideo}
           formatSecondsToMMSS={formatSecondsToMMSS}
           disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+          clipSegmentationDuration={clipSegmentationDuration}
+          onClipDurationChange={onClipDurationChange}
+          isLoadingMedia={isLoadingMedia}
+          isSavingMedia={isSavingMedia}
+          isAnyClipTranscribing={isAnyClipTranscribing}
         />
         <Button
           onClick={handleTranscribe}
-          disabled={isAutomatedTranscriptionLoading || isAnyClipTranscribing || isYouTubeVideo || (isAudioSource && !mediaSrc) || isLoadingMedia || isSavingMedia}
           className="w-full"
-          variant="default"
+          disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
         >
-          {isAutomatedTranscriptionLoading ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="mr-2 h-4 w-4" />
-          )}
-          {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1} (AI)`}
-          {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
-          {isAnyClipTranscribing && !isAutomatedTranscriptionLoading && <span className="text-xs ml-1">(Processing another clip)</span>}
+          <Mic className="mr-2 h-4 w-4" />
+          {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe Audio"}
         </Button>
       </div>
 
@@ -283,7 +267,7 @@ export default function TranscriptionWorkspace({
                         variant="outline"
                         size="icon"
                         onClick={togglePlayPause}
-                        disabled={disableTextarea || !mediaSrc || isYouTubeVideo}
+                        disabled={disableTextarea || !mediaSrc}
                         aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
                     >
                         {isCurrentClipPlaying ? <PauseIcon className="h-5 w-5" /> : <PlayIcon className="h-5 w-5" />}
@@ -293,12 +277,11 @@ export default function TranscriptionWorkspace({
                     </span>
                 </div>
                 <Textarea
-                  placeholder="Start typing..."
+                  className="min-h-24 resize-y"
+                  disabled={disableTextarea || !mediaSrc}
+                  placeholder={`Type what you hear in the clip to practice ${language}...`}
                   value={userTranscriptionInput}
                   onChange={handleUserInputChange}
-                  rows={8}
-                  className="min-h-[150px] resize-none"
-                  disabled={disableTextarea}
                 />
               </CardContent>
                <CardFooter className="flex-col items-stretch gap-2">
@@ -343,26 +326,17 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold text-foreground">Transcription Comparison:</h3>
                    <Button
                     onClick={handleCorrections}
-                    disabled={isCorrectionsLoading || !canGetCorrections || disableCurrentClipAIActions}
+                    disabled={!canGetCorrections || isCorrectionsLoading || isAnyClipTranscribing}
                     className="w-full"
-                    variant="outline"
                   >
-                    {isCorrectionsLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <FileDiff className="mr-2 h-4 w-4" />
-                    )}
-                    {isCorrectionsLoading ? "Comparing..." : "Show Corrections"}
-                    {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
-                    {!isYouTubeVideo && isAutomatedTranscriptionError && <span className="text-xs ml-1">(Fix Transcription First)</span>}
-                    {!userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError && <span className="text-xs ml-1">(Enter Your Transcription)</span>}
-                    {isAutomatedTranscriptionLoading && <span className="text-xs ml-1">(Wait for transcription)</span>}
+                    <FileDiff className="mr-2 h-4 w-4" />
+                    {isCorrectionsLoading ? "Comparing..." : "Get Corrections"}
                   </Button>
                   <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
                      {isCorrectionsLoading ? (
                        <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto my-4" />
                      ) : currentClip.comparisonResult === null || currentClip.comparisonResult === undefined ? (
-                       <p className="text-sm text-muted-foreground">Click "Show Corrections" above after entering your transcription and generating the AI transcription.</p>
+                       <p className="text-sm text-muted-foreground">Click "Get Corrections" above after entering your transcription and generating the AI transcription.</p>
                      ) : currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Error generating comparison." ? (
                         <p className="text-sm text-destructive">{currentClip.comparisonResult[0].token}</p>
                      ) : (
@@ -377,19 +351,11 @@ export default function TranscriptionWorkspace({
                   <h3 className="font-semibold mb-2 text-foreground">English Translation:</h3>
                    <Button
                     onClick={handleTranslate}
-                    disabled={isTranslationLoading || !canTranslate || disableCurrentClipAIActions}
-                    className="w-full mb-2"
-                    variant="outline"
+                    disabled={!canTranslate || isTranslationLoading || isAnyClipTranscribing}
+                    className="w-full"
                   >
-                    {isTranslationLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Languages className="mr-2 h-4 w-4" />
-                    )}
+                    <Languages className="mr-2 h-4 w-4" />
                     {isTranslationLoading ? "Translating..." : "Translate to English"}
-                    {isYouTubeVideo && <span className="text-xs ml-1">(File Uploads Only)</span>}
-                    {!isYouTubeVideo && isAutomatedTranscriptionError && <span className="text-xs ml-1">(Fix Transcription First)</span>}
-                    {isAutomatedTranscriptionLoading && <span className="text-xs ml-1">(Wait for transcription)</span>}
                   </Button>
                   <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                      {isTranslationLoading ? (
@@ -413,5 +379,3 @@ export default function TranscriptionWorkspace({
     </div>
   );
 }
-
-    

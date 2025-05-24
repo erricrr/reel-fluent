@@ -1,4 +1,3 @@
-
 "use client";
 
 import type * as React from 'react';
@@ -119,7 +118,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
       }
     }
   };
-  
+
   const renderDragIcon = () => {
     if (draggedFileType === 'audio') {
       return <FileAudio className={cn("h-12 w-12", isDraggingOver ? "text-primary" : "text-muted-foreground")} />;
@@ -190,7 +189,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Video from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-            Note: For direct video URLs (non-YouTube), video and audio files will be divided into short clips (configurable length). YouTube links are primarily for viewing and will not be clipped.
+            Enter a YouTube URL or direct media URL. YouTube videos will be converted to audio and processed with full clip generation and transcription support.
           </p>
         </form>
       </TabsContent>
