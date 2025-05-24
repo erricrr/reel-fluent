@@ -643,7 +643,6 @@ export default function LinguaClipApp() {
 
         {mediaSrc && clips.length > 0 && currentClip && (
           <TranscriptionWorkspace
-            key={currentClip.id + '-' + (currentClip.language || language) + '-' + currentClipIndex}
             currentClip={currentClip}
             clips={clips}
             mediaSrc={mediaSrc}
