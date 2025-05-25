@@ -57,12 +57,89 @@ export function generateClips(duration: number, clipLength: number, language: st
   return clips;
 }
 
+// Mobile browser detection
+function isMobileBrowser(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const userAgent = navigator.userAgent.toLowerCase();
+  const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
+
+  return isMobile || isTablet;
+}
+
+// Check if captureStream is supported
+function isCaptureStreamSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const video = document.createElement('video');
+  const audio = document.createElement('audio');
+
+  return (
+    ('captureStream' in video && typeof video.captureStream === 'function') ||
+    ('mozCaptureStream' in video && typeof (video as any).mozCaptureStream === 'function') ||
+    ('captureStream' in audio && typeof audio.captureStream === 'function') ||
+    ('mozCaptureStream' in audio && typeof (audio as any).mozCaptureStream === 'function')
+  );
+}
+
+// Server-side audio extraction for mobile browsers
+async function extractAudioServerSide(
+  mediaSrcUrl: string,
+  startTime: number,
+  endTime: number,
+  sourceType: 'audio' | 'video'
+): Promise<string> {
+  console.log('Using server-side audio extraction for mobile browser');
+
+  const response = await fetch('/api/audio/extract', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: mediaSrcUrl,
+      startTime,
+      endTime,
+      sourceType
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || `Server-side audio extraction failed: ${response.status}`);
+  }
+
+  // Get the audio blob and convert to data URI
+  const audioBlob = await response.blob();
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to convert audio blob to data URI'));
+    reader.readAsDataURL(audioBlob);
+  });
+}
+
 export async function extractAudioFromVideoSegment(
   mediaSrcUrl: string,
   startTime: number,
   endTime: number,
   sourceType: 'audio' | 'video' = 'video'
 ): Promise<string | null> {
+  // Check if we should use server-side extraction
+  const shouldUseServerSide = isMobileBrowser() || !isCaptureStreamSupported();
+
+  if (shouldUseServerSide) {
+    try {
+      return await extractAudioServerSide(mediaSrcUrl, startTime, endTime, sourceType);
+    } catch (error) {
+      console.warn('Server-side audio extraction failed, falling back to client-side:', error);
+      // Fall through to client-side extraction as fallback
+    }
+  }
+
+  // Original client-side extraction
   return new Promise((resolve, reject) => {
     const mediaElement = document.createElement(sourceType);
     mediaElement.crossOrigin = "anonymous";
@@ -110,7 +187,7 @@ export async function extractAudioFromVideoSegment(
 
       if (!hasCaptureStream && !hasMozCaptureStream) {
         cleanup();
-        return reject(new Error(`Browser does not support ${sourceType}.captureStream() for audio extraction.`));
+        return reject(new Error(`Browser does not support ${sourceType}.captureStream() for audio extraction. Try using a different browser or device.`));
       }
 
       const segmentDuration = (endTime - startTime) * 1000;

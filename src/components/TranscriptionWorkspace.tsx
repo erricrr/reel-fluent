@@ -78,6 +78,17 @@ const ThreeDotsLoader = ({ className = "" }: { className?: string }) => (
   </div>
 );
 
+// Mobile browser detection (same as in videoUtils.ts)
+const isMobileBrowser = (): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  const userAgent = navigator.userAgent.toLowerCase();
+  const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
+
+  return isMobile || isTablet;
+};
+
 export default function TranscriptionWorkspace({
   currentClip,
   clips,
@@ -349,6 +360,12 @@ export default function TranscriptionWorkspace({
             <Sparkles className="mr-2 h-4 w-4" />
             {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
           </Button>
+          {isMobileBrowser() && (
+            <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-2 rounded border border-blue-200 dark:border-blue-800">
+              <span className="font-medium text-blue-700 dark:text-blue-300">📱 Mobile Device Detected:</span>
+              <span className="text-blue-600 dark:text-blue-400"> Using server-side audio processing for better compatibility.</span>
+            </div>
+          )}
         </div>
 
         <div className="lg:w-1/2 w-full">

@@ -8,6 +8,7 @@ A feature-rich language learning application that allows users to download YouTu
 - 🎯 AI-powered audio transcription and segmentation
 - 🌍 Multi-language support with translation
 - 🎓 Interactive language learning tools
+- 📱 Mobile browser support with server-side audio processing
 - 🔒 Privacy-focused (no permanent storage of user content)
 
 ## Tech Stack

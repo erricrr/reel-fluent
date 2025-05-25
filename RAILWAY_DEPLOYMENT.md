@@ -67,6 +67,11 @@ After adding the environment variable:
 2. Verify the API key is correct (starts with `AIza...`)
 3. Redeploy after adding the variable
 
+**Mobile Browser Issues**:
+- If transcription fails on mobile, the app automatically uses server-side processing
+- Look for the "📱 Mobile Device Detected" message
+- This requires ffmpeg to be available on the server (included in our Dockerfile)
+
 ### YouTube Processing Not Working
 
 **Symptoms**:
@@ -76,6 +81,15 @@ After adding the environment variable:
 **Solution**:
 - This should work automatically with our Dockerfile
 - Check the health endpoint at `/api/health` to verify yt-dlp is installed
+
+### Mobile Browser Support
+
+**Good news!** The app now automatically detects mobile browsers and uses server-side audio processing for better compatibility.
+
+**What this means:**
+- ✅ AI transcription works on iOS Safari, Android Chrome, and other mobile browsers
+- ✅ Automatic fallback when browser APIs are limited
+- ✅ Same functionality across all devices
 
 ### Health Check
 
@@ -87,6 +101,11 @@ Visit `your-app-url.railway.app/api/health` to check if all dependencies are wor
   "dependencies": {
     "yt-dlp": "available",
     "ffmpeg": "available"
+  },
+  "features": {
+    "youtube-processing": true,
+    "mobile-audio-extraction": true,
+    "ai-transcription": "configured"
   }
 }
 ```
