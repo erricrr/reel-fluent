@@ -90,35 +90,84 @@ async function extractAudioServerSide(
   endTime: number,
   sourceType: 'audio' | 'video'
 ): Promise<string> {
-  console.log('Using server-side audio extraction for mobile browser');
-
-  const response = await fetch('/api/audio/extract', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: mediaSrcUrl,
-      startTime,
-      endTime,
-      sourceType
-    }),
+  console.log('Using server-side audio extraction for mobile browser', {
+    url: mediaSrcUrl.substring(0, 50) + '...',
+    startTime,
+    endTime,
+    sourceType,
+    isBlobUrl: mediaSrcUrl.startsWith('blob:')
   });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || `Server-side audio extraction failed: ${response.status}`);
+  try {
+    let response: Response;
+
+    if (mediaSrcUrl.startsWith('blob:')) {
+      // Handle blob URLs by fetching the blob and uploading it
+      console.log('Blob URL detected, fetching blob and uploading to server');
+
+      const blobResponse = await fetch(mediaSrcUrl);
+      const blob = await blobResponse.blob();
+
+      // Create form data for file upload
+      const formData = new FormData();
+      formData.append('file', blob, 'media_file');
+      formData.append('startTime', startTime.toString());
+      formData.append('endTime', endTime.toString());
+      formData.append('sourceType', sourceType);
+
+      response = await fetch('/api/audio/extract', {
+        method: 'POST',
+        body: formData,
+      });
+    } else {
+      // Handle regular URLs
+      response = await fetch('/api/audio/extract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: mediaSrcUrl,
+          startTime,
+          endTime,
+          sourceType
+        }),
+      });
+    }
+
+    if (!response.ok) {
+      let errorMessage = `Server returned ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (parseError) {
+        console.warn('Could not parse error response:', parseError);
+      }
+      throw new Error(errorMessage);
+    }
+
+    // Get the audio blob and convert to data URI
+    const audioBlob = await response.blob();
+
+    if (audioBlob.size === 0) {
+      throw new Error('Server returned empty audio file');
+    }
+
+    console.log('Server-side audio extraction successful, blob size:', Math.round(audioBlob.size / 1024) + ' KB');
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to convert audio blob to data URI'));
+      reader.readAsDataURL(audioBlob);
+    });
+  } catch (error) {
+    console.error('Server-side audio extraction error:', error);
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Network error: Could not connect to audio extraction service');
+    }
+    throw error;
   }
-
-  // Get the audio blob and convert to data URI
-  const audioBlob = await response.blob();
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to convert audio blob to data URI'));
-    reader.readAsDataURL(audioBlob);
-  });
 }
 
 export async function extractAudioFromVideoSegment(
@@ -132,10 +181,16 @@ export async function extractAudioFromVideoSegment(
 
   if (shouldUseServerSide) {
     try {
+      console.log('Mobile browser detected, using server-side audio extraction');
       return await extractAudioServerSide(mediaSrcUrl, startTime, endTime, sourceType);
     } catch (error) {
-      console.warn('Server-side audio extraction failed, falling back to client-side:', error);
-      // Fall through to client-side extraction as fallback
+      console.error('Server-side audio extraction failed:', error);
+      // For mobile browsers, don't fall back to client-side as it won't work
+      if (isMobileBrowser()) {
+        throw new Error(`Mobile browser audio extraction failed: ${(error as Error).message}. Please try again or use a different media source.`);
+      }
+      console.warn('Server-side failed, attempting client-side fallback');
+      // Fall through to client-side extraction as fallback for desktop
     }
   }
 
