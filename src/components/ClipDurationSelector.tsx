@@ -14,9 +14,9 @@ interface ClipDurationSelectorProps {
 }
 
 const durationOptions = [
-  { value: "15", label: "15 Seconds" },
-  { value: "30", label: "30 Seconds" },
-  { value: "60", label: "1 Minute" },
+  { value: "15", label: "15 seconds" },
+  { value: "30", label: "30 seconds" },
+  { value: "60", label: "1 minute" },
 ];
 
 export default function ClipDurationSelector({ selectedDuration, onDurationChange, disabled }: ClipDurationSelectorProps) {
