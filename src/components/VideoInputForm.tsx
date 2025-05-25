@@ -186,10 +186,10 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             />
           </div>
           <Button type="submit" disabled={isLoading || !url.trim()} className="w-full sm:w-auto">
-            {isLoading ? "Loading..." : "Load Audio from URL"}
+            {isLoading ? "Loading..." : "Load Media from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-           Supports YouTube URLs and direct links to video/audio files. Best compatibility: MP3, WAV, MP4, WebM. Other formats (M4A, OGG) may work depending on your browser. Audio is extracted for educational language learning only.
+           Supports YouTube URLs and direct audio/video links (MP3, WAV, MP4, WebM). Other formats may vary by browser. YouTube audio is extracted for educational language learning only.
            </p>
         </form>
       </TabsContent>
