@@ -5,8 +5,8 @@ A feature-rich language learning application that allows users to download YouTu
 ## Features
 
 - 🎥 YouTube video download and audio extraction
-- 🎯 Audio transcription and segmentation
-- 🌍 Multi-language support
+- 🎯 AI-powered audio transcription and segmentation
+- 🌍 Multi-language support with translation
 - 🎓 Interactive language learning tools
 - 🔒 Privacy-focused (no permanent storage of user content)
 
@@ -15,7 +15,7 @@ A feature-rich language learning application that allows users to download YouTu
 - **Frontend**: Next.js 15, React 18, TypeScript
 - **UI**: Tailwind CSS, Radix UI components
 - **Audio Processing**: yt-dlp, FFmpeg
-- **AI**: Google Genkit for transcription and translation
+- **AI**: Google Genkit with Gemini 2.0 Flash for transcription and translation
 - **Database**: Firebase (optional)
 
 ## Prerequisites
@@ -23,6 +23,7 @@ A feature-rich language learning application that allows users to download YouTu
 - Node.js 18+
 - Python 3.x (for yt-dlp)
 - FFmpeg
+- Google AI API Key (for transcription features)
 
 ## Local Development
 
@@ -65,20 +66,32 @@ This project is optimized for Railway deployment with automatic yt-dlp installat
 
 1. Connect your GitHub repository to Railway
 2. Railway will automatically detect this as a Node.js project
-3. Set your environment variables in Railway dashboard
+3. **IMPORTANT**: Set your environment variables in Railway dashboard (see below)
 4. Deploy! Railway will handle yt-dlp installation automatically
 
 ### Environment Variables
 
-Set these in your Railway project:
+**Required for Railway deployment:**
 
+- `GOOGLE_API_KEY` - **REQUIRED** for AI transcription features. Get this from [Google AI Studio](https://aistudio.google.com/app/apikey)
 - `NODE_ENV=production`
-- `GOOGLE_API_KEY` (if using Google AI features)
-- `FIREBASE_CONFIG` (if using Firebase)
+
+**Optional:**
+- `FIREBASE_CONFIG` (if using Firebase authentication)
+- `NEXT_PUBLIC_FIREBASE_API_KEY` (if using Firebase)
 
 Railway automatically provides:
 - `PORT` (Railway sets this automatically)
 - `RAILWAY_ENVIRONMENT`
+
+### Getting Google AI API Key
+
+1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Sign in with your Google account
+3. Click "Create API Key"
+4. Copy the key and add it to Railway as `GOOGLE_API_KEY`
+
+**Without this API key, AI transcription will not work!**
 
 ## Project Structure
 
@@ -89,10 +102,10 @@ src/
 │   │   └── youtube/
 │   │       └── download/
 │   │           └── route.ts    # YouTube download API
-│   ├── privacy/
-│   │   └── page.tsx           # Privacy policy
-│   └── ...
-├── components/                 # Reusable UI components
+│   └── health/
+│       └── route.ts        # Health check endpoint
+├── privacy/
+│   └── page.tsx           # Privacy policy
 └── ...
 ```
 

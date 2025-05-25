@@ -309,7 +309,7 @@ export default function TranscriptionWorkspace({
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-6">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 p-3 sm:p-4 md:p-6">
         <div className="lg:w-1/2 w-full space-y-4">
           <VideoPlayer
             ref={videoPlayerRef}
@@ -391,7 +391,7 @@ export default function TranscriptionWorkspace({
                 <CardContent className="space-y-4">
                    <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
                       {/* Timeline Controls Header */}
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
                         <span className="text-sm font-medium text-foreground">
                             {isCurrentClipPlaying ? "Playing" : "Paused"} - Clip {currentClipIndex + 1}
                         </span>
@@ -414,7 +414,7 @@ export default function TranscriptionWorkspace({
                       </div>
 
                       {/* Transport Controls */}
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row items-center gap-3 sm:justify-between">
                         <div className="flex items-center space-x-2">
                           <Checkbox
                             id={`loop-toggle-${currentClip.id}`}
@@ -459,7 +459,7 @@ export default function TranscriptionWorkspace({
                         </div>
 
                         <div className="flex items-center space-x-2">
-                          <span className="text-xs text-muted-foreground">Speed</span>
+                          <span className="text-xs text-muted-foreground hidden sm:inline">Speed</span>
                           <Select
                             value={playbackRate.toString()}
                             onValueChange={handlePlaybackRateChange}
