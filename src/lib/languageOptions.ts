@@ -5,13 +5,14 @@ export interface LanguageOption {
 
 // Shared language options used across the app for consistency (DRY principle)
 export const LANGUAGE_OPTIONS: LanguageOption[] = [
-  { value: "vietnamese", label: "Vietnamese" },
   { value: "english", label: "English" },
-  { value: "spanish", label: "Spanish" },
   { value: "french", label: "French" },
   { value: "german", label: "German" },
+  { value: "italian", label: "Italian" },
   { value: "japanese", label: "Japanese" },
   { value: "korean", label: "Korean" },
+  { value: "spanish", label: "Spanish" },
+  { value: "vietnamese", label: "Vietnamese" },
 ];
 
 // Helper function to get language label by value
