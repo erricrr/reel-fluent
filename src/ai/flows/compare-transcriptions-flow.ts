@@ -233,6 +233,7 @@ const prompt = ai.definePrompt({
   name: 'compareTranscriptionsPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
+  model: 'googleai/gemini-2.0-flash',
   prompt: `SIMPLE RULE: Compare USER input to AUTOMATED transcription. AUTOMATED is always correct. USER has errors.
 
 🔴 AUTOMATED TRANSCRIPTION = 100% CORRECT (NEVER WRONG)

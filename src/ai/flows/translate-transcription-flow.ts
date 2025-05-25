@@ -44,6 +44,7 @@ const prompt = ai.definePrompt({
   name: 'translateTranscriptionPrompt',
   input: {schema: TranslateTranscriptionInputSchema},
   output: {schema: TranslateTranscriptionOutputSchema},
+  model: 'googleai/gemini-2.0-flash',
   prompt: `Translate the following text into {{targetLanguage}}.
 If a source language is provided, use it as a hint.
 

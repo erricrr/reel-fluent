@@ -44,6 +44,7 @@ const prompt = ai.definePrompt({
   name: 'transcriptionFeedbackPrompt',
   input: {schema: TranscriptionFeedbackInputSchema},
   output: {schema: TranscriptionFeedbackOutputSchema},
+  model: 'googleai/gemini-2.0-flash',
   prompt: `You are a language learning assistant providing feedback on a user\'s transcription compared to an automated transcription.
 
   Provide feedback to the user, highlighting differences in spelling and grammar. Generate helpful tips to the user to improve their language skills. Focus on areas where the user's transcription deviates from the automated transcription.

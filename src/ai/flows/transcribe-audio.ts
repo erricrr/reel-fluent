@@ -14,7 +14,7 @@ const TranscribeAudioInputSchema = z.object({
   audioDataUri: z
     .string()
     .describe(
-      'The audio data as a data URI that must include a MIME type and use Base64 encoding. Expected format: \'data:<mimetype>;base64,<encoded_data>\'.' 
+      'The audio data as a data URI that must include a MIME type and use Base64 encoding. Expected format: \'data:<mimetype>;base64,<encoded_data>\'.'
     ),
   language: z.string().describe('The language of the audio.').optional(),
 });
@@ -35,6 +35,7 @@ const transcribeAudioPrompt = ai.definePrompt({
   name: 'transcribeAudioPrompt',
   input: {schema: TranscribeAudioInputSchema},
   output: {schema: TranscribeAudioOutputSchema},
+  model: 'googleai/gemini-2.0-flash',
   prompt: `Transcribe the following audio to text. The language of the audio is {{{language}}}.\n\nAudio: {{media url=audioDataUri}}`,
 });
 
