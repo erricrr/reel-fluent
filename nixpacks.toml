@@ -1,15 +1,21 @@
+[providers]
+node = "18.x"
+
 [phases.setup]
 nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg"]
 
 [phases.install]
+dependsOn = ["setup"]
 cmds = [
   "npm cache clean --force || true",
   "rm -rf node_modules || true",
-  "npm install --no-package-lock --legacy-peer-deps",
+  "rm -rf package-lock.json || true",
+  "npm install --legacy-peer-deps --no-audit --no-fund",
   "pip3 install --user yt-dlp"
 ]
 
 [phases.build]
+dependsOn = ["install"]
 cmds = ["npm run build"]
 
 [start]
@@ -18,3 +24,4 @@ cmd = "npm start"
 [variables]
 NODE_ENV = "production"
 PATH = "/root/.local/bin:$PATH"
+NPM_CONFIG_CACHE = "/tmp/.npm"
