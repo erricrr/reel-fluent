@@ -11,7 +11,7 @@ interface YouTubeDownloadRequest {
   url: string;
 }
 
-const TEMP_DIR = path.join(process.cwd(), 'temp-downloads');
+const TEMP_DIR = process.env.TEMP_DIR || path.join(process.env.NODE_ENV === 'production' ? '/tmp' : process.cwd(), 'temp-downloads');
 const MAX_DURATION = 1800; // 30 minutes max duration
 
 // Ensure temp directory exists

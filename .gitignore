@@ -39,7 +39,17 @@ next-env.d.ts
 
 .genkit/*
 .env*
+!.env.example
 
 # firebase
 firebase-debug.log
 firestore-debug.log
+
+# temp downloads
+temp-downloads/
+*.mp3
+*.mp4
+*.wav
+
+# Railway
+.railway/
