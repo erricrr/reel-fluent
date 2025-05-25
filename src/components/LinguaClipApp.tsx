@@ -839,6 +839,13 @@ export default function LinguaClipApp() {
         )}
       </main>
       <footer className="py-4 px-4 md:px-8 border-t border-border text-center">
+        <div className="mb-2">
+          <span className="text-xs text-muted-foreground">
+            By using this service you accept the{' '}
+            <a href="/terms" className="underline hover:text-primary transition-colors">Terms of Service</a> and{' '}
+            <a href="/privacy" className="underline hover:text-primary transition-colors">Privacy Policy</a>
+          </span>
+        </div>
         <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} LinguaClip. Happy learning!</p>
       </footer>
     </div>
