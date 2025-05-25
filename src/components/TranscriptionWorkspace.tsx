@@ -1,7 +1,7 @@
 "use client";
 
 import type * as React from 'react';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import VideoPlayer, { type VideoPlayerRef } from "./VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -107,6 +107,11 @@ export default function TranscriptionWorkspace({
   const [isLooping, setIsLooping] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState("english");
+
+  // Stable callback for media time updates to prevent remount flicker
+  const handlePlayerTimeUpdate = useCallback((time: number) => {
+    setCurrentPlaybackTime(time);
+  }, []);
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
@@ -311,6 +316,7 @@ export default function TranscriptionWorkspace({
             src={mediaSrc}
             startTime={currentClip?.startTime}
             endTime={currentClip?.endTime}
+            onTimeUpdate={handlePlayerTimeUpdate}
             className="shadow-lg rounded-lg"
             isAudioSource={isAudioSource}
             currentClipIndex={currentClipIndex}

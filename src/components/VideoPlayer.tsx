@@ -66,19 +66,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     isLoopingRef.current = isLooping;
   }, [isLooping]);
 
-  const getEffectiveSrc = useCallback(() => {
-    if (!src) return undefined;
-    if (src.includes("youtube.com/") || src.includes("youtu.be/")) {
-      return src;
-    }
-    const sTime = typeof startTime === 'number' && isFinite(startTime) ? Math.floor(startTime) : 0;
-    const eTime = typeof endTime === 'number' && isFinite(endTime) ? Math.floor(endTime) : undefined;
-
-    if (eTime !== undefined) {
-      return `${src}#t=${sTime},${eTime}`;
-    }
-    return `${src}#t=${sTime}${eTime ? `,${eTime}` : ''}`;
-  }, [src, startTime, endTime]);
+  const getEffectiveSrc = useCallback(() => src, [src]);
 
   const effectiveSrc = getEffectiveSrc();
   const mediaKey = `${effectiveSrc}-${startTime}-${endTime}-${isAudioSource}`;
@@ -115,10 +103,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     if (!media || isYouTube) {
       return;
     }
-    if (media.currentTime < startTime) {
+    // Clamp to startTime if before clip or when looping from endTime
+    const beyondEnd = isLoopingRef.current && typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime;
+    if (media.currentTime < startTime || beyondEnd) {
       media.currentTime = startTime;
+      // Immediately notify parent so slider updates
+      if (onTimeUpdate) onTimeUpdate(startTime);
     }
-  }, [isYouTube, startTime]);
+  }, [isYouTube, startTime, endTime, onTimeUpdate]);
 
   const handleTimeUpdate = useCallback(() => {
     const media = mediaRef.current;
@@ -134,6 +126,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       if (!media.paused && media.currentTime >= endTime) {
         if (isLoopingRef.current) {
           media.currentTime = startTime;
+          if (onTimeUpdate) onTimeUpdate(startTime);
           media.play().catch(error => {
             console.warn("Error attempting to loop playback:", error);
             media.pause();
@@ -156,6 +149,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
     if (isLoopingRef.current) {
       media.currentTime = startTime;
+      if (onTimeUpdate) onTimeUpdate(startTime);
       media.play().catch(error => console.warn("Loop playback error on ended event:", error));
     } else {
       if(typeof endTime === 'number' && isFinite(endTime)){
