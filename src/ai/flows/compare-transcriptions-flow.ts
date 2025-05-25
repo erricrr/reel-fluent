@@ -70,14 +70,16 @@ function preprocessTranscriptions(userText: string, automatedText: string): { us
   const normalizeUnicode = (text: string): string => {
     return text
       // Normalize quotes
-      .replace(/[""]/g, '"')
-      .replace(/['']/g, "'")
+      .replace(/["""]/g, '"') // Include smart quotes
+      .replace(/['']/g, "'") // Include smart quotes
       // Normalize dashes
       .replace(/[–—]/g, '-')
       // Normalize ellipsis
       .replace(/…/g, '...')
       // Normalize other common variants
-      .replace(/\u00A0/g, ' '); // non-breaking space to regular space
+      .replace(/\u00A0/g, ' ') // non-breaking space to regular space
+      // Add NFC normalization for better handling of diacritics, especially for Vietnamese
+      .normalize('NFC');
   };
 
   const processedUser = normalizeUnicode(normalizeWhitespace(userText));
@@ -239,12 +241,24 @@ const prompt = ai.definePrompt({
 
 LANGUAGE-SPECIFIC ERRORS TO CATCH:
 
-VIETNAMESE - Missing diacritics/tone marks:
-USER: "Hom" vs AUTOMATED: "Hôm" → STATUS: "incorrect", SUGGESTION: "Hôm"
-USER: "co" vs AUTOMATED: "có" → STATUS: "incorrect", SUGGESTION: "có"
-USER: "cac" vs AUTOMATED: "các" → STATUS: "incorrect", SUGGESTION: "các"
-USER: "tieng" vs AUTOMATED: "tiếng" → STATUS: "incorrect", SUGGESTION: "tiếng"
-USER: "Viet" vs AUTOMATED: "Việt" → STATUS: "incorrect", SUGGESTION: "Việt"
+VIETNAMESE - Pay close attention to base letters (ă, â, ê, ô, ơ, ư, đ) and their tone mark combinations (à, á, ả, ã, ạ).
+USER: "an" vs AUTOMATED: "ăn"         → STATUS: "incorrect", SUGGESTION: "ăn"   (a vs ă)
+USER: "an" vs AUTOMATED: "ắn"         → STATUS: "incorrect", SUGGESTION: "ắn"   (a vs ắ which is ă + tone)
+USER: "can" vs AUTOMATED: "cần"        → STATUS: "incorrect", SUGGESTION: "cần"  (a vs â + tone)
+USER: "em" vs AUTOMATED: "êm"          → STATUS: "incorrect", SUGGESTION: "êm"   (e vs ê)
+USER: "em" vs AUTOMATED: "yên"         → STATUS: "incorrect", SUGGESTION: "yên"  (e vs yê - vowel group)
+USER: "den" vs AUTOMATED: "đến"        → STATUS: "incorrect", SUGGESTION: "đến"  (d vs đ, e vs ê + tone)
+USER: "ho" vs AUTOMATED: "họ"          → STATUS: "incorrect", SUGGESTION: "họ"   (o vs ọ - simple tone)
+USER: "moi" vs AUTOMATED: "mới"        → STATUS: "incorrect", SUGGESTION: "mới"  (o vs ơ + tone)
+USER: "tu" vs AUTOMATED: "tư"          → STATUS: "incorrect", SUGGESTION: "tư"   (u vs ư)
+USER: "chuc" vs AUTOMATED: "chúc"       → STATUS: "incorrect", SUGGESTION: "chúc" (u vs ú - simple tone)
+USER: "thu" vs AUTOMATED: "thử"        → STATUS: "incorrect", SUGGESTION: "thử"  (u vs ư + tone)
+USER: "da" vs AUTOMATED: "đã"          → STATUS: "incorrect", SUGGESTION: "đã"   (d vs đ, a vs ã - a + tone)
+USER: "dien" vs AUTOMATED: "điện"       → STATUS: "incorrect", SUGGESTION: "điện" (d vs đ, i vs i+tone, e vs ê+tone - complex word)
+USER: "Hoi An" vs AUTOMATED: "Hội An"   → STATUS: "incorrect", SUGGESTION: "Hội An" (o vs ộ in a multi-word phrase)
+USER: "nhat" vs AUTOMATED: "nhất"       → STATUS: "incorrect", SUGGESTION: "nhất" (a vs â + tone, example of stacked diacritic like ấ)
+USER: "Hôm" vs AUTOMATED: "Hôm"       → STATUS: "correct" (Example of already correct with diacritic)
+USER: "co gang" vs AUTOMATED: "cố gắng" → STATUS: "incorrect", SUGGESTION: "cố gắng" (o vs ô+tone, a vs ă+tone)
 
 SPANISH - Missing accents:
 USER: "nino" vs AUTOMATED: "niño" → STATUS: "incorrect", SUGGESTION: "niño"
