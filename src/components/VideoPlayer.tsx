@@ -103,11 +103,11 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     if (!media || isYouTube) {
       return;
     }
-    // Clamp to startTime if before clip or when looping from endTime
-    const beyondEnd = isLoopingRef.current && typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime;
-    if (media.currentTime < startTime || beyondEnd) {
+    // Reset to clip start if before start or after end, on any play
+    const beforeStart = media.currentTime < startTime;
+    const atOrAfterEnd = typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime;
+    if (beforeStart || atOrAfterEnd) {
       media.currentTime = startTime;
-      // Immediately notify parent so slider updates
       if (onTimeUpdate) onTimeUpdate(startTime);
     }
   }, [isYouTube, startTime, endTime, onTimeUpdate]);
