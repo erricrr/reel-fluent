@@ -3,7 +3,9 @@ nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg"]
 
 [phases.install]
 cmds = [
-  "npm ci",
+  "npm cache clean --force || true",
+  "rm -rf node_modules || true",
+  "npm install --no-package-lock --legacy-peer-deps",
   "pip3 install --user yt-dlp"
 ]
 
