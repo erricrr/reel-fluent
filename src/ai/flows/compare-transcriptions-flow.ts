@@ -231,210 +231,91 @@ const prompt = ai.definePrompt({
   name: 'compareTranscriptionsPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
-  prompt: `You are a PRECISE multilingual language learning assistant that compares user transcriptions against automated (correct) transcriptions with ZERO TOLERANCE for any errors.
+  prompt: `SIMPLE RULE: Compare USER input to AUTOMATED transcription. AUTOMATED is always correct. USER has errors.
 
-CRITICAL UNDERSTANDING:
-- The AUTOMATED transcription is the GROUND TRUTH (always correct)
-- The USER transcription is what needs to be checked for errors
-- You must align tokens between user and automated transcriptions to find differences
-- ANY difference in diacritics, accents, case, or characters = INCORRECT
+🔴 AUTOMATED TRANSCRIPTION = 100% CORRECT (NEVER WRONG)
+🔴 USER INPUT = HAS ERRORS TO FIND
+🔴 IF THEY DON'T MATCH EXACTLY = USER IS WRONG
 
-TOKENIZATION RULES:
-1. Split text by whitespace to get words
-2. Separate punctuation as individual tokens: "Hello!" → ["Hello", "!"]
-3. Keep words intact (don't split syllables/characters)
-4. Preserve original capitalization in tokens
+LANGUAGE-SPECIFIC ERRORS TO CATCH:
 
-LANGUAGE-SPECIFIC PRECISION RULES:
+VIETNAMESE - Missing diacritics/tone marks:
+USER: "Hom" vs AUTOMATED: "Hôm" → STATUS: "incorrect", SUGGESTION: "Hôm"
+USER: "co" vs AUTOMATED: "có" → STATUS: "incorrect", SUGGESTION: "có"
+USER: "cac" vs AUTOMATED: "các" → STATUS: "incorrect", SUGGESTION: "các"
+USER: "tieng" vs AUTOMATED: "tiếng" → STATUS: "incorrect", SUGGESTION: "tiếng"
+USER: "Viet" vs AUTOMATED: "Việt" → STATUS: "incorrect", SUGGESTION: "Việt"
 
-VIETNAMESE - ABSOLUTE DIACRITIC STRICTNESS:
-Every Vietnamese syllable must have ALL required marks:
-- Base vowels: a, ă, â, e, ê, i, o, ô, ơ, u, ư, y
-- Tone marks: à, á, ả, ã, ạ (and all combinations with base vowels)
-- ANY missing or wrong diacritic = INCORRECT
-- Examples: "hoc" ≠ "học", "Viet" ≠ "Việt", "tieng" ≠ "tiếng"
+SPANISH - Missing accents:
+USER: "nino" vs AUTOMATED: "niño" → STATUS: "incorrect", SUGGESTION: "niño"
+USER: "como" vs AUTOMATED: "cómo" → STATUS: "incorrect", SUGGESTION: "cómo"
+USER: "mas" vs AUTOMATED: "más" → STATUS: "incorrect", SUGGESTION: "más"
 
-SPANISH - ABSOLUTE ACCENT STRICTNESS:
-- Acute accents: á, é, í, ó, ú
-- Diaeresis: ü
-- Tilde: ñ
-- Inverted punctuation: ¿, ¡
-- ANY missing or wrong accent = INCORRECT
-- Examples: "nino" ≠ "niño", "como" ≠ "cómo", "mas" ≠ "más"
+FRENCH - Missing accents:
+USER: "cafe" vs AUTOMATED: "café" → STATUS: "incorrect", SUGGESTION: "café"
+USER: "etre" vs AUTOMATED: "être" → STATUS: "incorrect", SUGGESTION: "être"
+USER: "francais" vs AUTOMATED: "français" → STATUS: "incorrect", SUGGESTION: "français"
 
-FRENCH - ABSOLUTE ACCENT STRICTNESS:
-- Acute: é
-- Grave: à, è, ù
-- Circumflex: â, ê, î, ô, û
-- Diaeresis: ë, ï
-- Cedilla: ç
-- ANY missing or wrong accent = INCORRECT
-- Examples: "cafe" ≠ "café", "etre" ≠ "être", "francais" ≠ "français"
+GERMAN - Missing umlauts:
+USER: "uber" vs AUTOMATED: "über" → STATUS: "incorrect", SUGGESTION: "über"
+USER: "Madchen" vs AUTOMATED: "Mädchen" → STATUS: "incorrect", SUGGESTION: "Mädchen"
 
-GERMAN - ABSOLUTE UMLAUT STRICTNESS:
-- Umlauts: ä, ö, ü
-- Eszett: ß
-- ANY missing or wrong umlaut = INCORRECT
-- Examples: "uber" ≠ "über", "Madchen" ≠ "Mädchen", "gross" ≠ "groß"
+ITALIAN - Missing accents:
+USER: "citta" vs AUTOMATED: "città" → STATUS: "incorrect", SUGGESTION: "città"
+USER: "perche" vs AUTOMATED: "perché" → STATUS: "incorrect", SUGGESTION: "perché"
 
-ITALIAN - ABSOLUTE ACCENT STRICTNESS:
-- Grave accents: à, è, ì, ò, ù
-- Acute accents: é, í, ó, ú
-- ANY missing or wrong accent = INCORRECT
-- Examples: "citta" ≠ "città", "perche" ≠ "perché", "piu" ≠ "più"
+PORTUGUESE - Missing accents:
+USER: "nao" vs AUTOMATED: "não" → STATUS: "incorrect", SUGGESTION: "não"
+USER: "voce" vs AUTOMATED: "você" → STATUS: "incorrect", SUGGESTION: "você"
 
-PORTUGUESE - ABSOLUTE ACCENT STRICTNESS:
-- Acute: á, é, í, ó, ú
-- Grave: à
-- Circumflex: â, ê, ô
-- Tilde: ã, õ
-- Cedilla: ç
-- ANY missing or wrong accent = INCORRECT
-- Examples: "nao" ≠ "não", "voce" ≠ "você", "coração" ≠ "coracao"
+JAPANESE - Wrong script/spacing:
+USER: "がくせい" vs AUTOMATED: "学生" → STATUS: "incorrect", SUGGESTION: "学生"
 
-JAPANESE - ABSOLUTE SCRIPT STRICTNESS:
-- Hiragana vs Katakana vs Kanji must be EXACT
-- Particle spacing: は, が, を, に
-- Punctuation: 。、！？
-- ANY wrong script or spacing = INCORRECT
-- Examples: "わたし" ≠ "ワタシ", "です。" ≠ "です"
+KOREAN - Wrong syllables/spacing:
+USER: "안영하세요" vs AUTOMATED: "안녕하세요" → STATUS: "incorrect", SUGGESTION: "안녕하세요"
 
-KOREAN - ABSOLUTE SYLLABLE STRICTNESS:
-- Exact syllable blocks (Hangul)
-- Particle separation: 은/는, 이/가, 을/를
-- Spacing rules
-- ANY wrong syllable or spacing = INCORRECT
-- Examples: "안녕하세요" ≠ "안녕 하세요"
+SIMPLE COMPARISON RULES:
+1. Split both texts into words
+2. Compare each AUTOMATED word to the USER word
+3. If the AUTOMATED word and the USER word are EXACTLY the same → "correct"
+4. If the USER word is different from the AUTOMATED word in ANY way → "incorrect"
+5. If USER is missing a word that appears in the AUTOMATED transcription → "missing"
+6. If USER has an extra word that DOES NOT APPEAR in the AUTOMATED transcription → "extra" (no suggestion)
 
+EXAMPLE - EXACTLY WHAT TO DO:
+AUTOMATED: "Hôm nay, có và các em sẽ cùng tìm hiểu về bảng chữ cái tiếng Việt. Trước tiền..."
+USER: "Hom nay co va cac em se cung tim hieu ve bang chu cai tieng Viet"
 
-COMPARISON ALGORITHM:
-1. Tokenize both transcriptions
-2. Align tokens using sequence alignment (handle insertions/deletions)
-3. For each aligned position, compare tokens:
-   - EXACT MATCH (including case, diacritics, accents) → "correct"
-   - DIFFERENT but aligned → "incorrect" (provide automated token as suggestion)
-   - User has extra token → "extra" (no suggestion)
-   - User missing token → "missing" (token = missing automated token, suggestion = same)
-
-MULTILINGUAL EXAMPLES:
-
-VIETNAMESE Example:
-User: "Toi hoc tieng Viet"
-Automated: "Tôi học tiếng Việt"
-Result: [
-  {"token": "Toi", "status": "incorrect", "suggestion": "Tôi"},
-  {"token": "hoc", "status": "incorrect", "suggestion": "học"},
+CORRECT OUTPUT:
+[
+  {"token": "Hom", "status": "incorrect", "suggestion": "Hôm"},
+  {"token": "nay", "status": "incorrect", "suggestion": "nay,"},
+  {"token": "co", "status": "incorrect", "suggestion": "có"},
+  {"token": "va", "status": "incorrect", "suggestion": "và"},
+  {"token": "cac", "status": "incorrect", "suggestion": "các"},
+  {"token": "em", "status": "correct"},
+  {"token": "se", "status": "incorrect", "suggestion": "sẽ"},
+  {"token": "cung", "status": "incorrect", "suggestion": "cùng"},
+  {"token": "tim", "status": "incorrect", "suggestion": "tìm"},
+  {"token": "hieu", "status": "incorrect", "suggestion": "hiểu"},
+  {"token": "ve", "status": "incorrect", "suggestion": "về"},
+  {"token": "bang", "status": "incorrect", "suggestion": "bảng"},
+  {"token": "chu", "status": "incorrect", "suggestion": "chữ"},
+  {"token": "cai", "status": "incorrect", "suggestion": "cái"},
   {"token": "tieng", "status": "incorrect", "suggestion": "tiếng"},
-  {"token": "Viet", "status": "incorrect", "suggestion": "Việt"}
+  {"token": "Viet", "status": "incorrect", "suggestion": "Việt."},
+  {"token": "Trước", "status": "missing", "suggestion": "Trước"},
+  {"token": "tiền...", "status": "missing", "suggestion": "tiền..."}
 ]
 
-SPANISH Example:
-User: "Como estas? Muy bien, gracias."
-Automated: "¿Cómo estás? Muy bien, gracias."
-Result: [
-  {"token": "Como", "status": "incorrect", "suggestion": "¿Cómo"},
-  {"token": "estas", "status": "incorrect", "suggestion": "estás"},
-  {"token": "?", "status": "correct"},
-  {"token": "Muy", "status": "correct"},
-  {"token": "bien", "status": "correct"},
-  {"token": ",", "status": "correct"},
-  {"token": "gracias", "status": "correct"},
-  {"token": ".", "status": "correct"}
-]
+NOW COMPARE THESE INPUTS:
+USER: {{{userTranscription}}}
+AUTOMATED: {{{automatedTranscription}}}
+LANGUAGE: {{{language}}}
 
-FRENCH Example:
-User: "Je suis etudiant francais"
-Automated: "Je suis étudiant français"
-Result: [
-  {"token": "Je", "status": "correct"},
-  {"token": "suis", "status": "correct"},
-  {"token": "etudiant", "status": "incorrect", "suggestion": "étudiant"},
-  {"token": "francais", "status": "incorrect", "suggestion": "français"}
-]
+USE THE EXAMPLE ABOVE AS A GUIDE. KNOW THAT AUTOMATED IS ALWAYS RIGHT.
 
-GERMAN Example:
-User: "Ich bin ein Madchen aus Deutschland"
-Automated: "Ich bin ein Mädchen aus Deutschland"
-Result: [
-  {"token": "Ich", "status": "correct"},
-  {"token": "bin", "status": "correct"},
-  {"token": "ein", "status": "correct"},
-  {"token": "Madchen", "status": "incorrect", "suggestion": "Mädchen"},
-  {"token": "aus", "status": "correct"},
-  {"token": "Deutschland", "status": "correct"}
-]
-
-ITALIAN Example:
-User: "La citta e molto bella"
-Automated: "La città è molto bella"
-Result: [
-  {"token": "La", "status": "correct"},
-  {"token": "citta", "status": "incorrect", "suggestion": "città"},
-  {"token": "e", "status": "incorrect", "suggestion": "è"},
-  {"token": "molto", "status": "correct"},
-  {"token": "bella", "status": "correct"}
-]
-
-JAPANESE Example:
-User: "わたしは がくせい です"
-Automated: "わたしは学生です"
-Result: [
-  {"token": "わたしは", "status": "correct"},
-  {"token": "がくせい", "status": "incorrect", "suggestion": "学生"},
-  {"token": "です", "status": "correct"}
-]
-
-KOREAN Example:
-User: "안영하세요 맛나서 반가습니다"
-Automated: "안녕하세요 만나서 반갑습니다"
-Result: [
-{"token": "안영하세요", "status": "incorrect", "suggestion": "안녕하세요"},
-{"token": "맛나서", "status": "incorrect", "suggestion": "만나서"},
-{"token": "반가습니다", "status": "incorrect", "suggestion": "반갑습니다"}
-]
-
-PORTUGUESE Example:
-User: "Voce fala portugues?"
-Automated: "Você fala português?"
-Result: [
-{"token": "Voce", "status": "incorrect", "suggestion": "Você"},
-{"token": "fala", "status": "correct"},
-{"token": "portugues", "status": "incorrect", "suggestion": "português"},
-{"token": "?", "status": "correct"}
-]
-
-ENGLISH Example:
-User: "helo how are you."
-Automated: "Hello, how are you."
-Result: [
-{"token": "helo", "status": "incorrect", "suggestion": "Hello,"},
-{"token": "how", "status": "correct"},
-{"token": "are", "status": "correct"},
-{"token": "you", "status": "correct"},
-{"token": ".", "status": "correct"}
-]
-
-CRITICAL RULES FOR ALL LANGUAGES:
-1. The automated transcription is ALWAYS the correct reference
-2. ANY difference (diacritics, accents, case, spelling, script) = "incorrect"
-3. Use proper sequence alignment to handle length differences
-4. Punctuation must be treated as separate tokens
-5. "missing" tokens come from automated transcription
-6. "extra" tokens come from user transcription
-7. For "incorrect": token = user's version, suggestion = automated version
-8. For "missing": token = automated version, suggestion = automated version
-9. For "extra": token = user's version, no suggestion
-10. For "correct": token = user's version (which matches automated), no suggestion
-
-STEP-BY-STEP PROCESS:
-1. Tokenize user transcription: {{{userTranscription}}}
-2. Tokenize automated transcription: {{{automatedTranscription}}}
-3. Identify language-specific rules for: {{{language}}}
-4. Align token sequences (handle insertions/deletions)
-5. Compare each aligned position with ABSOLUTE STRICTNESS for the target language
-6. Generate result array covering ALL tokens from the alignment
-
-Return the complete comparison result following the exact schema with ZERO TOLERANCE for any language-specific errors.`
+RETURN THE COMPLETE COMPARISON RESULT FOLLOWING THE EXACT SCHEMA WITH ZERO TOLERANCE FOR ANY LANGUAGE-SPECIFIC ERRORS.`
 });
 
 

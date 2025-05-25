@@ -49,8 +49,8 @@ const MIN_CHAR_THRESHOLD = 15;
 // Helper function to determine if AI tools should be enabled
 const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null): boolean => {
   const hasMinimumUserInput = userInput.trim().length >= MIN_CHAR_THRESHOLD;
-  const hasAutomatedTranscription = automatedTranscription && automatedTranscription !== "Transcribing..." && !automatedTranscription.startsWith("Error:");
-  return hasMinimumUserInput || !!hasAutomatedTranscription;
+  // AI tools should only unlock when user has typed enough, not when automated transcription completes
+  return hasMinimumUserInput;
 };
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -385,7 +385,7 @@ export default function TranscriptionWorkspace({
                   <CardTitle>Type What You Hear</CardTitle>
                   <CardDescription>
                     Listen to Clip {currentClipIndex + 1} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                    and type the dialogue. The "AI Tools" tab unlocks after you type or if automated transcription is available.
+                    and type the dialogue. The "AI Tools" tab unlocks after you type at least {MIN_CHAR_THRESHOLD} characters.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
