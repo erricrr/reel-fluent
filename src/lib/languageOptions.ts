@@ -11,6 +11,7 @@ export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "italian", label: "Italian" },
   { value: "japanese", label: "Japanese" },
   { value: "korean", label: "Korean" },
+  { value: "portuguese", label: "Portuguese" },
   { value: "spanish", label: "Spanish" },
   { value: "vietnamese", label: "Vietnamese" },
 ];
