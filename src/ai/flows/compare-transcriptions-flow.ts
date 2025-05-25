@@ -109,30 +109,36 @@ function validateComparisonResult(result: CorrectionToken[], userText: string, a
   for (let i = 0; i < result.length; i++) {
     const token = result[i];
 
+    // Check if token exists and is an object
+    if (!token || typeof token !== 'object') {
+      errors.push(`Token ${i}: Invalid token object`);
+      continue;
+    }
+
     // Check required fields
-    if (!token.token || typeof token.token !== 'string') {
-      errors.push(`Token ${i}: Missing or invalid token field`);
+    if (!token.token || typeof token.token !== 'string' || token.token.trim() === '') {
+      errors.push(`Token ${i}: Missing or invalid token field (got: ${typeof token.token}, value: "${token.token}")`);
     }
 
     if (!['correct', 'incorrect', 'extra', 'missing'].includes(token.status)) {
-      errors.push(`Token ${i}: Invalid status "${token.status}"`);
+      errors.push(`Token ${i}: Invalid status "${token.status}" (must be: correct, incorrect, extra, or missing)`);
     }
 
     // Validate suggestion field requirements
-    if (token.status === 'incorrect' && !token.suggestion) {
-      errors.push(`Token ${i}: "incorrect" status requires suggestion field`);
+    if (token.status === 'incorrect' && (!token.suggestion || typeof token.suggestion !== 'string')) {
+      errors.push(`Token ${i}: "incorrect" status requires suggestion field (got: ${typeof token.suggestion})`);
     }
 
-    if (token.status === 'missing' && !token.suggestion) {
-      errors.push(`Token ${i}: "missing" status requires suggestion field`);
+    if (token.status === 'missing' && (!token.suggestion || typeof token.suggestion !== 'string')) {
+      errors.push(`Token ${i}: "missing" status requires suggestion field (got: ${typeof token.suggestion})`);
     }
 
     if (token.status === 'missing' && token.suggestion && token.token !== token.suggestion) {
-      errors.push(`Token ${i}: "missing" status requires suggestion to match token`);
+      errors.push(`Token ${i}: "missing" status requires suggestion to match token (token: "${token.token}", suggestion: "${token.suggestion}")`);
     }
 
-    if ((token.status === 'correct' || token.status === 'extra') && token.suggestion) {
-      errors.push(`Token ${i}: "${token.status}" status should not have suggestion field`);
+    if ((token.status === 'correct' || token.status === 'extra') && token.suggestion !== undefined) {
+      errors.push(`Token ${i}: "${token.status}" status should not have suggestion field (got: "${token.suggestion}")`);
     }
   }
 
@@ -152,42 +158,65 @@ function validateComparisonResult(result: CorrectionToken[], userText: string, a
  * Post-processes AI results to fix common schema violations and ensure compliance
  */
 function postProcessComparisonResult(result: CorrectionToken[]): CorrectionToken[] {
+  if (!result || !Array.isArray(result)) {
+    console.warn('CompareTranscriptionsFlow: Invalid result array, returning empty array');
+    return [];
+  }
+
   return result.map((token, index) => {
+    // Ensure we have a valid token object
+    if (!token || typeof token !== 'object') {
+      console.warn(`CompareTranscriptionsFlow: Invalid token at index ${index}, skipping`);
+      return null;
+    }
+
     const fixed = { ...token };
 
+    // Ensure token field is a string and not empty
+    if (!fixed.token || typeof fixed.token !== 'string' || fixed.token.trim() === '') {
+      console.warn(`CompareTranscriptionsFlow: Invalid token field at index ${index}, skipping token`);
+      return null; // Skip this token entirely
+    }
+
+    // Ensure status is valid
+    if (!['correct', 'incorrect', 'extra', 'missing'].includes(fixed.status)) {
+      console.warn(`CompareTranscriptionsFlow: Invalid status "${fixed.status}" at index ${index}, defaulting to "incorrect"`);
+      fixed.status = 'incorrect';
+    }
+
     // Fix suggestion field requirements based on status
-    switch (token.status) {
+    switch (fixed.status) {
       case 'correct':
       case 'extra':
         // These statuses should NOT have suggestion fields
         if (fixed.suggestion !== undefined) {
-          console.log(`CompareTranscriptionsFlow: Fixing token ${index}: Removing suggestion from "${token.status}" status`);
+          console.log(`CompareTranscriptionsFlow: Fixing token ${index}: Removing suggestion from "${fixed.status}" status`);
           delete fixed.suggestion;
         }
         break;
 
       case 'incorrect':
         // This status MUST have a suggestion field
-        if (!fixed.suggestion) {
+        if (!fixed.suggestion || typeof fixed.suggestion !== 'string') {
           console.log(`CompareTranscriptionsFlow: Fixing token ${index}: Adding missing suggestion for "incorrect" status`);
-          fixed.suggestion = token.token; // Fallback to original token if no suggestion provided
+          fixed.suggestion = fixed.token; // Fallback to original token if no suggestion provided
         }
         break;
 
       case 'missing':
         // This status MUST have a suggestion field that matches the token
-        if (!fixed.suggestion) {
+        if (!fixed.suggestion || typeof fixed.suggestion !== 'string') {
           console.log(`CompareTranscriptionsFlow: Fixing token ${index}: Adding missing suggestion for "missing" status`);
-          fixed.suggestion = token.token;
-        } else if (fixed.suggestion !== token.token) {
+          fixed.suggestion = fixed.token;
+        } else if (fixed.suggestion !== fixed.token) {
           console.log(`CompareTranscriptionsFlow: Fixing token ${index}: Correcting suggestion to match token for "missing" status`);
-          fixed.suggestion = token.token;
+          fixed.suggestion = fixed.token;
         }
         break;
     }
 
     return fixed;
-  });
+  }).filter((token): token is CorrectionToken => token !== null); // Remove any null tokens
 }
 
 export async function compareTranscriptions(
@@ -316,13 +345,32 @@ const compareTranscriptionsFlow = ai.defineFlow(
 
         const {output} = await prompt(processedInput);
 
-        if (!output || !output.comparisonResult) {
-          throw new Error('AI returned empty or malformed response');
+        if (!output) {
+          throw new Error('AI returned null or undefined response');
         }
 
-        // Validate the result
+        if (!output.comparisonResult) {
+          throw new Error('AI response missing comparisonResult field');
+        }
+
+        if (!Array.isArray(output.comparisonResult)) {
+          throw new Error(`AI response comparisonResult is not an array (got: ${typeof output.comparisonResult})`);
+        }
+
+        if (output.comparisonResult.length === 0) {
+          throw new Error('AI returned empty comparisonResult array');
+        }
+
+        // Post-process the result FIRST to fix common schema violations
+        const postProcessedResult = postProcessComparisonResult(output.comparisonResult);
+
+        if (postProcessedResult.length === 0) {
+          throw new Error('Post-processing resulted in empty array');
+        }
+
+        // Then validate the post-processed result
         const validation = validateComparisonResult(
-          output.comparisonResult,
+          postProcessedResult,
           processedUser,
           processedAutomated
         );
@@ -332,14 +380,15 @@ const compareTranscriptionsFlow = ai.defineFlow(
           if (attempt === maxRetries) {
             // On final attempt, return the result even if validation fails, but log the issues
             console.error('CompareTranscriptionsFlow: Final attempt validation failed, returning result anyway:', validation.errors);
+            // Return the post-processed result even if validation fails
+            return {
+              comparisonResult: postProcessedResult
+            } satisfies CompareTranscriptionsOutput;
           } else {
             // Retry if not the final attempt
             throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
           }
         }
-
-        // Post-process the result
-        const postProcessedResult = postProcessComparisonResult(output.comparisonResult);
 
         console.log(`CompareTranscriptionsFlow: Success on attempt ${attempt}, returning ${postProcessedResult.length} tokens`);
         return {

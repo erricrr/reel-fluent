@@ -59,6 +59,12 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   isLooping = false,
 }, ref) => {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
+  const isLoopingRef = useRef(isLooping);
+
+  // Update the ref when isLooping changes
+  useEffect(() => {
+    isLoopingRef.current = isLooping;
+  }, [isLooping]);
 
   const getEffectiveSrc = useCallback(() => {
     if (!src) return undefined;
@@ -126,7 +132,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
     if (typeof endTime === 'number' && isFinite(endTime)) {
       if (!media.paused && media.currentTime >= endTime) {
-        if (isLooping) {
+        if (isLoopingRef.current) {
           media.currentTime = startTime;
           media.play().catch(error => {
             console.warn("Error attempting to loop playback:", error);
@@ -136,19 +142,19 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         } else {
           media.currentTime = endTime;
           media.pause();
-          if (onEnded && !isLooping) {
+          if (onEnded && !isLoopingRef.current) {
             onEnded();
           }
         }
       }
     }
-  }, [isYouTube, startTime, endTime, onTimeUpdate, onEnded, isLooping]);
+  }, [isYouTube, startTime, endTime, onTimeUpdate, onEnded]);
 
   const handleMediaEnded = useCallback(() => {
     const media = mediaRef.current;
     if (!media || isYouTube) return;
 
-    if (isLooping) {
+    if (isLoopingRef.current) {
       media.currentTime = startTime;
       media.play().catch(error => console.warn("Loop playback error on ended event:", error));
     } else {
@@ -157,7 +163,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       }
       if (onEnded) onEnded();
     }
-  }, [isYouTube, startTime, endTime, isLooping, onEnded]);
+  }, [isYouTube, startTime, endTime, onEnded]);
 
   const handlePlayEvent = useCallback(() => {
     onPlayStateChange?.(true);
@@ -282,7 +288,12 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     return (
       <Card className={rootCardClasses}>
         <CardContent className={cn(contentClasses, isAudioSource ? "" : "aspect-video")}>
-          <audio key={mediaKey} ref={mediaRef as React.RefObject<HTMLAudioElement>} controls className="w-full">
+                    <audio
+            key={mediaKey}
+            ref={mediaRef as React.RefObject<HTMLAudioElement>}
+            controls
+            className="w-full"
+          >
             Your browser does not support the audio tag.
           </audio>
         </CardContent>
@@ -293,7 +304,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   return (
     <Card className={rootCardClasses}>
       <CardContent className={cn(contentClasses, !isAudioSource ? "aspect-video" : "")}>
-        <video key={mediaKey} ref={mediaRef as React.RefObject<HTMLVideoElement>} controls className="w-full h-full bg-black" playsInline>
+                <video
+          key={mediaKey}
+          ref={mediaRef as React.RefObject<HTMLVideoElement>}
+          controls
+          className="w-full h-full bg-black"
+          playsInline
+        >
           Your browser does not support the video tag.
         </video>
       </CardContent>
