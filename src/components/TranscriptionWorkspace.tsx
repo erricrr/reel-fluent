@@ -317,6 +317,8 @@ export default function TranscriptionWorkspace({
             startTime={currentClip?.startTime}
             endTime={currentClip?.endTime}
             onTimeUpdate={handlePlayerTimeUpdate}
+            onPlaybackRateChange={setPlaybackRate}
+            playbackRate={playbackRate}
             className="shadow-lg rounded-lg"
             isAudioSource={isAudioSource}
             currentClipIndex={currentClipIndex}
@@ -473,6 +475,7 @@ export default function TranscriptionWorkspace({
                               <SelectItem value="1">1x</SelectItem>
                               <SelectItem value="1.25">1.25x</SelectItem>
                               <SelectItem value="1.5">1.5x</SelectItem>
+                              <SelectItem value="1.75">1.75x</SelectItem>
                               <SelectItem value="2">2x</SelectItem>
                             </SelectContent>
                           </Select>

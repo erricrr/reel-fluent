@@ -19,6 +19,10 @@ interface VideoPlayerProps {
   startTime?: number;
   endTime?: number;
   onTimeUpdate?: (currentTime: number) => void;
+  /** Called when playbackRate changes on the media element */
+  onPlaybackRateChange?: (rate: number) => void;
+  /** The desired playback rate; syncs from parent to media element */
+  playbackRate?: number;
   onLoadedMetadata?: (duration: number) => void;
   onEnded?: () => void;
   className?: string;
@@ -50,6 +54,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   startTime = 0,
   endTime,
   onTimeUpdate,
+  onPlaybackRateChange,
+  playbackRate = 1,
   onLoadedMetadata,
   onEnded,
   className,
@@ -60,6 +66,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 }, ref) => {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const isLoopingRef = useRef(isLooping);
+
+  // Sync media element playbackRate to prop on mount and when it changes
+  useEffect(() => {
+    const media = mediaRef.current;
+    if (media && typeof playbackRate === 'number') {
+      media.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   // Update the ref when isLooping changes
   useEffect(() => {
@@ -167,6 +181,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     onPlayStateChange?.(false);
   }, [onPlayStateChange]);
 
+  // Notify parent when playback rate is changed (e.g., via context menu)
+  const handleRateChange = useCallback(() => {
+    const media = mediaRef.current;
+    if (media && onPlaybackRateChange) {
+      onPlaybackRateChange(media.playbackRate);
+    }
+  }, [onPlaybackRateChange]);
 
   useEffect(() => {
     const media = mediaRef.current;
@@ -184,6 +205,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       onPlayStateChange?.(!media.paused); // Initial state after metadata load
     };
 
+    media.addEventListener('ratechange', handleRateChange);
     media.addEventListener("loadedmetadata", localHandleLoadedMetadata);
     media.addEventListener("timeupdate", handleTimeUpdate);
     media.addEventListener("ended", handleMediaEnded);
@@ -204,6 +226,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     }
 
     return () => {
+      media.removeEventListener('ratechange', handleRateChange);
       media.removeEventListener("loadedmetadata", localHandleLoadedMetadata);
       media.removeEventListener("timeupdate", handleTimeUpdate);
       media.removeEventListener("ended", handleMediaEnded);
@@ -212,7 +235,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       media.removeEventListener('play', handlePlayEvent);
       media.removeEventListener('pause', handlePauseEvent);
     };
-  }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onPlayStateChange]);
+  }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onPlaybackRateChange, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onPlayStateChange, handleRateChange]);
 
 
   if (!effectiveSrc) {
