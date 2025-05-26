@@ -13,9 +13,10 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
+import ClipTrimmer from "./ClipTrimmer";
 import TranslationLanguageSelector from "./TranslationLanguageSelector";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
@@ -41,6 +42,13 @@ interface TranscriptionWorkspaceProps {
   isLoadingMedia: boolean;
   isSavingMedia: boolean;
   isAnyClipTranscribing: boolean;
+  // Focused clip functionality
+  mediaDuration?: number;
+  focusedClip?: Clip | null;
+  showClipTrimmer?: boolean;
+  onCreateFocusedClip?: (startTime: number, endTime: number) => void;
+  onToggleClipTrimmer?: () => void;
+  onBackToAutoClips?: () => void;
 }
 
 // Character threshold constants
@@ -49,8 +57,13 @@ const MIN_CHAR_THRESHOLD = 15;
 // Helper function to determine if AI tools should be enabled
 const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null): boolean => {
   const hasMinimumUserInput = userInput.trim().length >= MIN_CHAR_THRESHOLD;
-  // AI tools should only unlock when user has typed enough, not when automated transcription completes
-  return hasMinimumUserInput;
+  const hasSuccessfulAutomatedTranscription = Boolean(automatedTranscription &&
+    automatedTranscription.trim() &&
+    !automatedTranscription.startsWith("Error:") &&
+    automatedTranscription !== "Transcribing...");
+
+  // AI tools unlock when user has typed enough OR when automated transcription is available
+  return hasMinimumUserInput || hasSuccessfulAutomatedTranscription;
 };
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -108,6 +121,13 @@ export default function TranscriptionWorkspace({
   isLoadingMedia,
   isSavingMedia,
   isAnyClipTranscribing,
+  // Focused clip functionality
+  mediaDuration = 0,
+  focusedClip = null,
+  showClipTrimmer = false,
+  onCreateFocusedClip,
+  onToggleClipTrimmer,
+  onBackToAutoClips,
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
@@ -126,10 +146,29 @@ export default function TranscriptionWorkspace({
 
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-    if (activeTab === "ai" && (!currentClip.userTranscription?.trim() && !currentClip.automatedTranscription)) {
+  }, [currentClip]);
+
+  // Separate useEffect for tab switching logic to avoid circular dependencies
+  useEffect(() => {
+    // Auto-switch to AI tools tab when automated transcription becomes available
+    const hasSuccessfulAutomatedTranscription = Boolean(currentClip.automatedTranscription &&
+      currentClip.automatedTranscription.trim() &&
+      !currentClip.automatedTranscription.startsWith("Error:") &&
+      currentClip.automatedTranscription !== "Transcribing...");
+
+    if (hasSuccessfulAutomatedTranscription && activeTab === "manual") {
+      setActiveTab("ai");
+    }
+
+    // Only switch back to manual if AI tools are truly not available
+    // Check if BOTH user input AND automated transcription are empty
+    const shouldSwitchToManual = activeTab === "ai" &&
+      !shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
+
+    if (shouldSwitchToManual) {
       setActiveTab("manual");
     }
-  }, [currentClip, activeTab]);
+  }, [currentClip.automatedTranscription, activeTab, userTranscriptionInput]);
 
   // Separate useEffect for resetting playback time only when clip changes
   useEffect(() => {
@@ -336,29 +375,81 @@ export default function TranscriptionWorkspace({
             onPlayStateChange={setIsCurrentClipPlaying}
             isLooping={isLooping}
           />
-          <div className="space-y-3 p-3 bg-card rounded-lg shadow">
-              <ClipDurationSelector
-                  selectedDuration={clipSegmentationDuration}
-                  onDurationChange={onClipDurationChange}
+          {/* Clip Controls - Show different UI based on focused clip mode */}
+          {focusedClip ? (
+            <div className="space-y-4">
+              {/* Focused Clip Info */}
+              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-primary">🎯 Focused Clip Mode</span>
+                  {onBackToAutoClips && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onBackToAutoClips}
+                      disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                    >
+                      Back to Auto Clips
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Working on your custom clip: {formatSecondsToMMSS(focusedClip.startTime)} - {formatSecondsToMMSS(focusedClip.endTime)}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Auto Clip Controls */}
+              <div className="space-y-3 p-3 bg-card rounded-lg shadow">
+                <ClipDurationSelector
+                    selectedDuration={clipSegmentationDuration}
+                    onDurationChange={onClipDurationChange}
+                    disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                />
+              </div>
+
+              {/* Clip Trimmer Toggle */}
+              {onToggleClipTrimmer && (
+                <Button
+                  variant="outline"
+                  onClick={onToggleClipTrimmer}
                   disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                  className="w-full"
+                >
+                  <Scissors className="mr-2 h-4 w-4" />
+                  {showClipTrimmer ? "Hide Clip Trimmer" : "Create Custom Clip"}
+                </Button>
+              )}
+
+              {/* Clip Trimmer */}
+              {showClipTrimmer && onCreateFocusedClip && (
+                <ClipTrimmer
+                  mediaDuration={mediaDuration}
+                  videoPlayerRef={videoPlayerRef}
+                  onTrimmedClipCreate={onCreateFocusedClip}
+                  disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                />
+              )}
+
+              <ClipNavigation
+                clips={clips}
+                currentClipIndex={currentClipIndex}
+                onSelectClip={onSelectClip}
+                onRemoveClip={onRemoveClip}
+                isYouTubeVideo={isYouTubeVideo}
+                formatSecondsToMMSS={formatSecondsToMMSS}
+                disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
               />
-          </div>
-          <ClipNavigation
-            clips={clips}
-            currentClipIndex={currentClipIndex}
-            onSelectClip={onSelectClip}
-            onRemoveClip={onRemoveClip}
-            isYouTubeVideo={isYouTubeVideo}
-            formatSecondsToMMSS={formatSecondsToMMSS}
-            disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-          />
+            </div>
+          )}
           <Button
             onClick={handleTranscribe}
             className="w-full"
             disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
+            {isAutomatedTranscriptionLoading ? "Transcribing..." : focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
           </Button>
           {isMobileBrowser() && (
             <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-2 rounded border border-blue-200 dark:border-blue-800">
@@ -401,8 +492,17 @@ export default function TranscriptionWorkspace({
                 <CardHeader>
                   <CardTitle>Type What You Hear</CardTitle>
                   <CardDescription>
-                    Listen to Clip {currentClipIndex + 1} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                    and type the dialogue. The "AI Tools" tab unlocks after you type at least {MIN_CHAR_THRESHOLD} characters.
+                    {focusedClip ? (
+                      <>
+                        Listen to your focused clip ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
+                        and type the dialogue. The "AI Tools" tab unlocks after you type at least {MIN_CHAR_THRESHOLD} characters.
+                      </>
+                    ) : (
+                      <>
+                        Listen to Clip {currentClipIndex + 1} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
+                        and type the dialogue. The "AI Tools" tab unlocks after you type at least {MIN_CHAR_THRESHOLD} characters.
+                      </>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -410,7 +510,7 @@ export default function TranscriptionWorkspace({
                       {/* Timeline Controls Header */}
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
                         <span className="text-sm font-medium text-foreground">
-                            {isCurrentClipPlaying ? "Playing" : "Paused"} - Clip {currentClipIndex + 1}
+                            {isCurrentClipPlaying ? "Playing" : "Paused"} - {focusedClip ? "Focused Clip" : `Clip ${currentClipIndex + 1}`}
                         </span>
                         <span className="text-sm font-mono text-primary">
                             {formatSecondsToMMSS(Math.max(currentClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(currentClip.endTime)}
@@ -548,7 +648,7 @@ export default function TranscriptionWorkspace({
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
                       {isAutomatedTranscriptionLoading ? <ThreeDotsLoader className="mx-auto my-4" /> : null}
                       {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
-                      {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "Transcribe Clip {currentClipIndex + 1}" to generate.</p>}
+                      {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "{focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}" to generate.</p>}
                     </ScrollArea>
                   </div>
 

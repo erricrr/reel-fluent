@@ -26,6 +26,7 @@ export interface Clip {
   translationTargetLanguage?: string | null; // Language the translation is in
   comparisonResult?: CorrectionToken[] | null;
   language?: string;
+  isFocusedClip?: boolean; // Indicates if this is a user-created focused clip
 }
 
 export function generateClips(duration: number, clipLength: number, language: string): Clip[] {
@@ -51,10 +52,28 @@ export function generateClips(duration: number, clipLength: number, language: st
       translationTargetLanguage: null,
       comparisonResult: null,
       language: language,
+      isFocusedClip: false,
     });
     currentTime += clipLength;
   }
   return clips;
+}
+
+export function createFocusedClip(startTime: number, endTime: number, language: string): Clip {
+  return {
+    id: `focused-clip-${Date.now()}`,
+    startTime: startTime,
+    endTime: endTime,
+    userTranscription: null,
+    automatedTranscription: null,
+    feedback: null,
+    englishTranslation: null,
+    translation: null,
+    translationTargetLanguage: null,
+    comparisonResult: null,
+    language: language,
+    isFocusedClip: true,
+  };
 }
 
 // Mobile browser detection

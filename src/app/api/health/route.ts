@@ -35,7 +35,7 @@ export async function GET() {
       features: {
         'youtube-processing': ytDlpStatus === 'available' && ffmpegStatus === 'available',
         'mobile-audio-extraction': ffmpegStatus === 'available',
-        'ai-transcription': process.env.GOOGLE_API_KEY ? 'configured' : 'missing-api-key'
+        'ai-transcription': process.env.GOOGLE_GENAI_API_KEY ? 'configured' : 'missing-api-key'
       },
       version: '1.0.0'
     };

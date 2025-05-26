@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { FileVideo, X as XIcon, FileAudio, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { generateClips, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
+import { generateClips, createFocusedClip, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
 import { translateTranscription } from "@/ai/flows/translate-transcription-flow"; // New import
 import { compareTranscriptions, type CorrectionToken } from "@/ai/flows/compare-transcriptions-flow";
@@ -48,6 +48,10 @@ export default function LinguaClipApp() {
   const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | 'unknown' | null>(null);
   const [youtubeVideoInfo, setYoutubeVideoInfo] = useState<YouTubeVideoInfo | null>(null);
 
+  // Focused clip state
+  const [focusedClip, setFocusedClip] = useState<Clip | null>(null);
+  const [showClipTrimmer, setShowClipTrimmer] = useState<boolean>(false);
+
   const processingIdRef = useRef<number>(0);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -65,6 +69,14 @@ export default function LinguaClipApp() {
         clip.id === clipId ? { ...clip, ...data, language: clip.language || language } : clip
       )
     );
+
+    // Also update focusedClip state if the updated clip is the focused clip
+    setFocusedClip(prevFocusedClip => {
+      if (prevFocusedClip && prevFocusedClip.id === clipId) {
+        return { ...prevFocusedClip, ...data, language: prevFocusedClip.language || language };
+      }
+      return prevFocusedClip;
+    });
   }, [language]);
 
   const resetAppState = useCallback(() => {
@@ -96,6 +108,8 @@ export default function LinguaClipApp() {
     setProcessingProgress(0);
     setProcessingStatus("");
     setIsYouTubeProcessing(false);
+    setFocusedClip(null);
+    setShowClipTrimmer(false);
   }, [isAnyClipTranscribing]);
 
   const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
@@ -714,6 +728,44 @@ export default function LinguaClipApp() {
     }
   };
 
+  const handleCreateFocusedClip = useCallback((startTime: number, endTime: number) => {
+    const newFocusedClip = createFocusedClip(startTime, endTime, language);
+    setFocusedClip(newFocusedClip);
+    setShowClipTrimmer(false);
+
+    // Replace the clips array with just the focused clip
+    setClips([newFocusedClip]);
+    setCurrentClipIndex(0);
+
+    toast({
+      title: "Focused Clip Created",
+      description: `Created focused clip from ${Math.round(startTime)}s to ${Math.round(endTime)}s. All AI functionality will now work on this clip.`
+    });
+  }, [language, toast]);
+
+  const handleToggleClipTrimmer = useCallback(() => {
+    setShowClipTrimmer(prev => !prev);
+  }, []);
+
+  const handleBackToAutoClips = useCallback(() => {
+    if (isAnyClipTranscribing) {
+      toast({variant: "destructive", title: "Action Disabled", description: "Cannot switch clips while transcription is in progress."});
+      return;
+    }
+
+    // Regenerate auto clips
+    const newGeneratedClips = generateClips(mediaDuration, clipSegmentationDuration, language);
+    setClips(newGeneratedClips);
+    setCurrentClipIndex(0);
+    setFocusedClip(null);
+    setShowClipTrimmer(false);
+
+    toast({
+      title: "Returned to Auto Clips",
+      description: `Generated ${newGeneratedClips.length} automatic clips.`
+    });
+  }, [isAnyClipTranscribing, mediaDuration, clipSegmentationDuration, language, toast]);
+
   const handleResetAppWithCheck = () => {
     if (isAnyClipTranscribing) {
       toast({variant: "destructive", title: "Action Disabled", description: "Cannot clear media while transcription is in progress."});
@@ -724,7 +776,7 @@ export default function LinguaClipApp() {
   }
 
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
-  const currentClip = clips[currentClipIndex];
+  const currentClip = focusedClip || clips[currentClipIndex];
   const globalAppBusyState = isLoading || isSaving;
 
   return (
@@ -795,6 +847,13 @@ export default function LinguaClipApp() {
             isLoadingMedia={isLoading}
             isSavingMedia={isSaving}
             isAnyClipTranscribing={isAnyClipTranscribing}
+            // Focused clip functionality
+            mediaDuration={mediaDuration}
+            focusedClip={focusedClip}
+            showClipTrimmer={showClipTrimmer}
+            onCreateFocusedClip={handleCreateFocusedClip}
+            onToggleClipTrimmer={handleToggleClipTrimmer}
+            onBackToAutoClips={handleBackToAutoClips}
           />
         )}
         {isLoading && !mediaDisplayName && (
