@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -57,13 +57,10 @@ const MIN_CHAR_THRESHOLD = 15;
 // Helper function to determine if AI tools should be enabled
 const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null): boolean => {
   const hasMinimumUserInput = userInput.trim().length >= MIN_CHAR_THRESHOLD;
-  const hasSuccessfulAutomatedTranscription = Boolean(automatedTranscription &&
-    automatedTranscription.trim() &&
-    !automatedTranscription.startsWith("Error:") &&
-    automatedTranscription !== "Transcribing...");
 
-  // AI tools unlock when user has typed enough OR when automated transcription is available
-  return hasMinimumUserInput || hasSuccessfulAutomatedTranscription;
+  // AI tools unlock ONLY when user has typed enough characters
+  // Automated transcription availability should not unlock AI tools
+  return hasMinimumUserInput;
 };
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -140,6 +137,9 @@ export default function TranscriptionWorkspace({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState("english");
 
+  // Preview clip state
+  const [previewClip, setPreviewClip] = useState<{ startTime: number; endTime: number } | null>(null);
+
   // Stable callback for media time updates to prevent remount flicker
   const handlePlayerTimeUpdate = useCallback((time: number) => {
     setCurrentPlaybackTime(time);
@@ -176,16 +176,8 @@ export default function TranscriptionWorkspace({
       return;
     }
 
-    // Auto-switch to AI tools tab when automated transcription becomes available
-    const hasSuccessfulAutomatedTranscription = Boolean(currentClip.automatedTranscription &&
-      currentClip.automatedTranscription.trim() &&
-      !currentClip.automatedTranscription.startsWith("Error:") &&
-      currentClip.automatedTranscription !== "Transcribing...");
-
-    if (hasSuccessfulAutomatedTranscription && activeTab === "manual") {
-      setActiveTab("ai");
-    }
-  }, [currentClip.automatedTranscription, activeTab, userTranscriptionInput, hasUserManuallyChangedTab]);
+    // No auto-switching to AI tab - user must manually switch after typing 15+ characters
+  }, [activeTab, userTranscriptionInput, hasUserManuallyChangedTab, currentClip.automatedTranscription]);
 
   // Separate useEffect for resetting playback time only when clip changes
   useEffect(() => {
@@ -274,7 +266,7 @@ export default function TranscriptionWorkspace({
   const skipBackward = () => {
     if (!videoPlayerRef.current) return;
     const currentTime = videoPlayerRef.current.getCurrentTime();
-    const newTime = Math.max(currentClip.startTime, currentTime - 5); // Skip back 5 seconds
+    const newTime = Math.max(effectiveClip.startTime, currentTime - 5); // Skip back 5 seconds
     videoPlayerRef.current.seek(newTime);
     setCurrentPlaybackTime(newTime);
   };
@@ -282,7 +274,7 @@ export default function TranscriptionWorkspace({
   const skipForward = () => {
     if (!videoPlayerRef.current) return;
     const currentTime = videoPlayerRef.current.getCurrentTime();
-    const newTime = Math.min(currentClip.endTime, currentTime + 5); // Skip forward 5 seconds
+    const newTime = Math.min(effectiveClip.endTime, currentTime + 5); // Skip forward 5 seconds
     videoPlayerRef.current.seek(newTime);
     setCurrentPlaybackTime(newTime);
   };
@@ -310,6 +302,28 @@ export default function TranscriptionWorkspace({
     // No translation available for current target
     return null;
   };
+
+  // Handle preview clip start
+  const handlePreviewClip = useCallback((startTime: number, endTime: number) => {
+    setPreviewClip({ startTime, endTime });
+    // Start playing the preview
+    setTimeout(() => {
+      if (videoPlayerRef.current) {
+        videoPlayerRef.current.play();
+      }
+    }, 100);
+  }, []);
+
+  // Handle preview clip stop
+  const handleStopPreview = useCallback(() => {
+    setPreviewClip(null);
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.pause();
+    }
+  }, []);
+
+  // Determine which clip times to use for the VideoPlayer
+  const effectiveClip = previewClip ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime } : currentClip;
 
   if (!currentClip) {
     return (
@@ -381,8 +395,8 @@ export default function TranscriptionWorkspace({
           <VideoPlayer
             ref={videoPlayerRef}
             src={mediaSrc}
-            startTime={currentClip?.startTime}
-            endTime={currentClip?.endTime}
+            startTime={effectiveClip.startTime}
+            endTime={effectiveClip.endTime}
             onTimeUpdate={handlePlayerTimeUpdate}
             onPlaybackRateChange={setPlaybackRate}
             playbackRate={playbackRate}
@@ -398,7 +412,10 @@ export default function TranscriptionWorkspace({
               {/* Focused Clip Info */}
               <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-primary">🎯 Focused Clip Mode</span>
+                  <span className="text-sm font-medium text-primary flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Focused Clip Mode
+                  </span>
                   {onBackToAutoClips && (
                     <Button
                       variant="outline"
@@ -446,6 +463,8 @@ export default function TranscriptionWorkspace({
                   videoPlayerRef={videoPlayerRef}
                   onTrimmedClipCreate={onCreateFocusedClip}
                   disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                  onPreviewClip={handlePreviewClip}
+                  onStopPreview={handleStopPreview}
                 />
               )}
 
@@ -530,17 +549,17 @@ export default function TranscriptionWorkspace({
                             {isCurrentClipPlaying ? "Playing" : "Paused"} - {focusedClip ? "Focused Clip" : `Clip ${currentClipIndex + 1}`}
                         </span>
                         <span className="text-sm font-mono text-primary">
-                            {formatSecondsToMMSS(Math.max(currentClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(currentClip.endTime)}
+                            {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
                         </span>
                       </div>
 
                       {/* Timeline Slider */}
                       <div className="space-y-2">
                         <Slider
-                          value={[Math.max(currentClip.startTime, currentPlaybackTime)]}
+                          value={[Math.max(effectiveClip.startTime, currentPlaybackTime)]}
                           onValueChange={handleSeek}
-                          min={currentClip.startTime}
-                          max={currentClip.endTime}
+                          min={effectiveClip.startTime}
+                          max={effectiveClip.endTime}
                           step={0.1}
                           className="w-full"
                           disabled={disableTextarea || !mediaSrc}

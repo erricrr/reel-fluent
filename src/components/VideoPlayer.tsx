@@ -14,6 +14,8 @@ export interface VideoPlayerRef {
   setPlaybackRate: (rate: number) => void;
   seekWithoutBoundaryCheck: (time: number) => void;
   playWithoutBoundaryCheck: () => Promise<void>;
+  disableBoundaryEnforcement: () => void;
+  enableBoundaryEnforcement: () => void;
 }
 
 interface VideoPlayerProps {
@@ -68,6 +70,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 }, ref) => {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const isLoopingRef = useRef(isLooping);
+  const [boundaryEnforcementEnabled, setBoundaryEnforcementEnabled] = useState(true);
 
   // Sync media element playbackRate to prop on mount and when it changes
   useEffect(() => {
@@ -121,12 +124,18 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       if (mediaRef.current) {
         await mediaRef.current.play();
       }
+    },
+    disableBoundaryEnforcement: () => {
+      setBoundaryEnforcementEnabled(false);
+    },
+    enableBoundaryEnforcement: () => {
+      setBoundaryEnforcementEnabled(true);
     }
   }));
 
   const enforceClipBoundaryOnPlay = useCallback(() => {
     const media = mediaRef.current;
-    if (!media || isYouTube) {
+    if (!media || isYouTube || !boundaryEnforcementEnabled) {
       return;
     }
     // Reset to clip start if before start or after end, on any play
@@ -136,7 +145,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       media.currentTime = startTime;
       if (onTimeUpdate) onTimeUpdate(startTime);
     }
-  }, [isYouTube, startTime, endTime, onTimeUpdate]);
+  }, [isYouTube, startTime, endTime, onTimeUpdate, boundaryEnforcementEnabled]);
 
   const handleTimeUpdate = useCallback(() => {
     const media = mediaRef.current;
@@ -146,7 +155,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       onTimeUpdate(media.currentTime);
     }
 
-    if (isYouTube) return;
+    if (isYouTube || !boundaryEnforcementEnabled) return;
 
     if (typeof endTime === 'number' && isFinite(endTime)) {
       if (!media.paused && media.currentTime >= endTime) {
@@ -167,7 +176,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         }
       }
     }
-  }, [isYouTube, startTime, endTime, onTimeUpdate, onEnded]);
+  }, [isYouTube, startTime, endTime, onTimeUpdate, onEnded, boundaryEnforcementEnabled]);
 
   const handleMediaEnded = useCallback(() => {
     const media = mediaRef.current;

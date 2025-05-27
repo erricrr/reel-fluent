@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Scissors, Play, Pause, RotateCcw } from "lucide-react";
+import { Scissors, Play, Pause } from "lucide-react";
 import type { VideoPlayerRef } from "./VideoPlayer";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,8 @@ interface ClipTrimmerProps {
   onTrimmedClipCreate: (startTime: number, endTime: number) => void;
   disabled?: boolean;
   currentTrimmedClip?: { startTime: number; endTime: number } | null;
+  onPreviewClip?: (startTime: number, endTime: number) => void;
+  onStopPreview?: () => void;
 }
 
 // Helper function to format seconds to MM:SS
@@ -64,11 +66,14 @@ export default function ClipTrimmer({
   videoPlayerRef,
   onTrimmedClipCreate,
   disabled = false,
-  currentTrimmedClip
+  currentTrimmedClip,
+  onPreviewClip,
+  onStopPreview
 }: ClipTrimmerProps) {
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(Math.min(30, mediaDuration));
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [previewTimeRemaining, setPreviewTimeRemaining] = useState(0);
   const timeCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Update end time when media duration changes
@@ -90,8 +95,9 @@ export default function ClipTrimmer({
   useEffect(() => {
     return () => {
       if (timeCheckInterval.current) {
-        clearInterval(timeCheckInterval.current);
+        clearTimeout(timeCheckInterval.current);
       }
+      setPreviewTimeRemaining(0);
     };
   }, []);
 
@@ -101,104 +107,80 @@ export default function ClipTrimmer({
       setEndTime(value[1]);
 
       // When manually adjusting the range, seek to the new start position
+      // Only if not currently previewing
       if (!isPreviewPlaying && videoPlayerRef.current) {
-        videoPlayerRef.current.seekWithoutBoundaryCheck(value[0]);
+        videoPlayerRef.current.seek(value[0]);
       }
     }
   }, [isPreviewPlaying, videoPlayerRef]);
 
   const handlePreviewClip = useCallback(() => {
-    if (!videoPlayerRef.current) return;
-
-    console.log('Preview clip clicked. Current state:', { isPreviewPlaying, startTime, endTime });
-
     if (isPreviewPlaying) {
       // Stop preview
-      console.log('Stopping preview');
-      videoPlayerRef.current.pause();
       setIsPreviewPlaying(false);
+      setPreviewTimeRemaining(0);
 
       // Clear any existing interval
       if (timeCheckInterval.current) {
-        clearInterval(timeCheckInterval.current);
+        clearTimeout(timeCheckInterval.current);
         timeCheckInterval.current = null;
       }
+
+      // Tell parent to stop preview
+      if (onStopPreview) {
+        onStopPreview();
+      }
     } else {
-      // Start preview - use the new method that bypasses boundary enforcement
-      console.log('Starting preview - seeking to:', startTime);
+      // Start preview
+      setIsPreviewPlaying(true);
+      const clipDuration = endTime - startTime;
+      setPreviewTimeRemaining(clipDuration);
 
-      // Use the new seekWithoutBoundaryCheck method
-      videoPlayerRef.current.seekWithoutBoundaryCheck(startTime);
-
-      // Wait a moment for seek to complete, then start playback
-      setTimeout(async () => {
-        if (!videoPlayerRef.current) return;
-
-        console.log('Starting playback after seek');
-        try {
-          // Use the new playWithoutBoundaryCheck method
-          await videoPlayerRef.current.playWithoutBoundaryCheck();
-          setIsPreviewPlaying(true);
-
-          // Set up monitoring to stop at end time
-          if (timeCheckInterval.current) {
-            clearInterval(timeCheckInterval.current);
-          }
-
-          timeCheckInterval.current = setInterval(() => {
-            if (!videoPlayerRef.current) {
-              if (timeCheckInterval.current) {
-                clearInterval(timeCheckInterval.current);
-                timeCheckInterval.current = null;
-              }
-              return;
-            }
-
-            const currentTime = videoPlayerRef.current.getCurrentTime();
-
-            // Stop when we reach the end time
-            if (currentTime >= endTime) {
-              console.log('Reached end time, stopping preview at:', currentTime, 'target was:', endTime);
-              videoPlayerRef.current.pause();
-              setIsPreviewPlaying(false);
-
-              if (timeCheckInterval.current) {
-                clearInterval(timeCheckInterval.current);
-                timeCheckInterval.current = null;
-              }
-            }
-          }, 50); // Check every 50ms for more responsive stopping
-        } catch (err) {
-          console.error('Failed to start playback:', err);
-          setIsPreviewPlaying(false);
-        }
-      }, 300); // Longer delay to ensure seek completes
+      // Tell parent to start preview with our custom times
+      if (onPreviewClip) {
+        onPreviewClip(startTime, endTime);
+      }
     }
-  }, [startTime, endTime, isPreviewPlaying, videoPlayerRef]);
+  }, [startTime, endTime, isPreviewPlaying, onPreviewClip, onStopPreview]);
+
+  // Separate useEffect to handle countdown timer
+  useEffect(() => {
+    if (!isPreviewPlaying || previewTimeRemaining <= 0) {
+      return;
+    }
+
+    const updateCountdown = () => {
+      setPreviewTimeRemaining(prev => {
+        const newTime = prev - 0.1;
+        if (newTime <= 0) {
+          return 0; // Just return 0, don't call callbacks here
+        }
+        return newTime;
+      });
+    };
+
+    timeCheckInterval.current = setTimeout(updateCountdown, 100);
+
+    return () => {
+      if (timeCheckInterval.current) {
+        clearTimeout(timeCheckInterval.current);
+      }
+    };
+  }, [isPreviewPlaying, previewTimeRemaining]);
+
+  // Separate useEffect to handle when countdown reaches zero
+  useEffect(() => {
+    if (isPreviewPlaying && previewTimeRemaining <= 0) {
+      setIsPreviewPlaying(false);
+      if (onStopPreview) {
+        onStopPreview();
+      }
+    }
+  }, [isPreviewPlaying, previewTimeRemaining, onStopPreview]);
 
   const handleCreateTrimmedClip = useCallback(() => {
     onTrimmedClipCreate(startTime, endTime);
   }, [startTime, endTime, onTrimmedClipCreate]);
-
-  const handleReset = useCallback(() => {
-    setStartTime(0);
-    setEndTime(Math.min(30, mediaDuration));
-
-    if (isPreviewPlaying && videoPlayerRef.current) {
-      videoPlayerRef.current.pause();
-      setIsPreviewPlaying(false);
-
-      if (timeCheckInterval.current) {
-        clearInterval(timeCheckInterval.current);
-        timeCheckInterval.current = null;
-      }
-    }
-
-    // Reset to beginning of media
-    if (videoPlayerRef.current) {
-      videoPlayerRef.current.seekWithoutBoundaryCheck(0);
-    }
-  }, [mediaDuration, videoPlayerRef, isPreviewPlaying]);
 
   const clipDuration = endTime - startTime;
   const isValidClip = clipDuration >= 1 && clipDuration <= 300;
@@ -248,37 +230,25 @@ export default function ClipTrimmer({
           </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            onClick={handlePreviewClip}
-            disabled={disabled || !isValidClip}
-            className="flex-1"
-          >
-            {isPreviewPlaying ? (
-              <>
-                <Pause className="mr-2 h-4 w-4" />
-                Stop Preview
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" />
-                Preview Clip
-              </>
-            )}
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            disabled={disabled}
-            size="icon"
-            className="sm:w-auto sm:px-3"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-        </div>
+        {/* Preview Button Only */}
+        <Button
+          variant="outline"
+          onClick={handlePreviewClip}
+          disabled={disabled || !isValidClip}
+          className="w-full"
+        >
+          {isPreviewPlaying ? (
+            <>
+              <Pause className="mr-2 h-4 w-4" />
+              Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)} remaining)
+            </>
+          ) : (
+            <>
+              <Play className="mr-2 h-4 w-4" />
+              Preview Clip
+            </>
+          )}
+        </Button>
 
         <Button
           onClick={handleCreateTrimmedClip}
