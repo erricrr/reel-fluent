@@ -12,6 +12,8 @@ export interface VideoPlayerRef {
   getCurrentTime: () => number;
   seek: (time: number) => void;
   setPlaybackRate: (rate: number) => void;
+  seekWithoutBoundaryCheck: (time: number) => void;
+  playWithoutBoundaryCheck: () => Promise<void>;
 }
 
 interface VideoPlayerProps {
@@ -108,6 +110,16 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     setPlaybackRate: (rate: number) => {
       if (mediaRef.current) {
         mediaRef.current.playbackRate = rate;
+      }
+    },
+    seekWithoutBoundaryCheck: (time: number) => {
+      if (mediaRef.current) {
+        mediaRef.current.currentTime = time;
+      }
+    },
+    playWithoutBoundaryCheck: async () => {
+      if (mediaRef.current) {
+        await mediaRef.current.play();
       }
     }
   }));

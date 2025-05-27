@@ -1,13 +1,38 @@
 "use client";
 
-import type * as React from 'react';
-import { useState, useEffect, useCallback } from "react";
+import * as React from 'react';
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Scissors, Play, Pause, RotateCcw } from "lucide-react";
 import type { VideoPlayerRef } from "./VideoPlayer";
+import * as SliderPrimitive from "@radix-ui/react-slider";
+import { cn } from "@/lib/utils";
+
+// Create a RangeSlider component with two thumbs
+const RangeSlider = React.forwardRef<
+  React.ElementRef<typeof SliderPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <SliderPrimitive.Root
+    ref={ref}
+    className={cn(
+      "relative flex w-full touch-none select-none items-center",
+      className
+    )}
+    {...props}
+  >
+    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
+      <SliderPrimitive.Range className="absolute h-full bg-primary" />
+    </SliderPrimitive.Track>
+    {/* First thumb (start) */}
+    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+    {/* Second thumb (end) */}
+    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+  </SliderPrimitive.Root>
+));
+RangeSlider.displayName = "RangeSlider";
 
 interface ClipTrimmerProps {
   mediaDuration: number;
@@ -42,8 +67,9 @@ export default function ClipTrimmer({
   currentTrimmedClip
 }: ClipTrimmerProps) {
   const [startTime, setStartTime] = useState(0);
-  const [endTime, setEndTime] = useState(Math.min(30, mediaDuration)); // Default to 30 seconds or media duration
+  const [endTime, setEndTime] = useState(Math.min(30, mediaDuration));
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const timeCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Update end time when media duration changes
   useEffect(() => {
@@ -60,52 +86,93 @@ export default function ClipTrimmer({
     }
   }, [currentTrimmedClip]);
 
-  const handleStartTimeChange = useCallback((value: number[]) => {
-    const newStartTime = value[0];
-    setStartTime(newStartTime);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeCheckInterval.current) {
+        clearInterval(timeCheckInterval.current);
+      }
+    };
+  }, []);
 
-    // Ensure end time is always after start time (minimum 1 second gap)
-    if (newStartTime >= endTime) {
-      setEndTime(Math.min(newStartTime + 1, mediaDuration));
+  const handleRangeChange = useCallback((value: number[]) => {
+    if (value.length === 2) {
+      setStartTime(value[0]);
+      setEndTime(value[1]);
+
+      // When manually adjusting the range, seek to the new start position
+      if (!isPreviewPlaying && videoPlayerRef.current) {
+        videoPlayerRef.current.seekWithoutBoundaryCheck(value[0]);
+      }
     }
-  }, [endTime, mediaDuration]);
-
-  const handleEndTimeChange = useCallback((value: number[]) => {
-    const newEndTime = value[0];
-    setEndTime(newEndTime);
-
-    // Ensure start time is always before end time (minimum 1 second gap)
-    if (newEndTime <= startTime) {
-      setStartTime(Math.max(newEndTime - 1, 0));
-    }
-  }, [startTime]);
+  }, [isPreviewPlaying, videoPlayerRef]);
 
   const handlePreviewClip = useCallback(() => {
     if (!videoPlayerRef.current) return;
 
+    console.log('Preview clip clicked. Current state:', { isPreviewPlaying, startTime, endTime });
+
     if (isPreviewPlaying) {
+      // Stop preview
+      console.log('Stopping preview');
       videoPlayerRef.current.pause();
       setIsPreviewPlaying(false);
-    } else {
-      videoPlayerRef.current.seek(startTime);
-      videoPlayerRef.current.play();
-      setIsPreviewPlaying(true);
 
-      // Auto-pause when reaching end time
-      const checkEndTime = () => {
-        if (videoPlayerRef.current) {
-          const currentTime = videoPlayerRef.current.getCurrentTime();
-          if (currentTime >= endTime) {
-            videoPlayerRef.current.pause();
-            setIsPreviewPlaying(false);
-            return;
+      // Clear any existing interval
+      if (timeCheckInterval.current) {
+        clearInterval(timeCheckInterval.current);
+        timeCheckInterval.current = null;
+      }
+    } else {
+      // Start preview - use the new method that bypasses boundary enforcement
+      console.log('Starting preview - seeking to:', startTime);
+
+      // Use the new seekWithoutBoundaryCheck method
+      videoPlayerRef.current.seekWithoutBoundaryCheck(startTime);
+
+      // Wait a moment for seek to complete, then start playback
+      setTimeout(async () => {
+        if (!videoPlayerRef.current) return;
+
+        console.log('Starting playback after seek');
+        try {
+          // Use the new playWithoutBoundaryCheck method
+          await videoPlayerRef.current.playWithoutBoundaryCheck();
+          setIsPreviewPlaying(true);
+
+          // Set up monitoring to stop at end time
+          if (timeCheckInterval.current) {
+            clearInterval(timeCheckInterval.current);
           }
+
+          timeCheckInterval.current = setInterval(() => {
+            if (!videoPlayerRef.current) {
+              if (timeCheckInterval.current) {
+                clearInterval(timeCheckInterval.current);
+                timeCheckInterval.current = null;
+              }
+              return;
+            }
+
+            const currentTime = videoPlayerRef.current.getCurrentTime();
+
+            // Stop when we reach the end time
+            if (currentTime >= endTime) {
+              console.log('Reached end time, stopping preview at:', currentTime, 'target was:', endTime);
+              videoPlayerRef.current.pause();
+              setIsPreviewPlaying(false);
+
+              if (timeCheckInterval.current) {
+                clearInterval(timeCheckInterval.current);
+                timeCheckInterval.current = null;
+              }
+            }
+          }, 50); // Check every 50ms for more responsive stopping
+        } catch (err) {
+          console.error('Failed to start playback:', err);
+          setIsPreviewPlaying(false);
         }
-        if (isPreviewPlaying) {
-          requestAnimationFrame(checkEndTime);
-        }
-      };
-      requestAnimationFrame(checkEndTime);
+      }, 300); // Longer delay to ensure seek completes
     }
   }, [startTime, endTime, isPreviewPlaying, videoPlayerRef]);
 
@@ -116,14 +183,25 @@ export default function ClipTrimmer({
   const handleReset = useCallback(() => {
     setStartTime(0);
     setEndTime(Math.min(30, mediaDuration));
-    if (videoPlayerRef.current) {
+
+    if (isPreviewPlaying && videoPlayerRef.current) {
       videoPlayerRef.current.pause();
       setIsPreviewPlaying(false);
+
+      if (timeCheckInterval.current) {
+        clearInterval(timeCheckInterval.current);
+        timeCheckInterval.current = null;
+      }
     }
-  }, [mediaDuration, videoPlayerRef]);
+
+    // Reset to beginning of media
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.seekWithoutBoundaryCheck(0);
+    }
+  }, [mediaDuration, videoPlayerRef, isPreviewPlaying]);
 
   const clipDuration = endTime - startTime;
-  const isValidClip = clipDuration >= 1 && clipDuration <= 300; // Between 1 second and 5 minutes
+  const isValidClip = clipDuration >= 1 && clipDuration <= 300;
 
   return (
     <Card className="shadow-sm">
@@ -137,45 +215,26 @@ export default function ClipTrimmer({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Start Time Selector */}
-        <div className="space-y-2">
+        {/* Range Slider for both start and end times */}
+        <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <Label htmlFor="start-time-slider" className="text-sm font-medium">
-              Start Time
+            <Label htmlFor="range-slider" className="text-sm font-medium">
+              Clip Range
             </Label>
-            <span className="text-sm font-mono text-primary">
-              {formatSecondsToMMSS(startTime)}
-            </span>
+            <div className="flex items-center gap-2 text-sm font-mono">
+              <span className="text-primary">{formatSecondsToMMSS(startTime)}</span>
+              <span className="text-muted-foreground">to</span>
+              <span className="text-primary">{formatSecondsToMMSS(endTime)}</span>
+            </div>
           </div>
-          <Slider
-            id="start-time-slider"
-            value={[startTime]}
-            onValueChange={handleStartTimeChange}
+          <RangeSlider
+            id="range-slider"
+            value={[startTime, endTime]}
+            onValueChange={handleRangeChange}
             min={0}
-            max={Math.max(0, endTime - 1)}
-            step={0.1}
-            className="w-full"
-            disabled={disabled}
-          />
-        </div>
-
-        {/* End Time Selector */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="end-time-slider" className="text-sm font-medium">
-              End Time
-            </Label>
-            <span className="text-sm font-mono text-primary">
-              {formatSecondsToMMSS(endTime)}
-            </span>
-          </div>
-          <Slider
-            id="end-time-slider"
-            value={[endTime]}
-            onValueChange={handleEndTimeChange}
-            min={Math.min(startTime + 1, mediaDuration)}
             max={mediaDuration}
             step={0.1}
+            minStepsBetweenThumbs={10} // Ensures minimum 1 second gap (with step=0.1)
             className="w-full"
             disabled={disabled}
           />

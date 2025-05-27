@@ -131,6 +131,7 @@ export default function TranscriptionWorkspace({
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
+  const [hasUserManuallyChangedTab, setHasUserManuallyChangedTab] = useState(false);
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
   const [isCurrentClipPlaying, setIsCurrentClipPlaying] = useState(false);
@@ -148,8 +149,33 @@ export default function TranscriptionWorkspace({
     setUserTranscriptionInput(currentClip.userTranscription || "");
   }, [currentClip]);
 
+  // Custom tab change handler to track manual user interactions
+  const handleTabChange = useCallback((newTab: string) => {
+    setActiveTab(newTab);
+    setHasUserManuallyChangedTab(true);
+  }, []);
+
+  // Reset manual tab change tracking when switching clips
+  useEffect(() => {
+    setHasUserManuallyChangedTab(false);
+  }, [currentClip.id]);
+
   // Separate useEffect for tab switching logic to avoid circular dependencies
   useEffect(() => {
+    // Only auto-switch tabs if the user hasn't manually changed them
+    if (hasUserManuallyChangedTab) {
+      // If user manually changed tabs, only force them back to manual if AI tools are disabled
+      // and they're currently on the AI tab (to prevent getting stuck)
+      const shouldForceToManual = activeTab === "ai" &&
+        !shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
+
+      if (shouldForceToManual) {
+        setActiveTab("manual");
+        setHasUserManuallyChangedTab(false); // Reset so they can try again later
+      }
+      return;
+    }
+
     // Auto-switch to AI tools tab when automated transcription becomes available
     const hasSuccessfulAutomatedTranscription = Boolean(currentClip.automatedTranscription &&
       currentClip.automatedTranscription.trim() &&
@@ -159,16 +185,7 @@ export default function TranscriptionWorkspace({
     if (hasSuccessfulAutomatedTranscription && activeTab === "manual") {
       setActiveTab("ai");
     }
-
-    // Only switch back to manual if AI tools are truly not available
-    // Check if BOTH user input AND automated transcription are empty
-    const shouldSwitchToManual = activeTab === "ai" &&
-      !shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
-
-    if (shouldSwitchToManual) {
-      setActiveTab("manual");
-    }
-  }, [currentClip.automatedTranscription, activeTab, userTranscriptionInput]);
+  }, [currentClip.automatedTranscription, activeTab, userTranscriptionInput, hasUserManuallyChangedTab]);
 
   // Separate useEffect for resetting playback time only when clip changes
   useEffect(() => {
@@ -460,7 +477,7 @@ export default function TranscriptionWorkspace({
         </div>
 
         <div className="lg:w-1/2 w-full">
-          <Tabs defaultValue="manual" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="manual" disabled={disableTextarea}>Your Transcription</TabsTrigger>
               <Tooltip>
@@ -613,7 +630,7 @@ export default function TranscriptionWorkspace({
                      <TooltipTrigger asChild>
                        <div>
                          <Button
-                            onClick={() => setActiveTab("ai")}
+                            onClick={() => handleTabChange("ai")}
                             disabled={disableTextarea || !aiToolsEnabled}
                             variant="outline"
                             className="w-full flex items-center gap-2"
