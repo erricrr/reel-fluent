@@ -189,7 +189,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Media from URL"}
           </Button>
            <p className="text-xs text-muted-foreground">
-           Supports YouTube URLs and direct audio/video links (MP3, WAV, MP4, WebM). Other formats may vary by browser. YouTube audio is extracted for educational language learning only.
+           Supports YouTube and direct media links (MP3, WAV, MP4, WebM). Format support may vary by browser. YouTube audio is extracted only for language learning.
            </p>
         </form>
       </TabsContent>
