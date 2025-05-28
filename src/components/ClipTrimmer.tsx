@@ -23,13 +23,13 @@ const RangeSlider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-      <SliderPrimitive.Range className="absolute h-full bg-primary" />
+    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+      <SliderPrimitive.Range className="absolute h-full bg-gray-500 dark:bg-gray-400" />
     </SliderPrimitive.Track>
     {/* First thumb (start) */}
-    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-gray-500 dark:border-gray-400 bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 shadow-md" />
     {/* Second thumb (end) */}
-    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-gray-500 dark:border-gray-400 bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 shadow-md" />
   </SliderPrimitive.Root>
 ));
 RangeSlider.displayName = "RangeSlider";
@@ -186,27 +186,27 @@ export default function ClipTrimmer({
   const isValidClip = clipDuration >= 1 && clipDuration <= 300;
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Scissors className="h-5 w-5 text-primary" />
+    <Card className="shadow-lg border-gray-300 dark:border-gray-600 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
+      <CardHeader className="pb-3 border-b border-gray-300 dark:border-gray-600">
+        <CardTitle className="text-lg flex items-center gap-2 text-gray-800 dark:text-gray-200">
+          <Scissors className="h-5 w-5 text-gray-600 dark:text-gray-400" />
           Clip Trimmer
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-gray-600 dark:text-gray-400">
           Select custom start and stop points to create your focused clip for AI processing.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-4">
         {/* Range Slider for both start and end times */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <Label htmlFor="range-slider" className="text-sm font-medium">
+            <Label htmlFor="range-slider" className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Clip Range
             </Label>
             <div className="flex items-center gap-2 text-sm font-mono">
-              <span className="text-primary">{formatSecondsToMMSS(startTime)}</span>
-              <span className="text-muted-foreground">to</span>
-              <span className="text-primary">{formatSecondsToMMSS(endTime)}</span>
+              <span className="text-gray-800 dark:text-gray-200 font-semibold">{formatSecondsToMMSS(startTime)}</span>
+              <span className="text-gray-500 dark:text-gray-400">to</span>
+              <span className="text-gray-800 dark:text-gray-200 font-semibold">{formatSecondsToMMSS(endTime)}</span>
             </div>
           </div>
           <RangeSlider
@@ -223,9 +223,9 @@ export default function ClipTrimmer({
         </div>
 
         {/* Clip Duration Display */}
-        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-          <span className="text-sm font-medium">Clip Duration:</span>
-          <span className="text-sm font-mono text-primary">
+        <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Clip Duration:</span>
+          <span className="text-sm font-mono text-gray-800 dark:text-gray-200 font-semibold">
             {formatSecondsToMMSS(clipDuration)}
           </span>
         </div>
@@ -235,7 +235,7 @@ export default function ClipTrimmer({
           variant="outline"
           onClick={handlePreviewClip}
           disabled={disabled || !isValidClip}
-          className="w-full"
+          className="w-full border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-500"
         >
           {isPreviewPlaying ? (
             <>
@@ -253,14 +253,14 @@ export default function ClipTrimmer({
         <Button
           onClick={handleCreateTrimmedClip}
           disabled={disabled || !isValidClip}
-          className="w-full"
+          className="w-full bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white shadow-md hover:shadow-lg"
         >
           <Scissors className="mr-2 h-4 w-4" />
           Create Focused Clip ({formatSecondsToMMSS(clipDuration)})
         </Button>
 
         {!isValidClip && (
-          <p className="text-sm text-muted-foreground text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
             {clipDuration < 1
               ? "Clip must be at least 1 second long"
               : "Clip must be no longer than 5 minutes"

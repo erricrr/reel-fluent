@@ -22,6 +22,7 @@ import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import { useToast } from "@/hooks/use-toast";
 import { getLanguageLabel } from "@/lib/languageOptions";
+import { cn } from "@/lib/utils";
 
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
@@ -446,10 +447,13 @@ export default function TranscriptionWorkspace({
               {/* Clip Trimmer Toggle */}
               {onToggleClipTrimmer && (
                 <Button
-                  variant="outline"
+                  variant={showClipTrimmer ? "outline" : "default"}
                   onClick={onToggleClipTrimmer}
                   disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-                  className="w-full"
+                  className={cn(
+                    "w-full transition-all duration-200",
+                    !showClipTrimmer && "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/20 hover:ring-primary/30"
+                  )}
                 >
                   <Scissors className="mr-2 h-4 w-4" />
                   {showClipTrimmer ? "Hide Clip Trimmer" : "Create Custom Clip"}
