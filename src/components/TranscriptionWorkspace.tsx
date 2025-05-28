@@ -567,20 +567,47 @@ export default function TranscriptionWorkspace({
                       </div>
 
                       {/* Transport Controls */}
-                      <div className="flex flex-col sm:flex-row items-center gap-3 sm:justify-between">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`loop-toggle-${currentClip.id}`}
-                            checked={isLooping}
-                            onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
-                            disabled={disableTextarea || !mediaSrc}
-                          />
-                          <Label htmlFor={`loop-toggle-${currentClip.id}`} className="text-sm font-normal text-muted-foreground">
-                            Loop
-                          </Label>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                        {/* Mobile: Top row with Loop and Speed, Desktop: Left side with Loop */}
+                        <div className="flex items-center justify-between sm:justify-start sm:space-x-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`loop-toggle-${currentClip.id}`}
+                              checked={isLooping}
+                              onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
+                              disabled={disableTextarea || !mediaSrc}
+                            />
+                            <Label htmlFor={`loop-toggle-${currentClip.id}`} className="text-sm font-normal text-muted-foreground">
+                              Loop
+                            </Label>
+                          </div>
+
+                          {/* Speed selector - shows on mobile top row, hidden on desktop (will show in right section) */}
+                          <div className="flex items-center space-x-2 sm:hidden">
+                            <Select
+                              value={playbackRate.toString()}
+                              onValueChange={handlePlaybackRateChange}
+                              disabled={disableTextarea || !mediaSrc}
+                            >
+                              <SelectTrigger className="w-20 h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0.25">0.25x</SelectItem>
+                                <SelectItem value="0.5">0.5x</SelectItem>
+                                <SelectItem value="0.75">0.75x</SelectItem>
+                                <SelectItem value="1">1x</SelectItem>
+                                <SelectItem value="1.25">1.25x</SelectItem>
+                                <SelectItem value="1.5">1.5x</SelectItem>
+                                <SelectItem value="1.75">1.75x</SelectItem>
+                                <SelectItem value="2">2x</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        {/* Mobile: Bottom row with play controls, Desktop: Center with play controls */}
+                        <div className="flex items-center justify-center gap-2">
                           <Button
                               variant="outline"
                               size="sm"
@@ -611,8 +638,9 @@ export default function TranscriptionWorkspace({
                           </Button>
                         </div>
 
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs text-muted-foreground hidden sm:inline">Speed</span>
+                        {/* Desktop only: Right side with speed selector */}
+                        <div className="hidden sm:flex items-center space-x-2">
+                          <span className="text-xs text-muted-foreground">Speed</span>
                           <Select
                             value={playbackRate.toString()}
                             onValueChange={handlePlaybackRateChange}
