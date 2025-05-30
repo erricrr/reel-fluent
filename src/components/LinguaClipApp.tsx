@@ -1173,33 +1173,11 @@ export default function LinguaClipApp() {
           </Card>
         )}
 
-        {/* Floating Action Button for Session Storage */}
-        <div className="fixed bottom-6 right-6 z-50">
-          <Button
-            size="lg"
-            className="rounded-full w-14 h-14 shadow-lg hover:shadow-xl transition-shadow"
-            onClick={() => {
-              const drawer = document.getElementById('session-drawer');
-              if (drawer) {
-                drawer.classList.remove('translate-y-full');
-                drawer.classList.add('translate-y-0');
-              }
-            }}
-          >
-            <Save className="h-6 w-6" />
-            {sessionClips.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-sm">
-                {sessionClips.length}
-              </span>
-            )}
-          </Button>
-        </div>
-
         {/* Session Storage Drawer */}
         <div
           id="session-drawer"
           className="fixed bottom-0 left-0 right-0 z-50 transform translate-y-full transition-transform duration-300 ease-in-out"
-          style={{ maxHeight: 'calc(100vh - 64px)' }}
+          style={{ maxHeight: 'calc(100vh - 120px)' }}
         >
           <div className="bg-background border-t border-border rounded-t-xl shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-border bg-background">
@@ -1238,7 +1216,7 @@ export default function LinguaClipApp() {
           </div>
         </div>
       </main>
-      <footer className="py-4 px-4 md:px-8 border-t border-border text-center">
+      <footer className="py-4 px-4 md:px-8 border-t border-border text-center bg-background relative z-[51]">
         <div className="mb-2">
           <span className="text-xs text-muted-foreground">
             By using this service you accept the{' '}
@@ -1246,7 +1224,6 @@ export default function LinguaClipApp() {
             <a href="/privacy" className="underline hover:text-primary transition-colors">Privacy Policy</a>
           </span>
         </div>
-        <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} LinguaClip. Happy learning!</p>
       </footer>
     </div>
   );

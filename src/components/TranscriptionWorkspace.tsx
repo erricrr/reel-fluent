@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -596,15 +596,31 @@ export default function TranscriptionWorkspace({
               </div>
 
               {/* Save to Session Button */}
-              <Button
-                onClick={onSaveToSession}
-                disabled={!canSaveToSession || disableTextarea}
-                variant="secondary"
-                className="w-full flex items-center justify-center gap-2 h-auto py-3"
-              >
-                <Save className="h-4 w-4" />
-                Save Current Clip to Session
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={onSaveToSession}
+                  disabled={!canSaveToSession || disableTextarea}
+                  variant="secondary"
+                  className="flex-1 flex items-center justify-center gap-2 h-auto py-3"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Current Clip to Session
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 h-auto py-3"
+                  onClick={() => {
+                    const drawer = document.getElementById('session-drawer');
+                    if (drawer) {
+                      drawer.classList.remove('translate-y-full');
+                      drawer.classList.add('translate-y-0');
+                    }
+                  }}
+                >
+                  <Save className="h-4 w-4" />
+                  Saved Clips
+                </Button>
+              </div>
 
               {/* Transcribe Button */}
               <Button
@@ -666,15 +682,31 @@ export default function TranscriptionWorkspace({
               />
 
               {/* Save to Session Button */}
-              <Button
-                onClick={onSaveToSession}
-                disabled={!canSaveToSession || disableTextarea}
-                variant="secondary"
-                className="w-full flex items-center justify-center gap-2 h-auto py-3"
-              >
-                <Save className="h-4 w-4" />
-                Save Current Clip to Session
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={onSaveToSession}
+                  disabled={!canSaveToSession || disableTextarea}
+                  variant="secondary"
+                  className="flex-1 flex items-center justify-center gap-2 h-auto py-3"
+                >
+                  <Save className="h-4 w-4" />
+                  Save Current Clip to Session
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex items-center justify-center gap-2 h-auto py-3"
+                  onClick={() => {
+                    const drawer = document.getElementById('session-drawer');
+                    if (drawer) {
+                      drawer.classList.remove('translate-y-full');
+                      drawer.classList.add('translate-y-0');
+                    }
+                  }}
+                >
+                  <Save className="h-4 w-4" />
+                  Saved Clips
+                </Button>
+              </div>
 
               {/* Transcribe Button */}
               <Button
