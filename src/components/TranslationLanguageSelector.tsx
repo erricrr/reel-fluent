@@ -34,10 +34,18 @@ export default function TranslationLanguageSelector({
         onValueChange={onLanguageChange}
         disabled={disabled}
       >
-        <SelectTrigger id="translation-language-select" className={className}>
+        <SelectTrigger id="translation-language-select" className={`${className} [&>svg]:rotate-180`}>
           <SelectValue placeholder="Select language" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent
+          position="popper"
+          side="top"
+          sideOffset={4}
+          collisionPadding={20}
+          className="min-w-[200px] max-h-[180px]"
+          alignOffset={0}
+          avoidCollisions={false}
+        >
           {LANGUAGE_OPTIONS.map((lang) => (
             <SelectItem key={lang.value} value={lang.value}>
               {lang.label}
