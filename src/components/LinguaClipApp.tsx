@@ -9,7 +9,7 @@ import ClipDurationSelector from "./ClipDurationSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileVideo, X as XIcon, FileAudio, Save } from "lucide-react";
+import { FileVideo, X as XIcon, FileAudio, Save, List } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, createFocusedClip, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
@@ -1182,7 +1182,7 @@ export default function LinguaClipApp() {
           <div className="bg-background border-t border-border rounded-t-xl shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-border bg-background">
               <div className="flex items-center gap-2">
-                <Save className="h-5 w-5" />
+                <List className="h-5 w-5" />
                 <h3 className="text-lg font-semibold">Saved Clips</h3>
                 <span className="text-sm text-muted-foreground">
                   ({sessionClips.length})

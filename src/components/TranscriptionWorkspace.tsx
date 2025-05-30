@@ -617,7 +617,7 @@ export default function TranscriptionWorkspace({
                     }
                   }}
                 >
-                  <Save className="h-4 w-4" />
+                  <List className="h-4 w-4" />
                   Saved Clips
                 </Button>
               </div>
@@ -705,7 +705,7 @@ export default function TranscriptionWorkspace({
                     }
                   }}
                 >
-                  <Save className="h-4 w-4" />
+                  <List className="h-4 w-4" />
                   Saved Clips
                 </Button>
               </div>

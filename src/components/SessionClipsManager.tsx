@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Save, Trash2, Edit2, FileAudio, FileVideo, Play, X as XIcon, Eye } from "lucide-react";
+import { Film, Save, Trash2, Edit2, FileAudio, FileVideo, Play, X as XIcon, Eye, List } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { Input } from "@/components/ui/input";
@@ -75,7 +75,7 @@ export default function SessionClipsManager({
       <CardHeader className="pb-3 bg-primary/5">
         <CardTitle className="text-sm font-medium flex items-center justify-between">
           <div className="flex items-center gap-2 text-primary">
-            <Save className="h-4 w-4" />
+            <List className="h-4 w-4" />
             Saved Clips
           </div>
           <span className="text-xs text-muted-foreground">
