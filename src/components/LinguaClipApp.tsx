@@ -157,6 +157,19 @@ export default function LinguaClipApp() {
   const [mediaSources, setMediaSources] = useState<MediaSource[]>([]);
   const [activeMediaSourceId, setActiveMediaSourceId] = useState<string | null>(null);
 
+  const [workInProgressClips, setWorkInProgressClips] = useState<Record<string, Clip>>({});
+
+  const clipsRef = useRef(clips);
+  const languageRef = useRef(language);
+  const activeMediaSourceIdRef = useRef(activeMediaSourceId);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    clipsRef.current = clips;
+    languageRef.current = language;
+    activeMediaSourceIdRef.current = activeMediaSourceId;
+  }, [clips, language, activeMediaSourceId]);
+
   useEffect(() => {
     const currentlyTranscribing = clips.some(clip => clip.automatedTranscription === "Transcribing...");
     setIsAnyClipTranscribing(currentlyTranscribing);
@@ -441,6 +454,9 @@ export default function LinguaClipApp() {
     setMediaDisplayName(displayName);
     setCurrentSourceType(determinedSourceType);
 
+    // Clear source URL after successful loading
+    setSourceUrl(undefined);
+
     // Load media metadata
     if (newMediaSrc) {
       const tempMediaElement = document.createElement(mediaElementTypeForLoad);
@@ -577,58 +593,124 @@ export default function LinguaClipApp() {
     updateClipData(clipId, { userTranscription: newUserTranscription });
   };
 
-  const handleTranscribeAudio = async (clipId: string): Promise<void> => {
-    const currentClipToTranscribe = clips.find(c => c.id === clipId);
-    const actualMediaSrcForExtraction = sourceFile ? objectUrlRef.current : mediaSrc;
-
-    if (!actualMediaSrcForExtraction || !currentClipToTranscribe || !currentSourceType || currentSourceType === 'unknown') {
-      toast({variant: "destructive", title: "Transcription Error", description: "Cannot transcribe. Ensure a media file is loaded and a clip is active."});
+  const handleTranscribeAudio = useCallback(async (clipId: string) => {
+    // Find the clip to transcribe - either from the clips array or the focused clip
+    const clipToTranscribe = focusedClip?.id === clipId ? focusedClip : clipsRef.current.find(c => c.id === clipId);
+    if (!clipToTranscribe || !mediaSrc) {
+      toast({variant: "destructive", title: "Cannot Transcribe", description: "Please ensure media is loaded and a clip is selected."});
       return;
     }
 
-    updateClipData(clipId, { automatedTranscription: "Transcribing...", feedback: null, englishTranslation: null, comparisonResult: null });
+    setIsAnyClipTranscribing(true);
 
-    let audioDataUri: string | null = null;
-    try {
-        console.log(`LinguaClipApp: Calling extractAudioFromVideoSegment with src: ${actualMediaSrcForExtraction?.substring(0,100)}, type: ${currentSourceType}`);
-        audioDataUri = await extractAudioFromVideoSegment(
-          actualMediaSrcForExtraction,
-          currentClipToTranscribe.startTime,
-          currentClipToTranscribe.endTime,
+    // Update clip state to show it's transcribing
+    const updateClipState = (newState: Partial<Clip>) => {
+      // Update in clips array if the clip exists there
+      setClips(prevClips =>
+        prevClips.map(c =>
+          c.id === clipId ? { ...c, ...newState } : c
+        )
+      );
+
+      // Update focused clip if this is the focused clip
+      if (focusedClip && focusedClip.id === clipId) {
+        setFocusedClip(prev => prev ? { ...prev, ...newState } : prev);
+      }
+
+      // Update work in progress
+      setWorkInProgressClips(prev => ({
+        ...prev,
+        [clipId]: { ...(prev[clipId] || clipToTranscribe), ...newState } as Clip
+      }));
+    };
+
+    // Set transcribing state
+    updateClipState({ automatedTranscription: "Transcribing..." });
+
+    const maxRetries = 2;
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`Retrying audio extraction (attempt ${attempt} of ${maxRetries})`);
+          // Add a small delay between retries
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        const audioDataUri = await extractAudioFromVideoSegment(
+          mediaSrc,
+          clipToTranscribe.startTime,
+          clipToTranscribe.endTime,
           currentSourceType === 'audio' ? 'audio' : 'video'
         );
-    } catch (error) {
-        console.warn("LinguaClipApp: Audio extraction failed in LinguaClipApp:", error);
-        toast({variant: "destructive", title: "Audio Extraction Failed", description: (error as Error).message || "Could not extract audio for transcription."});
-        updateClipData(clipId, { automatedTranscription: "Error: Audio extraction failed." });
-        return;
+
+        if (!audioDataUri) {
+          throw new Error("Failed to extract audio from the clip");
+        }
+
+        const result = await transcribeAudio({
+          audioDataUri,
+          language: clipToTranscribe.language || language,
+        });
+
+        // Update with transcription result
+        updateClipState({ automatedTranscription: result.transcription });
+        toast({ title: "Transcription Complete" });
+        return; // Success, exit the retry loop
+      } catch (error) {
+        console.error(`Error transcribing audio (attempt ${attempt + 1}):`, error);
+        lastError = error;
+
+        // If this is not the last attempt, continue to the next retry
+        if (attempt < maxRetries) {
+          continue;
+        }
+
+        // On final attempt, handle the error
+        console.error("All transcription attempts failed:", error);
+        const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+        const errorState = { automatedTranscription: errorMessage };
+
+        // Update all states with error
+        updateClipState(errorState);
+
+        toast({
+          variant: "destructive",
+          title: "Transcription Failed",
+          description: "Failed to transcribe the clip. Please try again."
+        });
+      }
     }
 
-    if (!audioDataUri) {
-        toast({variant: "destructive", title: "Transcription Error", description: "Failed to obtain audio data for transcription."});
-        updateClipData(clipId, { automatedTranscription: "Error: No audio data." });
-        return;
+    setIsAnyClipTranscribing(false);
+  }, [
+    focusedClip,
+    mediaSrc,
+    language,
+    currentSourceType,
+    setClips,
+    setFocusedClip,
+    setWorkInProgressClips,
+    setIsAnyClipTranscribing,
+    toast
+  ]);
+
+  const handleTranslate = useCallback(async (clipId: string, targetLanguage: string): Promise<void> => {
+    // First check if clip exists in either the clips array or as a focused clip
+    const currentClipForTranslation = focusedClip?.id === clipId ? focusedClip : clipsRef.current.find(c => c.id === clipId);
+    if (!currentClipForTranslation) {
+      toast({variant: "destructive", title: "Translation Error", description: "Clip not found."});
+      return;
     }
 
-    console.log("LinguaClipApp: Audio Data URI prefix for AI:", audioDataUri.substring(0, 100));
-    const clipLanguage = (currentClipToTranscribe.language || language).trim();
-    console.log("LinguaClipApp: Language for AI transcription:", clipLanguage);
-
-
-    try {
-      const result = await transcribeAudio({ audioDataUri, language: clipLanguage });
-      updateClipData(clipId, { automatedTranscription: result.transcription });
-      toast({ title: "Transcription Successful" });
-    } catch (error) {
-      console.warn("LinguaClipApp: AI Transcription error in LinguaClipApp:", error);
-      toast({ variant: "destructive", title: "AI Error", description: "Failed to transcribe audio. Check console for details." });
-      updateClipData(clipId, { automatedTranscription: "Error: Could not transcribe audio." });
-    }
-  };
-
-  const handleTranslate = async (clipId: string, targetLanguage: string): Promise<void> => {
-    const currentClipForTranslation = clips.find(c => c.id === clipId);
-    if (!currentClipForTranslation || !currentClipForTranslation.automatedTranscription || currentClipForTranslation.automatedTranscription.startsWith("Error:") || currentClipForTranslation.automatedTranscription === "Transcribing...") {
+    // Then check transcription validity
+    const transcription = currentClipForTranslation.automatedTranscription;
+    if (transcription === null ||
+        transcription === undefined ||
+        transcription === "" ||
+        transcription.startsWith("Error:") ||
+        transcription === "Transcribing...") {
       toast({variant: "destructive", title: "Translation Error", description: "Ensure automated transcription is successful."});
       return;
     }
@@ -642,17 +724,39 @@ export default function LinguaClipApp() {
 
     try {
       const result = await translateTranscription({
-        originalTranscription: currentClipForTranslation.automatedTranscription,
-        sourceLanguage: (currentClipForTranslation.language || language).trim(),
+        originalTranscription: transcription,
+        sourceLanguage: (currentClipForTranslation.language || languageRef.current).trim(),
         targetLanguage: targetLanguage,
       });
 
       // Update the appropriate field based on target language
-      if (targetLanguage === 'english') {
-        updateClipData(clipId, { englishTranslation: result.translatedText });
-      } else {
-        updateClipData(clipId, { translation: result.translatedText, translationTargetLanguage: targetLanguage });
-      }
+      const updateData = targetLanguage === 'english'
+        ? { englishTranslation: result.translatedText }
+        : { translation: result.translatedText, translationTargetLanguage: targetLanguage };
+
+      // Update clip data
+      updateClipData(clipId, updateData);
+
+      // Also update session clips if this clip exists there
+      setSessionClips(prevClips => {
+        const clipIndex = prevClips.findIndex(c =>
+          c.startTime === currentClipForTranslation.startTime &&
+          c.endTime === currentClipForTranslation.endTime &&
+          c.mediaSourceId === activeMediaSourceIdRef.current
+        );
+        if (clipIndex >= 0) {
+          const newClips = [...prevClips];
+          newClips[clipIndex] = { ...newClips[clipIndex], ...updateData };
+          return newClips;
+        }
+        return prevClips;
+      });
+
+      // Also update work in progress state
+      setWorkInProgressClips(prev => ({
+        ...prev,
+        [clipId]: { ...(prev[clipId] || currentClipForTranslation), ...updateData }
+      }));
 
       toast({ title: "Translation Successful" });
     } catch (error) {
@@ -660,17 +764,17 @@ export default function LinguaClipApp() {
       toast({ variant: "destructive", title: "AI Error", description: "Failed to translate transcription." });
 
       // Set error state based on target language
-      if (targetLanguage === 'english') {
-        updateClipData(clipId, { englishTranslation: "Error: Could not translate." });
-      } else {
-        updateClipData(clipId, { translation: "Error: Could not translate.", translationTargetLanguage: targetLanguage });
-      }
-    }
-  };
+      const errorState = targetLanguage === 'english'
+        ? { englishTranslation: "Error: Could not translate." }
+        : { translation: "Error: Could not translate.", translationTargetLanguage: targetLanguage };
 
-  const handleGetCorrections = async (clipId: string): Promise<void> => {
-    const currentClipForCorrections = clips.find(c => c.id === clipId);
-     if (!currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:") || currentClipForCorrections.automatedTranscription === "Transcribing...") {
+      updateClipData(clipId, errorState);
+    }
+  }, [focusedClip, updateClipData, toast]);
+
+  const handleGetCorrections = useCallback(async (clipId: string): Promise<void> => {
+    const currentClipForCorrections = clipsRef.current.find(c => c.id === clipId);
+    if (!currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:") || currentClipForCorrections.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Comparison Error", description: "Ensure automated transcription is successful and you've typed something."});
       return;
     }
@@ -684,54 +788,32 @@ export default function LinguaClipApp() {
       return;
     }
 
-    // Log detailed comparison context for debugging
-    console.log('LinguaClipApp: Starting comparison with detailed context:', {
-      clipId,
-      userTranscription: {
-        length: userText.length,
-        preview: userText.substring(0, 50) + (userText.length > 50 ? '...' : ''),
-        wordCount: userText.split(/\s+/).length
-      },
-      automatedTranscription: {
-        length: automatedText.length,
-        preview: automatedText.substring(0, 50) + (automatedText.length > 50 ? '...' : ''),
-        wordCount: automatedText.split(/\s+/).length
-      },
-      language: (currentClipForCorrections.language || language).trim(),
-      timestamp: new Date().toISOString()
-    });
-
     updateClipData(clipId, { comparisonResult: [{token: "Comparing...", status: "correct"}] });
 
     try {
-      const startTime = Date.now();
-
       const result = await compareTranscriptions({
         userTranscription: userText,
         automatedTranscription: automatedText,
-        language: (currentClipForCorrections.language || language).trim(),
+        language: (currentClipForCorrections.language || languageRef.current).trim(),
       });
 
-      const duration = Date.now() - startTime;
-
-      console.log('LinguaClipApp: Comparison completed successfully:', {
-        clipId,
-        duration: `${duration}ms`,
-        resultLength: result.comparisonResult.length,
-        tokenSummary: {
-          correct: result.comparisonResult.filter(t => t.status === 'correct').length,
-          incorrect: result.comparisonResult.filter(t => t.status === 'incorrect').length,
-          missing: result.comparisonResult.filter(t => t.status === 'missing').length,
-          extra: result.comparisonResult.filter(t => t.status === 'extra').length
-        },
-        firstFewTokens: result.comparisonResult.slice(0, 5).map(t => ({
-          token: t.token,
-          status: t.status,
-          suggestion: t.suggestion
-        }))
-      });
-
+      // Update clip data with comparison results
       updateClipData(clipId, { comparisonResult: result.comparisonResult });
+
+      // Also update session clips if this clip exists there
+      setSessionClips(prevClips => {
+        const clipIndex = prevClips.findIndex(c =>
+          c.startTime === currentClipForCorrections.startTime &&
+          c.endTime === currentClipForCorrections.endTime &&
+          c.mediaSourceId === activeMediaSourceIdRef.current
+        );
+        if (clipIndex >= 0) {
+          const newClips = [...prevClips];
+          newClips[clipIndex] = { ...newClips[clipIndex], comparisonResult: result.comparisonResult };
+          return newClips;
+        }
+        return prevClips;
+      });
 
       // Provide more specific success feedback
       const summary = result.comparisonResult;
@@ -771,7 +853,7 @@ export default function LinguaClipApp() {
         }]
       });
     }
-  };
+  }, [toast, updateClipData]);
 
   const handleRemoveClip = (clipIdToRemove: string) => {
     if (isAnyClipTranscribing) {
@@ -855,13 +937,21 @@ export default function LinguaClipApp() {
   };
 
   const handleCreateFocusedClip = useCallback((startTime: number, endTime: number) => {
-    const newFocusedClip = createFocusedClip(startTime, endTime, language);
+    // Ensure we have a valid language
+    const clipLanguage = language || 'english';
+    const newFocusedClip = createFocusedClip(startTime, endTime, clipLanguage);
     setFocusedClip(newFocusedClip);
     setShowClipTrimmer(false);
 
-    // Replace the clips array with just the focused clip
+    // Replace the clips array with just the focused clip and update work in progress
     setClips([newFocusedClip]);
     setCurrentClipIndex(0);
+
+    // Initialize work in progress for the new focused clip
+    setWorkInProgressClips(prev => ({
+      ...prev,
+      [newFocusedClip.id]: newFocusedClip
+    }));
 
     toast({
       title: "Focused Clip Mode",
@@ -874,23 +964,51 @@ export default function LinguaClipApp() {
   }, []);
 
   const handleBackToAutoClips = useCallback(() => {
-    if (isAnyClipTranscribing) {
-      toast({variant: "destructive", title: "Action Disabled", description: "Cannot switch clips while transcription is in progress."});
+    // Find the current media source
+    const currentSource = mediaSources.find(source => source.id === activeMediaSourceId);
+    if (!currentSource) {
+      toast({variant: "destructive", title: "Cannot Return to Auto Clips", description: "Current media source not found."});
       return;
     }
 
-    // Regenerate auto clips
+    // Restore media source state
+    setMediaSrc(currentSource.src);
+    setMediaDisplayName(currentSource.displayName);
+    setCurrentSourceType(currentSource.type);
+
+    // Generate new clips based on current media duration
     const newGeneratedClips = generateClips(mediaDuration, clipSegmentationDuration, language);
-    setClips(newGeneratedClips);
-    setCurrentClipIndex(0);
+
+    // Reset all clip-related states
+    setClips(newGeneratedClips.map(clip => ({
+      ...clip,
+      language: language,
+      comparisonResult: null,
+      feedback: null,
+      englishTranslation: null,
+      automatedTranscription: null,
+      userTranscription: null,
+      translation: null,
+      translationTargetLanguage: null,
+      isFocusedClip: false
+    })));
+
+    // Update clips ref immediately
+    clipsRef.current = newGeneratedClips;
+
+    // Reset focused clip mode states
     setFocusedClip(null);
     setShowClipTrimmer(false);
+    setWorkInProgressClips({});
+
+    // Reset to first clip
+    setCurrentClipIndex(0);
 
     toast({
       title: "Returned to Auto Clips",
       description: `Generated ${newGeneratedClips.length} automatic clips.`
     });
-  }, [isAnyClipTranscribing, mediaDuration, clipSegmentationDuration, language, toast]);
+  }, [mediaSources, activeMediaSourceId, mediaDuration, clipSegmentationDuration, language, toast]);
 
   const handleResetAppWithCheck = () => {
     if (isAnyClipTranscribing) {
@@ -929,22 +1047,68 @@ export default function LinguaClipApp() {
       return;
     }
 
-    // Create a new clip with reference to its media source
+    // Check if we're updating an existing session clip
+    const existingClipIndex = sessionClips.findIndex(clip =>
+      clip.startTime === currentClip.startTime &&
+      clip.endTime === currentClip.endTime &&
+      clip.mediaSourceId === activeMediaSourceId
+    );
+
+    // Create a new clip with reference to its media source and all transcription data
     const sessionClip: SessionClip = {
-      ...currentClip,
-      id: generateUniqueId(),
-      displayName: `Clip ${sessionClips.length + 1}`,
-      mediaSourceId: activeMediaSourceId
+      id: existingClipIndex >= 0 ? sessionClips[existingClipIndex].id : generateUniqueId(),
+      startTime: currentClip.startTime,
+      endTime: currentClip.endTime,
+      language: currentClip.language || language,
+      displayName: existingClipIndex >= 0
+        ? sessionClips[existingClipIndex].displayName
+        : `Clip ${sessionClips.length + 1}`,
+      mediaSourceId: activeMediaSourceId,
+      // Ensure all transcription data is properly formatted
+      userTranscription: currentClip.userTranscription || "",
+      automatedTranscription: currentClip.automatedTranscription || null,
+      translation: currentClip.translation || null,
+      translationTargetLanguage: currentClip.translationTargetLanguage || null,
+      englishTranslation: currentClip.englishTranslation || null,
+      comparisonResult: currentClip.comparisonResult || null,
     };
 
-    // Add new clip at the start of the array
-    setSessionClips(prevClips => [sessionClip, ...prevClips]);
-
-    toast({
-      title: "Clip Saved",
-      description: "Clip has been saved to your session. You can now give it a name.",
+    // Update or add the clip
+    setSessionClips(prevClips => {
+      if (existingClipIndex >= 0) {
+        // Update existing clip
+        const newClips = [...prevClips];
+        newClips[existingClipIndex] = sessionClip;
+        return newClips;
+      } else {
+        // Add new clip at the start
+        return [sessionClip, ...prevClips];
+      }
     });
-  }, [currentClip, activeMediaSourceId, sessionClips, toast]);
+
+    // Also update work in progress state
+    setWorkInProgressClips(prev => ({
+      ...prev,
+      [sessionClip.id]: sessionClip
+    }));
+
+    // Only show toast for new clips or AI output updates
+    const isAIOutputUpdate = existingClipIndex >= 0 && (
+      currentClip.automatedTranscription !== sessionClips[existingClipIndex].automatedTranscription ||
+      currentClip.translation !== sessionClips[existingClipIndex].translation ||
+      currentClip.englishTranslation !== sessionClips[existingClipIndex].englishTranslation ||
+      currentClip.comparisonResult !== sessionClips[existingClipIndex].comparisonResult
+    );
+
+    if (existingClipIndex === -1 || isAIOutputUpdate) {
+      toast({
+        title: existingClipIndex >= 0 ? "Clip Updated" : "Clip Saved",
+        description: existingClipIndex >= 0
+          ? "Clip has been updated with the latest AI output."
+          : "Clip has been saved to your session.",
+      });
+    }
+  }, [currentClip, activeMediaSourceId, sessionClips, language, toast]);
 
   const handleRenameClip = useCallback((clipId: string, newName: string) => {
     setSessionClips(prevClips =>
@@ -988,30 +1152,43 @@ export default function LinguaClipApp() {
       setMediaSrc(mediaSource.src);
       setMediaDisplayName(mediaSource.displayName);
       setCurrentSourceType(mediaSource.type);
+      setMediaDuration(mediaSource.duration);
     }
 
-    // Create a new focused clip
-    const loadedClip = {
+    // Create a new focused clip with all necessary data
+    const loadedClip: Clip = {
       ...clipToLoad,
+      id: clipToLoad.id || generateUniqueId(), // Ensure we have a valid ID
       startTime: clipToLoad.startTime,
       endTime: clipToLoad.endTime,
-      userTranscription: clipToLoad.userTranscription || null,
+      language: clipToLoad.language || language,
+      // Ensure all transcription data is properly initialized
+      userTranscription: clipToLoad.userTranscription || "",
       automatedTranscription: clipToLoad.automatedTranscription || null,
       translation: clipToLoad.translation || null,
       translationTargetLanguage: clipToLoad.translationTargetLanguage || null,
+      englishTranslation: clipToLoad.englishTranslation || null,
       comparisonResult: clipToLoad.comparisonResult || null,
+      isFocusedClip: true, // Mark this as a focused clip
     };
 
     // Set this as the only clip and focus on it
     setClips([loadedClip]);
     setCurrentClipIndex(0);
     setFocusedClip(loadedClip);
+    clipsRef.current = [loadedClip]; // Update the ref immediately
+
+    // Also update work in progress state
+    setWorkInProgressClips(prev => ({
+      ...prev,
+      [loadedClip.id]: loadedClip
+    }));
 
     toast({
       title: "Clip Loaded",
-      description: `Loaded clip (${formatSecondsToMMSS(clipToLoad.startTime)} - ${formatSecondsToMMSS(clipToLoad.endTime)})`,
+      description: `Loaded "${clipToLoad.displayName || 'Unnamed Clip'}" (${formatSecondsToMMSS(clipToLoad.startTime)} - ${formatSecondsToMMSS(clipToLoad.endTime)})`,
     });
-  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, toast]);
+  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, language, toast]);
 
   const handleRemoveFromSession = useCallback((clipId: string) => {
     setSessionClips(prevClips => prevClips.filter(clip => clip.id !== clipId));
@@ -1176,11 +1353,15 @@ export default function LinguaClipApp() {
         {/* Session Storage Drawer */}
         <div
           id="session-drawer"
-          className="fixed bottom-0 left-0 right-0 z-50 transform translate-y-full transition-transform duration-300 ease-in-out"
-          style={{ maxHeight: 'calc(100vh - 120px)' }}
+          className="fixed inset-x-0 bottom-0 z-50 transform translate-y-full transition-transform duration-300 ease-in-out bg-background"
+          style={{
+            height: 'calc(100vh - 120px)',
+            maxHeight: 'calc(100vh - 120px)',
+            willChange: 'transform'
+          }}
         >
-          <div className="bg-background border-t border-border rounded-t-xl shadow-lg h-full flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-border bg-background">
+          <div className="h-full flex flex-col border-t border-border rounded-t-xl shadow-lg">
+            <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 z-10">
               <div className="flex items-center gap-2">
                 <List className="h-5 w-5" />
                 <h3 className="text-lg font-semibold">Saved Clips</h3>
@@ -1211,12 +1392,13 @@ export default function LinguaClipApp() {
                 onRenameClip={handleRenameClip}
                 disabled={isLoading || isSaving || isAnyClipTranscribing}
                 mediaSources={mediaSources}
+                focusedClipId={focusedClip?.id || null}
               />
             </div>
           </div>
         </div>
       </main>
-      <footer className="py-4 px-4 md:px-8 border-t border-border text-center bg-background relative z-[51]">
+      <footer className="py-4 px-4 md:px-8 border-t border-border text-center bg-background relative z-40">
         <div className="mb-2">
           <span className="text-xs text-muted-foreground">
             By using this service you accept the{' '}

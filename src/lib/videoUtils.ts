@@ -191,17 +191,31 @@ async function extractAudioServerSide(
 }
 
 export async function extractAudioFromVideoSegment(
-  mediaSrcUrl: string,
+  mediaSrcUrl: string | undefined,
   startTime: number,
   endTime: number,
   sourceType: 'audio' | 'video' = 'video'
 ): Promise<string | null> {
+  if (!mediaSrcUrl) {
+    throw new Error("No media source URL provided for audio extraction");
+  }
+
+  // Validate time parameters
+  if (typeof startTime !== 'number' || typeof endTime !== 'number' || startTime >= endTime) {
+    throw new Error(`Invalid time parameters: start=${startTime}, end=${endTime}`);
+  }
+
   // Check if we should use server-side extraction
   const shouldUseServerSide = isMobileBrowser() || !isCaptureStreamSupported();
 
   if (shouldUseServerSide) {
     try {
-      console.log('Mobile browser detected, using server-side audio extraction');
+      console.log('Using server-side audio extraction', {
+        startTime,
+        endTime,
+        sourceType,
+        isBlobUrl: mediaSrcUrl.startsWith('blob:')
+      });
       return await extractAudioServerSide(mediaSrcUrl, startTime, endTime, sourceType);
     } catch (error) {
       console.error('Server-side audio extraction failed:', error);
@@ -224,6 +238,9 @@ export async function extractAudioFromVideoSegment(
       mediaElement.removeEventListener('loadedmetadata', onLoadedMetadata);
       mediaElement.removeEventListener('error', onErrorHandler);
       mediaElement.removeEventListener('stalled', onErrorHandler);
+      if (!mediaElement.paused) {
+        mediaElement.pause();
+      }
     };
 
     const onErrorHandler = (event: Event | string) => {
@@ -306,7 +323,7 @@ export async function extractAudioFromVideoSegment(
           cleanup();
           if (chunks.length === 0) {
             console.warn("Audio extraction: No data recorded. This might happen if the media segment is too short, silent, or playback didn't occur correctly.");
-            reject(new Error("No audio data recorded from the segment."));
+            reject(new Error("No audio data recorded from the segment. Please ensure the media is playing correctly and contains audio."));
             return;
           }
           const blob = new Blob(chunks, { type: recorder.mimeType });
@@ -329,25 +346,29 @@ export async function extractAudioFromVideoSegment(
 
         recorder.start();
         mediaElement.muted = true;
-        mediaElement.play().then(() => {
-          console.log(`Temporary ${sourceType} playback started for recording clip: ${startTime}s - ${endTime}s.`);
-          setTimeout(() => {
+
+        // Add a small delay before playing to ensure the recorder is ready
+        setTimeout(() => {
+          mediaElement.play().then(() => {
+            console.log(`Temporary ${sourceType} playback started for recording clip: ${startTime}s - ${endTime}s.`);
+            setTimeout(() => {
+              if (recorder.state === "recording") {
+                console.log(`Stopping MediaRecorder for clip: ${startTime}s - ${endTime}s.`);
+                recorder.stop();
+              }
+              if (!mediaElement.paused) {
+                mediaElement.pause();
+              }
+            }, segmentDuration + 500);
+          }).catch(playError => {
+            cleanup();
+            console.warn(`Error playing temporary ${sourceType} for recording:`, playError);
             if (recorder.state === "recording") {
-              console.log(`Stopping MediaRecorder for clip: ${startTime}s - ${endTime}s.`);
               recorder.stop();
             }
-            if (!mediaElement.paused) {
-               mediaElement.pause();
-            }
-          }, segmentDuration + 500);
-        }).catch(playError => {
-          cleanup();
-          console.warn(`Error playing temporary ${sourceType} for recording:`, playError);
-          if (recorder.state === "recording") {
-            recorder.stop();
-          }
-          reject(new Error(`Failed to play ${sourceType} for audio extraction: ${(playError as Error).message}. This can happen if the media format is not fully supported or due to browser restrictions.`));
-        });
+            reject(new Error(`Failed to play ${sourceType} for audio extraction: ${(playError as Error).message}. This can happen if the media format is not fully supported or due to browser restrictions.`));
+          });
+        }, 100);
 
       } catch (error) {
         cleanup();

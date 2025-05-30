@@ -60,10 +60,16 @@ const MIN_CHAR_THRESHOLD = 15;
 // Helper function to determine if AI tools should be enabled
 const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null): boolean => {
   const hasMinimumUserInput = userInput.trim().length >= MIN_CHAR_THRESHOLD;
+  const hasExistingTranscription = Boolean(
+    automatedTranscription &&
+    !automatedTranscription.startsWith("Error:") &&
+    automatedTranscription !== "Transcribing..."
+  );
 
-  // AI tools unlock ONLY when user has typed enough characters
-  // Automated transcription availability should not unlock AI tools
-  return hasMinimumUserInput;
+  // AI tools unlock when either:
+  // 1. User has typed enough characters
+  // 2. There is an existing successful transcription
+  return hasMinimumUserInput || hasExistingTranscription;
 };
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -291,13 +297,17 @@ export default function TranscriptionWorkspace({
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [hasUserManuallyChangedTab, setHasUserManuallyChangedTab] = useState(false);
+  const [lastUserSelectedTab, setLastUserSelectedTab] = useState<string>("manual");
+  const [isTranscriptionComplete, setIsTranscriptionComplete] = useState(false);
+  const [isTranscriptionInProgress, setIsTranscriptionInProgress] = useState(false);
+  const [localTranscribingState, setLocalTranscribingState] = useState<string | null>(null);
   const { toast } = useToast();
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
   const [isCurrentClipPlaying, setIsCurrentClipPlaying] = useState(false);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState(currentClip?.startTime || 0);
   const [isLooping, setIsLooping] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [translationTargetLanguage, setTranslationTargetLanguage] = useState("english");
+  const [translationTargetLanguage, setTranslationTargetLanguage] = useState(currentClip.translationTargetLanguage || "english");
 
   // Preview clip state
   const [previewClip, setPreviewClip] = useState<{ startTime: number; endTime: number } | null>(null);
@@ -307,39 +317,81 @@ export default function TranscriptionWorkspace({
     setCurrentPlaybackTime(time);
   }, []);
 
+  // Reset to manual tab when media source changes
+  useEffect(() => {
+    if (mediaSrc) {
+      setActiveTab("manual");
+      setHasUserManuallyChangedTab(false);
+      setLastUserSelectedTab("manual");
+      setIsTranscriptionComplete(false);
+      setIsTranscriptionInProgress(false);
+      // Reset user input when media changes
+      setUserTranscriptionInput("");
+    }
+  }, [mediaSrc]);
+
+  // Reset states when clip changes
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
-  }, [currentClip]);
+    setTranslationTargetLanguage(currentClip.translationTargetLanguage || "english");
+    setIsTranscriptionComplete(false);
+    setIsTranscriptionInProgress(false);
+
+    // Only reset tab if there's no transcription data
+    if (!currentClip.automatedTranscription || currentClip.automatedTranscription === "Transcribing...") {
+      setActiveTab("manual");
+      setHasUserManuallyChangedTab(false);
+      setLastUserSelectedTab("manual");
+    } else {
+      // If there is transcription data, restore the last user selected tab
+      setActiveTab(lastUserSelectedTab);
+    }
+  }, [currentClip.id]);
+
+  // Watch for transcription state changes
+  useEffect(() => {
+    if (currentClip.automatedTranscription === "Transcribing...") {
+      setIsTranscriptionInProgress(true);
+      setIsTranscriptionComplete(false);
+    } else if (currentClip.automatedTranscription &&
+        !currentClip.automatedTranscription.startsWith("Error:") &&
+        currentClip.automatedTranscription !== "Transcribing...") {
+      setIsTranscriptionComplete(true);
+      setIsTranscriptionInProgress(false);
+    } else {
+      setIsTranscriptionComplete(false);
+      setIsTranscriptionInProgress(false);
+    }
+  }, [currentClip.automatedTranscription]);
 
   // Custom tab change handler to track manual user interactions
   const handleTabChange = useCallback((newTab: string) => {
-    setActiveTab(newTab);
-    setHasUserManuallyChangedTab(true);
-  }, []);
-
-  // Reset manual tab change tracking when switching clips
-  useEffect(() => {
-    setHasUserManuallyChangedTab(false);
-  }, [currentClip.id]);
-
-  // Separate useEffect for tab switching logic to avoid circular dependencies
-  useEffect(() => {
-    // Only auto-switch tabs if the user hasn't manually changed them
-    if (hasUserManuallyChangedTab) {
-      // If user manually changed tabs, only force them back to manual if AI tools are disabled
-      // and they're currently on the AI tab (to prevent getting stuck)
-      const shouldForceToManual = activeTab === "ai" &&
-        !shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
-
-      if (shouldForceToManual) {
-        setActiveTab("manual");
-        setHasUserManuallyChangedTab(false); // Reset so they can try again later
-      }
+    if (isTranscriptionInProgress) {
+      // Don't allow tab changes during transcription
       return;
     }
+    setActiveTab(newTab);
+    setHasUserManuallyChangedTab(true);
+    setLastUserSelectedTab(newTab);
+  }, [isTranscriptionInProgress]);
 
-    // No auto-switching to AI tab - user must manually switch after typing 15+ characters
-  }, [activeTab, userTranscriptionInput, hasUserManuallyChangedTab, currentClip.automatedTranscription]);
+  // Modified tab switching logic
+  useEffect(() => {
+    // Only switch tabs in specific cases:
+    // 1. When user hasn't manually changed tabs AND
+    // 2. When AI tools should be locked (not enough user input and no transcription)
+    if (!hasUserManuallyChangedTab) {
+      const aiToolsEnabled = shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
+      if (!aiToolsEnabled && activeTab === "ai") {
+        setActiveTab("manual");
+      }
+    } else if (isTranscriptionComplete && !isTranscriptionInProgress) {
+      // If transcription is complete and user had previously selected AI tab, restore it
+      if (lastUserSelectedTab === "ai") {
+        setActiveTab("ai");
+      }
+    }
+  }, [hasUserManuallyChangedTab, userTranscriptionInput, activeTab, isTranscriptionComplete, isTranscriptionInProgress, lastUserSelectedTab, currentClip.automatedTranscription]);
 
   // Separate useEffect for resetting playback time only when clip changes
   useEffect(() => {
@@ -367,6 +419,11 @@ export default function TranscriptionWorkspace({
     const newValue = e.target.value;
     setUserTranscriptionInput(newValue);
     onUserTranscriptionChange(currentClip.id, newValue);
+
+    // Auto-save if this is a saved clip (when canSaveToSession is false), but don't show toast
+    if (onSaveToSession && !canSaveToSession) {
+      onSaveToSession();
+    }
   };
 
   const handleTranscribe = async () => {
@@ -381,20 +438,55 @@ export default function TranscriptionWorkspace({
       return;
     }
 
+    // Set loading state immediately
+    const clipId = currentClip.id;
+    setLocalTranscribingState(clipId);
+    setIsTranscriptionInProgress(true);
+
     try {
-      await onTranscribeAudio(currentClip.id);
+      await onTranscribeAudio(clipId);
+      // Only auto-save if this is a new clip (not already in session) and canSaveToSession is true
+      if (onSaveToSession && canSaveToSession) {
+        onSaveToSession();
+      }
     } catch (error) {
       console.warn("Transcription error in workspace:", error);
+      toast({
+        variant: "destructive",
+        title: "Transcription Failed",
+        description: "Failed to transcribe the clip. Please try again."
+      });
+    } finally {
+      setLocalTranscribingState(null);
+      setIsTranscriptionInProgress(false);
     }
   };
 
   const handleTranslate = async () => {
-    if (!currentClip.automatedTranscription || currentClip.automatedTranscription.startsWith("Error:") || currentClip.automatedTranscription === "Transcribing...") {
+    if (currentClip.automatedTranscription === null ||
+        currentClip.automatedTranscription === undefined ||
+        currentClip.automatedTranscription.startsWith("Error:") ||
+        currentClip.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Cannot Translate", description: "Please ensure automated transcription is successful first."});
       return;
     }
+
+    // Check if already translated to the target language
+    const existingTranslation = getTranslationForCurrentTarget();
+    if (existingTranslation && !existingTranslation.startsWith("Error:") && existingTranslation !== "Translating...") {
+      toast({
+        title: "Already Translated",
+        description: `This clip has already been translated to ${getLanguageLabel(translationTargetLanguage)}.`
+      });
+      return;
+    }
+
     try {
       await onTranslate(currentClip.id, translationTargetLanguage);
+      // Only auto-save if this is a new clip (not already in session) and canSaveToSession is true
+      if (onSaveToSession && canSaveToSession) {
+        onSaveToSession();
+      }
     } catch (error) {
       console.warn("Translation error in workspace:", error);
     }
@@ -405,12 +497,16 @@ export default function TranscriptionWorkspace({
       toast({variant: "destructive", title: "Cannot Show Corrections", description: "Please ensure automated transcription is successful and you've entered your transcription."});
       return;
     }
-     if (currentClip.automatedTranscription === "Transcribing...") {
+    if (currentClip.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Processing...", description: "Transcription for this clip is in progress. Please wait."});
       return;
     }
     try {
       await onGetCorrections(currentClip.id);
+      // Only auto-save if this is a new clip (not already in session) and canSaveToSession is true
+      if (onSaveToSession && canSaveToSession) {
+        onSaveToSession();
+      }
     } catch (error) {
       console.warn("Corrections error in workspace:", error);
     }
@@ -458,14 +554,14 @@ export default function TranscriptionWorkspace({
 
   // Helper function to get translation for current target language
   const getTranslationForCurrentTarget = (): string | null | undefined => {
-    // If target language is english and we have the legacy englishTranslation field, use it
-    if (translationTargetLanguage === 'english' && currentClip.englishTranslation !== undefined) {
-      return currentClip.englishTranslation;
-    }
-
     // If we have a translation and it matches our target language, use it
     if (currentClip.translation !== undefined && currentClip.translationTargetLanguage === translationTargetLanguage) {
       return currentClip.translation;
+    }
+
+    // If target language is english and we have the legacy englishTranslation field, use it
+    if (translationTargetLanguage === 'english' && currentClip.englishTranslation !== undefined) {
+      return currentClip.englishTranslation;
     }
 
     // No translation available for current target
@@ -493,6 +589,36 @@ export default function TranscriptionWorkspace({
 
   // Determine which clip times to use for the VideoPlayer
   const effectiveClip = previewClip ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime } : currentClip;
+
+  // Add a function to handle saving AI output
+  const handleSaveAIOutput = useCallback(() => {
+    if (!onSaveToSession) return;
+
+    onSaveToSession();
+    toast({
+      title: "AI Output Saved",
+      description: "All transcription, translation, and comparison data has been saved.",
+    });
+  }, [onSaveToSession, toast]);
+
+  // Add back the handleSaveToSessionWithData function
+  const handleSaveToSessionWithData = useCallback(() => {
+    if (!currentClip || !onSaveToSession) return;
+
+    // Ensure we have all the latest data before saving
+    const clipToSave = {
+      ...currentClip,
+      userTranscription: userTranscriptionInput, // Use the current input value
+      automatedTranscription: currentClip.automatedTranscription,
+      translation: currentClip.translation,
+      translationTargetLanguage: currentClip.translationTargetLanguage,
+      englishTranslation: currentClip.englishTranslation,
+      comparisonResult: currentClip.comparisonResult
+    };
+
+    // Call the parent's save function
+    onSaveToSession();
+  }, [currentClip, userTranscriptionInput, onSaveToSession]);
 
   if (!currentClip) {
     return (
@@ -591,7 +717,7 @@ export default function TranscriptionWorkspace({
                       variant="outline"
                       size="sm"
                       onClick={onBackToAutoClips}
-                      disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                      className="hover:bg-primary/10"
                     >
                       Back to Auto Clips
                     </Button>
@@ -605,7 +731,7 @@ export default function TranscriptionWorkspace({
               {/* Save to Session Button */}
               <div className="flex gap-2">
                 <Button
-                  onClick={onSaveToSession}
+                  onClick={handleSaveToSessionWithData}
                   disabled={!canSaveToSession || disableTextarea}
                   variant="secondary"
                   className="flex-1 flex items-center justify-center gap-2 h-auto py-3"
@@ -628,16 +754,6 @@ export default function TranscriptionWorkspace({
                   Saved Clips
                 </Button>
               </div>
-
-              {/* Transcribe Button */}
-              <Button
-                onClick={handleTranscribe}
-                className="w-full"
-                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe Focused Clip"}
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -664,7 +780,12 @@ export default function TranscriptionWorkspace({
                   )}
                 >
                   <Scissors className="mr-2 h-4 w-4" />
-                  {showClipTrimmer ? "Hide Clip Trimmer" : "Create Custom Clip"}
+                  {isAnyClipTranscribing
+                    ? "Create Custom Clip"
+                    : showClipTrimmer
+                      ? "Hide Clip Trimmer"
+                      : "Create Custom Clip"
+                  }
                 </Button>
               )}
 
@@ -693,7 +814,7 @@ export default function TranscriptionWorkspace({
               {/* Save to Session Button */}
               <div className="flex gap-2">
                 <Button
-                  onClick={onSaveToSession}
+                  onClick={handleSaveToSessionWithData}
                   disabled={!canSaveToSession || disableTextarea}
                   variant="secondary"
                   className="flex-1 flex items-center justify-center gap-2 h-auto py-3"
@@ -716,16 +837,6 @@ export default function TranscriptionWorkspace({
                   Saved Clips
                 </Button>
               </div>
-
-              {/* Transcribe Button */}
-              <Button
-                onClick={handleTranscribe}
-                className="w-full"
-                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
-              </Button>
             </div>
           )}
           {isMobileBrowser() && (
@@ -841,7 +952,7 @@ export default function TranscriptionWorkspace({
               <Card>
                 <CardHeader>
                   <CardTitle>Automated Transcription & Analysis</CardTitle>
-                   <CardDescription>View the AI-generated transcription, compare with your input, and translate to your preferred language.</CardDescription>
+                  <CardDescription>View the AI-generated transcription, compare with your input, and translate to your preferred language.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <MediaControls
@@ -862,12 +973,20 @@ export default function TranscriptionWorkspace({
                     focusedClip={focusedClip}
                   />
 
-                  <div>
+                  <div className="space-y-2">
                     <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
+                    <Button
+                      onClick={handleTranscribe}
+                      className="w-full mb-2"
+                      disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                    >
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {isAnyClipTranscribing ? "Transcribing..." : focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
+                    </Button>
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
-                      {isAutomatedTranscriptionLoading ? <ThreeDotsLoader className="mx-auto my-4" /> : null}
-                      {!isAutomatedTranscriptionLoading && currentClip.automatedTranscription ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
-                      {!isAutomatedTranscriptionLoading && !currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Select "{focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}" to generate.</p>}
+                      {currentClip.automatedTranscription === "Transcribing..." && <ThreeDotsLoader className="mx-auto my-4" />}
+                      {currentClip.automatedTranscription && currentClip.automatedTranscription !== "Transcribing..." ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
+                      {!currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe" above to generate.</p>}
                     </ScrollArea>
                   </div>
 

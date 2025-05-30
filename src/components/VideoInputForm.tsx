@@ -50,6 +50,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
       try {
         new URL(url);
         onSourceLoad({ url });
+        setUrl("");
       } catch (error) {
         toast({
           variant: "destructive",

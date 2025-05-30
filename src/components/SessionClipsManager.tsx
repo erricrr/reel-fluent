@@ -8,6 +8,7 @@ import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SessionClip extends Clip {
   displayName?: string;
@@ -23,6 +24,7 @@ interface SessionClipsManagerProps {
   onRenameClip: (clipId: string, newName: string) => void;
   disabled?: boolean;
   mediaSources: { id: string; displayName: string; type: 'video' | 'audio' | 'url' | 'unknown' }[];
+  focusedClipId?: string | null;
 }
 
 export default function SessionClipsManager({
@@ -31,7 +33,8 @@ export default function SessionClipsManager({
   onRemoveFromSession,
   onRenameClip,
   disabled = false,
-  mediaSources
+  mediaSources,
+  focusedClipId = null
 }: SessionClipsManagerProps) {
   const MAX_TOTAL_DURATION = 30 * 60; // 30 minutes in seconds
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
@@ -99,7 +102,7 @@ export default function SessionClipsManager({
                 return (
                   <div
                     key={clip.id}
-                    className="flex flex-col gap-2 p-2 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors"
+                    className="flex flex-col gap-2 p-2 rounded-md border border-primary/20 bg-card"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-grow space-y-1">
@@ -164,10 +167,16 @@ export default function SessionClipsManager({
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           size="icon"
-                          variant="secondary"
+                          variant={focusedClipId === clip.id ? "default" : "secondary"}
                           onClick={() => onLoadFromSession(clip)}
                           disabled={disabled || !mediaSource}
                           title={!mediaSource ? "Media source not available" : "Focus on this clip"}
+                          className={cn(
+                            "transition-all duration-200",
+                            focusedClipId === clip.id
+                              ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105"
+                              : "hover:bg-primary/20 hover:text-primary hover:scale-105"
+                          )}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
