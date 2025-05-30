@@ -864,8 +864,8 @@ export default function LinguaClipApp() {
     setCurrentClipIndex(0);
 
     toast({
-      title: "Focused Clip Created",
-      description: `Created focused clip from ${Math.round(startTime)}s to ${Math.round(endTime)}s. All AI functionality will now work on this clip.`
+      title: "Focused Clip Mode",
+      description: `Now working with a custom clip from ${formatSecondsToMMSS(startTime)} to ${formatSecondsToMMSS(endTime)}`
     });
   }, [language, toast]);
 
