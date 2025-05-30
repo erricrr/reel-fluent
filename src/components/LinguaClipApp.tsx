@@ -1152,7 +1152,6 @@ export default function LinguaClipApp() {
       setMediaSrc(mediaSource.src);
       setMediaDisplayName(mediaSource.displayName);
       setCurrentSourceType(mediaSource.type);
-      setMediaDuration(mediaSource.duration);
     }
 
     // Create a new focused clip with all necessary data
