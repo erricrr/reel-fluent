@@ -74,7 +74,7 @@ export default function SessionClipsManager({
   }
 
   return (
-    <Card className="shadow-sm border-primary/20">
+    <Card className="shadow-sm border-primary/20 w-full">
       <CardHeader className="pb-3 bg-primary/5">
         <CardTitle className="text-sm font-medium flex items-center justify-between">
           <div className="flex items-center gap-2 text-primary">
@@ -87,120 +87,117 @@ export default function SessionClipsManager({
         </CardTitle>
         <Progress value={durationProgress} className="h-2" />
       </CardHeader>
-      <CardContent>
-        <div className="relative">
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-2">
-              {sessionClips.map((clip) => {
-                const mediaSource = clip.mediaSourceId
-                  ? mediaSources.find(s => s.id === clip.mediaSourceId)
-                  : null;
+      <CardContent className="overflow-y-auto">
+        <div className="space-y-2">
+          {sessionClips.map((clip) => {
+            const mediaSource = clip.mediaSourceId
+              ? mediaSources.find(s => s.id === clip.mediaSourceId)
+              : null;
 
-                const SourceIcon: LucideIcon = mediaSource?.type === 'audio' ? FileAudio : FileVideo;
-                const sourceName = mediaSource?.displayName || clip.originalMediaName || 'Unknown Source';
+            const SourceIcon: LucideIcon = mediaSource?.type === 'audio' ? FileAudio : FileVideo;
+            const sourceName = mediaSource?.displayName || clip.originalMediaName || 'Unknown Source';
 
-                return (
-                  <div
-                    key={clip.id}
-                    className="flex flex-col gap-2 p-2 rounded-md border border-primary/20 bg-card"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex-grow space-y-1">
-                        {editingClipId === clip.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveEdit(clip.id);
-                                } else if (e.key === 'Escape') {
-                                  handleCancelEdit();
-                                }
-                              }}
-                              placeholder="Enter clip name"
-                              className="flex-grow"
-                              autoFocus
-                            />
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleSaveEdit(clip.id)}
-                              disabled={!editingName.trim()}
-                            >
-                              <Save className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={handleCancelEdit}
-                            >
-                              <XIcon className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium truncate">
-                              {clip.displayName || "Unnamed Clip"}
-                            </h3>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => handleStartEdit(clip)}
-                              disabled={disabled}
-                              className="h-6 w-6"
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <SourceIcon className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate" title={sourceName}>
-                            {sourceName}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+            return (
+              <div
+                key={clip.id}
+                className="flex flex-col gap-2 p-2 w-full rounded-md border border-primary/20 bg-card"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-grow space-y-1">
+                    {editingClipId === clip.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveEdit(clip.id);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                          placeholder="Enter clip name"
+                          className="flex-grow"
+                          autoFocus
+                        />
                         <Button
                           size="icon"
-                          variant={focusedClipId === clip.id ? "default" : "secondary"}
-                          onClick={() => onLoadFromSession(clip)}
-                          disabled={disabled || !mediaSource}
-                          title={!mediaSource ? "Media source not available" : "Focus on this clip"}
-                          className={cn(
-                            "transition-all duration-200",
-                            focusedClipId === clip.id
-                              ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105"
-                              : "hover:bg-primary/20 hover:text-primary hover:scale-105"
-                          )}
+                          variant="ghost"
+                          onClick={() => handleSaveEdit(clip.id)}
+                          disabled={!editingName.trim()}
                         >
-                          <Eye className="h-4 w-4" />
+                          <Save className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => onRemoveFromSession(clip.id)}
-                          disabled={disabled}
+                          onClick={handleCancelEdit}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <XIcon className="h-4 w-4" />
                         </Button>
                       </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium break-words">
+                          {clip.displayName || "Unnamed Clip"}
+                        </h3>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleStartEdit(clip)}
+                          disabled={disabled}
+                          className="h-6 w-6"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <SourceIcon className="h-4 w-4 flex-shrink-0" />
+                      <span className="break-words" title={sourceName}>
+                        {sourceName}
+                      </span>
                     </div>
+                    <p className="text-sm text-muted-foreground">
+                      {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
+                    </p>
                   </div>
-                );
-              })}
-
-              {sessionClips.length === 0 && (
-                <div className="text-center py-4 text-sm text-muted-foreground">
-                  No clips saved in session
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      size="icon"
+                      variant={focusedClipId === clip.id ? "default" : "secondary"}
+                      onClick={() => onLoadFromSession(clip)}
+                      disabled={disabled || !mediaSource}
+                      title={!mediaSource ? "Media source not available" : "Focus on this clip"}
+                      className={cn(
+                        "transition-all duration-200",
+                        focusedClipId === clip.id
+                          ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105"
+                          : "hover:bg-primary/20 hover:text-primary hover:scale-105"
+                      )}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => onRemoveFromSession(clip.id)}
+                      disabled={disabled}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              )}
+              </div>
+            );
+          })}
+
+          {sessionClips.length === 0 && (
+            <div className="text-center py-4 text-sm text-muted-foreground">
+              <p>No clips saved in this session yet.</p>
+              <p className="text-sm mt-2">Save clips to access them quickly without re-uploading media.</p>
             </div>
-          </ScrollArea>
+          )}
         </div>
       </CardContent>
     </Card>
