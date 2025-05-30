@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Save, Trash2, Edit2, FileAudio, FileVideo, Play, X as XIcon } from "lucide-react";
+import { Film, Save, Trash2, Edit2, FileAudio, FileVideo, Play, X as XIcon, Eye } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { Input } from "@/components/ui/input";
@@ -167,9 +167,9 @@ export default function SessionClipsManager({
                           variant="secondary"
                           onClick={() => onLoadFromSession(clip)}
                           disabled={disabled || !mediaSource}
-                          title={!mediaSource ? "Media source not available" : "Load clip"}
+                          title={!mediaSource ? "Media source not available" : "Focus on this clip"}
                         >
-                          <Play className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
