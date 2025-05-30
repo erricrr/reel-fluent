@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -50,6 +50,8 @@ interface TranscriptionWorkspaceProps {
   onCreateFocusedClip?: (startTime: number, endTime: number) => void;
   onToggleClipTrimmer?: () => void;
   onBackToAutoClips?: () => void;
+  onSaveToSession: () => void;
+  canSaveToSession: boolean;
 }
 
 // Character threshold constants
@@ -100,6 +102,163 @@ const isMobileBrowser = (): boolean => {
   return isMobile || isTablet;
 };
 
+// Add this component before the main TranscriptionWorkspace component
+const MediaControls = ({
+  effectiveClip,
+  currentPlaybackTime,
+  isCurrentClipPlaying,
+  isLooping,
+  setIsLooping,
+  playbackRate,
+  handleSeek,
+  handlePlaybackRateChange,
+  skipBackward,
+  skipForward,
+  togglePlayPause,
+  disableTextarea,
+  mediaSrc,
+  currentClipIndex,
+  focusedClip,
+}: {
+  effectiveClip: Clip;
+  currentPlaybackTime: number;
+  isCurrentClipPlaying: boolean;
+  isLooping: boolean;
+  setIsLooping: (value: boolean) => void;
+  playbackRate: number;
+  handleSeek: (value: number[]) => void;
+  handlePlaybackRateChange: (value: string) => void;
+  skipBackward: () => void;
+  skipForward: () => void;
+  togglePlayPause: () => void;
+  disableTextarea: boolean;
+  mediaSrc?: string;
+  currentClipIndex: number;
+  focusedClip?: Clip | null;
+}) => (
+  <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
+    {/* Timeline Controls Header */}
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
+      <span className="text-sm font-medium text-foreground">
+        {isCurrentClipPlaying ? "Playing" : "Paused"} - {focusedClip ? "Focused Clip" : `Clip ${currentClipIndex + 1}`}
+      </span>
+      <span className="text-sm font-mono text-primary">
+        {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
+      </span>
+    </div>
+
+    {/* Timeline Slider */}
+    <div className="space-y-2">
+      <Slider
+        value={[Math.max(effectiveClip.startTime, currentPlaybackTime)]}
+        onValueChange={handleSeek}
+        min={effectiveClip.startTime}
+        max={effectiveClip.endTime}
+        step={0.1}
+        className="w-full"
+        disabled={disableTextarea || !mediaSrc}
+      />
+    </div>
+
+    {/* Transport Controls */}
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      {/* Mobile: Top row with Loop and Speed, Desktop: Left side with Loop */}
+      <div className="flex items-center justify-between sm:justify-start sm:space-x-2">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id={`loop-toggle-${effectiveClip.id}`}
+            checked={isLooping}
+            onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
+            disabled={disableTextarea || !mediaSrc}
+          />
+          <Label htmlFor={`loop-toggle-${effectiveClip.id}`} className="text-sm font-normal text-muted-foreground">
+            Loop
+          </Label>
+        </div>
+
+        {/* Speed selector - shows on mobile top row, hidden on desktop (will show in right section) */}
+        <div className="flex items-center space-x-2 sm:hidden">
+          <Select
+            value={playbackRate.toString()}
+            onValueChange={handlePlaybackRateChange}
+            disabled={disableTextarea || !mediaSrc}
+          >
+            <SelectTrigger className="w-20 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0.25">0.25x</SelectItem>
+              <SelectItem value="0.5">0.5x</SelectItem>
+              <SelectItem value="0.75">0.75x</SelectItem>
+              <SelectItem value="1">1x</SelectItem>
+              <SelectItem value="1.25">1.25x</SelectItem>
+              <SelectItem value="1.5">1.5x</SelectItem>
+              <SelectItem value="1.75">1.75x</SelectItem>
+              <SelectItem value="2">2x</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Mobile: Bottom row with play controls, Desktop: Center with play controls */}
+      <div className="flex items-center justify-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={skipBackward}
+          disabled={disableTextarea || !mediaSrc}
+          aria-label="Skip back 5 seconds"
+        >
+          <SkipBack className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={togglePlayPause}
+          disabled={disableTextarea || !mediaSrc}
+          aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
+          className="px-4"
+        >
+          {isCurrentClipPlaying ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={skipForward}
+          disabled={disableTextarea || !mediaSrc}
+          aria-label="Skip forward 5 seconds"
+        >
+          <SkipForward className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Desktop only: Right side with speed selector */}
+      <div className="hidden sm:flex items-center space-x-2">
+        <span className="text-xs text-muted-foreground">Speed</span>
+        <Select
+          value={playbackRate.toString()}
+          onValueChange={handlePlaybackRateChange}
+          disabled={disableTextarea || !mediaSrc}
+        >
+          <SelectTrigger className="w-20 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0.25">0.25x</SelectItem>
+            <SelectItem value="0.5">0.5x</SelectItem>
+            <SelectItem value="0.75">0.75x</SelectItem>
+            <SelectItem value="1">1x</SelectItem>
+            <SelectItem value="1.25">1.25x</SelectItem>
+            <SelectItem value="1.5">1.5x</SelectItem>
+            <SelectItem value="1.75">1.75x</SelectItem>
+            <SelectItem value="2">2x</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  </div>
+);
+
 export default function TranscriptionWorkspace({
   currentClip,
   clips,
@@ -126,6 +285,8 @@ export default function TranscriptionWorkspace({
   onCreateFocusedClip,
   onToggleClipTrimmer,
   onBackToAutoClips,
+  onSaveToSession,
+  canSaveToSession,
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
@@ -407,6 +568,19 @@ export default function TranscriptionWorkspace({
             onPlayStateChange={setIsCurrentClipPlaying}
             isLooping={isLooping}
           />
+
+          {/* Transcribe Button - Only show outside focused clip mode */}
+          {!focusedClip && (
+            <Button
+              onClick={handleTranscribe}
+              className="w-full"
+              disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
+            </Button>
+          )}
+
           {/* Clip Controls - Show different UI based on focused clip mode */}
           {focusedClip ? (
             <div className="space-y-4">
@@ -432,6 +606,16 @@ export default function TranscriptionWorkspace({
                   Working on your custom clip: {formatSecondsToMMSS(focusedClip.startTime)} - {formatSecondsToMMSS(focusedClip.endTime)}
                 </p>
               </div>
+
+              {/* Transcribe Button for focused clip */}
+              <Button
+                onClick={handleTranscribe}
+                className="w-full"
+                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {isAutomatedTranscriptionLoading ? "Transcribing..." : "Transcribe Focused Clip"}
+              </Button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -481,16 +665,19 @@ export default function TranscriptionWorkspace({
                 formatSecondsToMMSS={formatSecondsToMMSS}
                 disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
               />
+
+              {/* Save to Session Button */}
+              <Button
+                onClick={onSaveToSession}
+                disabled={!canSaveToSession || disableTextarea}
+                variant="secondary"
+                className="w-full flex items-center justify-center gap-2 h-auto py-3"
+              >
+                <Save className="h-4 w-4" />
+                Save Current Clip to Session
+              </Button>
             </div>
           )}
-          <Button
-            onClick={handleTranscribe}
-            className="w-full"
-            disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            {isAutomatedTranscriptionLoading ? "Transcribing..." : focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
-          </Button>
           {isMobileBrowser() && (
             <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-2 rounded border border-blue-200 dark:border-blue-800">
               <span className="font-medium text-blue-700 dark:text-blue-300">📱 Mobile Device Detected:</span>
@@ -546,127 +733,23 @@ export default function TranscriptionWorkspace({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                   <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
-                      {/* Timeline Controls Header */}
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
-                        <span className="text-sm font-medium text-foreground">
-                            {isCurrentClipPlaying ? "Playing" : "Paused"} - {focusedClip ? "Focused Clip" : `Clip ${currentClipIndex + 1}`}
-                        </span>
-                        <span className="text-sm font-mono text-primary">
-                            {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
-                        </span>
-                      </div>
-
-                      {/* Timeline Slider */}
-                      <div className="space-y-2">
-                        <Slider
-                          value={[Math.max(effectiveClip.startTime, currentPlaybackTime)]}
-                          onValueChange={handleSeek}
-                          min={effectiveClip.startTime}
-                          max={effectiveClip.endTime}
-                          step={0.1}
-                          className="w-full"
-                          disabled={disableTextarea || !mediaSrc}
-                        />
-                      </div>
-
-                      {/* Transport Controls */}
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                        {/* Mobile: Top row with Loop and Speed, Desktop: Left side with Loop */}
-                        <div className="flex items-center justify-between sm:justify-start sm:space-x-2">
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`loop-toggle-${currentClip.id}`}
-                              checked={isLooping}
-                              onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
-                              disabled={disableTextarea || !mediaSrc}
-                            />
-                            <Label htmlFor={`loop-toggle-${currentClip.id}`} className="text-sm font-normal text-muted-foreground">
-                              Loop
-                            </Label>
-                          </div>
-
-                          {/* Speed selector - shows on mobile top row, hidden on desktop (will show in right section) */}
-                          <div className="flex items-center space-x-2 sm:hidden">
-                            <Select
-                              value={playbackRate.toString()}
-                              onValueChange={handlePlaybackRateChange}
-                              disabled={disableTextarea || !mediaSrc}
-                            >
-                              <SelectTrigger className="w-20 h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0.25">0.25x</SelectItem>
-                                <SelectItem value="0.5">0.5x</SelectItem>
-                                <SelectItem value="0.75">0.75x</SelectItem>
-                                <SelectItem value="1">1x</SelectItem>
-                                <SelectItem value="1.25">1.25x</SelectItem>
-                                <SelectItem value="1.5">1.5x</SelectItem>
-                                <SelectItem value="1.75">1.75x</SelectItem>
-                                <SelectItem value="2">2x</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {/* Mobile: Bottom row with play controls, Desktop: Center with play controls */}
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={skipBackward}
-                              disabled={disableTextarea || !mediaSrc}
-                              aria-label="Skip back 5 seconds"
-                          >
-                              <SkipBack className="h-4 w-4" />
-                          </Button>
-                          <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={togglePlayPause}
-                              disabled={disableTextarea || !mediaSrc}
-                              aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
-                              className="px-4"
-                          >
-                              {isCurrentClipPlaying ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
-                          </Button>
-                          <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={skipForward}
-                              disabled={disableTextarea || !mediaSrc}
-                              aria-label="Skip forward 5 seconds"
-                          >
-                              <SkipForward className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        {/* Desktop only: Right side with speed selector */}
-                        <div className="hidden sm:flex items-center space-x-2">
-                          <span className="text-xs text-muted-foreground">Speed</span>
-                          <Select
-                            value={playbackRate.toString()}
-                            onValueChange={handlePlaybackRateChange}
-                            disabled={disableTextarea || !mediaSrc}
-                          >
-                            <SelectTrigger className="w-20 h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0.25">0.25x</SelectItem>
-                              <SelectItem value="0.5">0.5x</SelectItem>
-                              <SelectItem value="0.75">0.75x</SelectItem>
-                              <SelectItem value="1">1x</SelectItem>
-                              <SelectItem value="1.25">1.25x</SelectItem>
-                              <SelectItem value="1.5">1.5x</SelectItem>
-                              <SelectItem value="1.75">1.75x</SelectItem>
-                              <SelectItem value="2">2x</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                  </div>
+                  <MediaControls
+                    effectiveClip={effectiveClip}
+                    currentPlaybackTime={currentPlaybackTime}
+                    isCurrentClipPlaying={isCurrentClipPlaying}
+                    isLooping={isLooping}
+                    setIsLooping={setIsLooping}
+                    playbackRate={playbackRate}
+                    handleSeek={handleSeek}
+                    handlePlaybackRateChange={handlePlaybackRateChange}
+                    skipBackward={skipBackward}
+                    skipForward={skipForward}
+                    togglePlayPause={togglePlayPause}
+                    disableTextarea={disableTextarea}
+                    mediaSrc={mediaSrc}
+                    currentClipIndex={currentClipIndex}
+                    focusedClip={focusedClip}
+                  />
 
                   <Textarea
                     className="min-h-24 resize-y"
@@ -711,6 +794,24 @@ export default function TranscriptionWorkspace({
                    <CardDescription>View the AI-generated transcription, compare with your input, and translate to your preferred language.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  <MediaControls
+                    effectiveClip={effectiveClip}
+                    currentPlaybackTime={currentPlaybackTime}
+                    isCurrentClipPlaying={isCurrentClipPlaying}
+                    isLooping={isLooping}
+                    setIsLooping={setIsLooping}
+                    playbackRate={playbackRate}
+                    handleSeek={handleSeek}
+                    handlePlaybackRateChange={handlePlaybackRateChange}
+                    skipBackward={skipBackward}
+                    skipForward={skipForward}
+                    togglePlayPause={togglePlayPause}
+                    disableTextarea={disableTextarea}
+                    mediaSrc={mediaSrc}
+                    currentClipIndex={currentClipIndex}
+                    focusedClip={focusedClip}
+                  />
+
                   <div>
                     <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                     <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">

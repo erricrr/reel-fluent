@@ -27,6 +27,7 @@ export interface Clip {
   comparisonResult?: CorrectionToken[] | null;
   language?: string;
   isFocusedClip?: boolean; // Indicates if this is a user-created focused clip
+  displayName?: string; // Optional display name for session clips
 }
 
 export function generateClips(duration: number, clipLength: number, language: string): Clip[] {

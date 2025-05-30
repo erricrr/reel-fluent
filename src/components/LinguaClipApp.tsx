@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { FileVideo, X as XIcon, FileAudio, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, createFocusedClip, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
+import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { transcribeAudio } from "@/ai/flows/transcribe-audio";
 import { translateTranscription } from "@/ai/flows/translate-transcription-flow"; // New import
 import { compareTranscriptions, type CorrectionToken } from "@/ai/flows/compare-transcriptions-flow";
@@ -19,8 +20,100 @@ import { useAuth } from '@/contexts/AuthContext';
 import { saveMediaItemAction } from '@/app/actions';
 import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo, type ProgressCallback } from '@/lib/youtubeUtils';
 import { Progress } from "@/components/ui/progress";
+import SessionClipsManager from './SessionClipsManager';
 
 const MAX_MEDIA_DURATION_MINUTES = 30;
+
+interface MediaSource {
+  id: string;
+  src: string;
+  displayName: string;
+  type: 'video' | 'audio' | 'url' | 'unknown';
+  duration: number;
+}
+
+interface SessionClip extends Clip {
+  displayName?: string;
+  mediaSourceId?: string;  // Make optional for backward compatibility
+  // Legacy fields for backward compatibility
+  originalMediaName?: string;
+  mediaSrc?: string;
+  sourceType?: 'video' | 'audio' | 'url' | 'unknown';
+}
+
+const MediaSourceList = ({
+  sources,
+  activeSourceId,
+  onSelectSource,
+  onRemoveSource,
+  disabled
+}: {
+  sources: MediaSource[];
+  activeSourceId: string | null;
+  onSelectSource: (sourceId: string) => void;
+  onRemoveSource: (sourceId: string) => void;
+  disabled: boolean;
+}) => {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium text-muted-foreground">Media Sources ({sources.length}/3)</h3>
+      <div className="space-y-2">
+        {sources.map((source) => (
+          <div
+            key={source.id}
+            className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${
+              source.id === activeSourceId
+                ? 'border-primary bg-primary/10'
+                : 'border-border bg-muted/50'
+            }`}
+          >
+            <button
+              className="flex items-center gap-3 min-w-0 flex-grow text-left"
+              onClick={() => onSelectSource(source.id)}
+              disabled={disabled}
+            >
+              {source.type === 'audio' ? (
+                <FileAudio className="h-5 w-5 flex-shrink-0" />
+              ) : (
+                <FileVideo className="h-5 w-5 flex-shrink-0" />
+              )}
+              <span className="truncate text-sm" title={source.displayName}>
+                {source.displayName}
+              </span>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemoveSource(source.id);
+              }}
+              disabled={disabled}
+              className="flex-shrink-0"
+            >
+              <XIcon className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const YouTubeProcessingLoader = ({ status }: { status: string }) => (
+  <div className="mt-4 transition-all duration-300 ease-in-out">
+    <div className="p-4 border border-primary/20 rounded-lg bg-primary/5">
+      <div className="flex flex-col items-center space-y-3">
+        <div className="flex justify-center space-x-1">
+          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+          <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
+        <p className="text-sm text-muted-foreground text-center">{status}</p>
+      </div>
+    </div>
+  </div>
+);
 
 export default function LinguaClipApp() {
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -57,6 +150,12 @@ export default function LinguaClipApp() {
   const { toast } = useToast();
 
   const isYouTubeVideo = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
+
+  const [sessionClips, setSessionClips] = useState<SessionClip[]>([]);
+
+  // Add state for media sources
+  const [mediaSources, setMediaSources] = useState<MediaSource[]>([]);
+  const [activeMediaSourceId, setActiveMediaSourceId] = useState<string | null>(null);
 
   useEffect(() => {
     const currentlyTranscribing = clips.some(clip => clip.automatedTranscription === "Transcribing...");
@@ -113,22 +212,22 @@ export default function LinguaClipApp() {
   }, [isAnyClipTranscribing]);
 
   const handleSourceLoad = useCallback(async (source: { file?: File; url?: string }) => {
-    const localProcessingId = processingIdRef.current + 1;
-    processingIdRef.current = localProcessingId;
-
-    if (objectUrlRef.current) {
-      console.log("LinguaClipApp: handleSourceLoad revoking PREVIOUS object URL:", objectUrlRef.current);
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = undefined;
+    if (mediaSources.length >= 3) {
+      toast({
+        variant: "destructive",
+        title: "Media Limit Reached",
+        description: "You can only have up to 3 media sources. Please remove one before adding another.",
+      });
+      return;
     }
 
-    resetAppState();
-
-    const currentProcessingId = processingIdRef.current;
+    const localProcessingId = processingIdRef.current + 1;
+    processingIdRef.current = localProcessingId;
 
     setIsLoading(true);
     setProcessingProgress(10);
     setProcessingStatus("Initializing media processing...");
+
     let newMediaSrc: string | undefined = undefined;
     let displayName: string | null = null;
     let determinedSourceType: 'video' | 'audio' | 'url' | 'unknown' = 'unknown';
@@ -147,7 +246,7 @@ export default function LinguaClipApp() {
         setProcessingProgress(40);
         setProcessingStatus("Analyzing media file...");
       } catch (error) {
-        if (processingIdRef.current !== currentProcessingId) return;
+        if (processingIdRef.current !== localProcessingId) return;
         toast({ variant: "destructive", title: "File Error", description: "Could not create a URL for the file." });
         setIsLoading(false);
         resetAppState();
@@ -161,13 +260,13 @@ export default function LinguaClipApp() {
         determinedSourceType = 'audio';
         mediaElementTypeForLoad = 'audio';
       } else {
-        if (processingIdRef.current !== currentProcessingId) {
-           if (newMediaSrc) {
+        if (processingIdRef.current !== localProcessingId) {
+          if (newMediaSrc) {
             console.log("LinguaClipApp: handleSourceLoad (unsupported file type) revoking new object URL due to processingId mismatch:", newMediaSrc);
             URL.revokeObjectURL(newMediaSrc);
             objectUrlRef.current = undefined;
-           }
-           return;
+          }
+          return;
         }
         toast({ variant: "destructive", title: "Unsupported File", description: "Please upload a valid video or audio file." });
         setIsLoading(false);
@@ -180,41 +279,46 @@ export default function LinguaClipApp() {
       if (isYouTubeUrl(source.url)) {
         console.log("LinguaClipApp: Processing YouTube URL:", source.url);
         setIsYouTubeProcessing(true);
-        setProcessingStatus("Extracting audio from YouTube video...");
+        setProcessingStatus("Preparing to extract audio from YouTube video...");
 
         try {
-          toast({ title: "Processing YouTube Video", description: "Extracting audio from YouTube video..." });
+          toast({
+            title: "Processing YouTube Video",
+            description: "Starting audio extraction. This may take a moment...",
+            duration: 3000
+          });
 
-          // Create status callback for YouTube processing
           const youtubeStatusCallback = (progress: number, status: string) => {
-            if (processingIdRef.current === currentProcessingId) {
-              setProcessingStatus(status);
+            if (processingIdRef.current === localProcessingId) {
+              setProcessingStatus(status || "Extracting audio...");
             }
           };
 
           const { file: audioFile, videoInfo } = await processYouTubeUrl(source.url, youtubeStatusCallback);
 
-          if (processingIdRef.current !== currentProcessingId) {
+          if (processingIdRef.current !== localProcessingId) {
             setIsLoading(false);
             setIsYouTubeProcessing(false);
             return;
           }
 
-          setIsYouTubeProcessing(false);
-          setProcessingProgress(50);
           setProcessingStatus("Processing YouTube audio file...");
-
           setYoutubeVideoInfo(videoInfo);
-
           setSourceFile(audioFile);
           displayName = videoInfo.title;
+
           try {
             newMediaSrc = URL.createObjectURL(audioFile);
             objectUrlRef.current = newMediaSrc;
-            console.log("LinguaClipApp: handleSourceLoad CREATED object URL for YouTube audio:", newMediaSrc);
           } catch (error) {
-            if (processingIdRef.current !== currentProcessingId) return;
-            toast({ variant: "destructive", title: "Error", description: "Could not process YouTube audio." });
+            setIsYouTubeProcessing(false);
+            if (processingIdRef.current !== localProcessingId) return;
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Could not process YouTube audio.",
+              duration: 5000
+            });
             setIsLoading(false);
             resetAppState();
             return;
@@ -223,19 +327,23 @@ export default function LinguaClipApp() {
           determinedSourceType = 'audio';
           mediaElementTypeForLoad = 'audio';
 
+          // Successfully processed YouTube video
+          setIsYouTubeProcessing(false);
           toast({
             title: "YouTube Audio Extracted",
-            description: `Successfully extracted audio from "${videoInfo.title}"`
+            description: `Successfully extracted audio from "${videoInfo.title}"`,
+            duration: 3000
           });
 
         } catch (error: any) {
-          if (processingIdRef.current !== currentProcessingId) return;
-          console.error("YouTube processing error:", error);
           setIsYouTubeProcessing(false);
+          if (processingIdRef.current !== localProcessingId) return;
+          console.error("YouTube processing error:", error);
           toast({
             variant: "destructive",
             title: "YouTube Processing Failed",
-            description: error.message || "Could not extract audio from YouTube video."
+            description: error.message || "Could not extract audio from YouTube video.",
+            duration: 5000
           });
           setIsLoading(false);
           resetAppState();
@@ -246,7 +354,6 @@ export default function LinguaClipApp() {
         newMediaSrc = source.url;
 
         // Detect if URL points to an audio file based on extension
-        // Note: Only includes formats with good cross-browser support
         const audioExtensions = ['.mp3', '.wav', '.ogg', '.m4a'];
         const urlPath = source.url.toLowerCase();
         const isAudioUrl = audioExtensions.some(ext => urlPath.includes(ext));
@@ -286,7 +393,7 @@ export default function LinguaClipApp() {
         );
 
         if (unsupportedPlatform) {
-          if (processingIdRef.current !== currentProcessingId) return;
+          if (processingIdRef.current !== localProcessingId) return;
           toast({
             variant: "destructive",
             title: `${unsupportedPlatform.name} Not Supported`,
@@ -298,13 +405,13 @@ export default function LinguaClipApp() {
         }
       }
     } else {
-      if (processingIdRef.current !== currentProcessingId) return;
+      if (processingIdRef.current !== localProcessingId) return;
       toast({ variant: "destructive", title: "Error", description: "No media source provided." });
       setIsLoading(false);
       return;
     }
 
-    if (processingIdRef.current !== currentProcessingId) {
+    if (processingIdRef.current !== localProcessingId) {
       if (source.file && newMediaSrc && objectUrlRef.current === newMediaSrc) {
         console.log("LinguaClipApp: handleSourceLoad (processingId mismatch post-file-load) revoking object URL:", newMediaSrc);
         URL.revokeObjectURL(newMediaSrc);
@@ -312,61 +419,76 @@ export default function LinguaClipApp() {
       }
       return;
     }
+
+    // When media is successfully loaded, add it to mediaSources
+    const newMediaSource: MediaSource = {
+      id: generateUniqueId(),
+      src: newMediaSrc!,
+      displayName: displayName || 'Unknown Media',
+      type: determinedSourceType,
+      duration: mediaDuration
+    };
+
+    setMediaSources(prev => [...prev, newMediaSource]);
+    setActiveMediaSourceId(newMediaSource.id);
+
+    // Update other state as needed
     setMediaSrc(newMediaSrc);
     setMediaDisplayName(displayName);
     setCurrentSourceType(determinedSourceType);
 
+    // Load media metadata
     if (newMediaSrc) {
       const tempMediaElement = document.createElement(mediaElementTypeForLoad);
       tempMediaElement.onloadedmetadata = () => {
-          if (processingIdRef.current !== currentProcessingId) {
-             if (source.file && newMediaSrc?.startsWith('blob:') && objectUrlRef.current === newMediaSrc) {
-                console.log("LinguaClipApp: onloadedmetadata (processingId mismatch) revoking object URL:", newMediaSrc);
-                URL.revokeObjectURL(newMediaSrc);
-                objectUrlRef.current = undefined;
-             }
-             return;
+        if (processingIdRef.current !== localProcessingId) {
+          if (source.file && newMediaSrc?.startsWith('blob:') && objectUrlRef.current === newMediaSrc) {
+            console.log("LinguaClipApp: onloadedmetadata (processingId mismatch) revoking object URL:", newMediaSrc);
+            URL.revokeObjectURL(newMediaSrc);
+            objectUrlRef.current = undefined;
           }
-          setProcessingProgress(60);
-          setProcessingStatus("Loading media metadata...");
-          setMediaDuration(tempMediaElement.duration);
+          return;
+        }
+        setProcessingProgress(60);
+        setProcessingStatus("Loading media metadata...");
+        setMediaDuration(tempMediaElement.duration);
       };
       tempMediaElement.onerror = (e) => {
-          if (processingIdRef.current !== currentProcessingId) {
-            if (source.file && newMediaSrc?.startsWith('blob:') && objectUrlRef.current === newMediaSrc) {
-              console.log("LinguaClipApp: onerror (processingId mismatch) revoking object URL:", newMediaSrc);
-              URL.revokeObjectURL(newMediaSrc);
-              objectUrlRef.current = undefined;
-            }
-            return;
+        if (processingIdRef.current !== localProcessingId) {
+          if (source.file && newMediaSrc?.startsWith('blob:') && objectUrlRef.current === newMediaSrc) {
+            console.log("LinguaClipApp: onerror (processingId mismatch) revoking object URL:", newMediaSrc);
+            URL.revokeObjectURL(newMediaSrc);
+            objectUrlRef.current = undefined;
           }
-          console.warn(`Error loading ${mediaElementTypeForLoad} metadata for ${displayName}:`, e, tempMediaElement.error);
+          return;
+        }
+        console.warn(`Error loading ${determinedSourceType === 'audio' ? 'audio' : 'video'} metadata for ${displayName}:`, e, tempMediaElement.error);
 
-          // Provide helpful error messages based on context
-          let errorDescription = `Could not load ${determinedSourceType === 'audio' ? 'audio' : 'video'} metadata. The file might be corrupt or in an unsupported format.`;
+        // Provide helpful error messages based on context
+        let errorDescription = `Could not load ${determinedSourceType === 'audio' ? 'audio' : 'video'} metadata. The file might be corrupt or in an unsupported format.`;
 
-          if (source.url && determinedSourceType === 'audio') {
-            // Check if it might be an unsupported audio format
-            const lessCompatibleFormats = ['.aac', '.flac', '.wma', '.opus'];
-            const isLessCompatible = lessCompatibleFormats.some(ext => source.url!.toLowerCase().includes(ext));
+        if (source.url && determinedSourceType === 'audio') {
+          // Check if it might be an unsupported audio format
+          const lessCompatibleFormats = ['.aac', '.flac', '.wma', '.opus'];
+          const isLessCompatible = lessCompatibleFormats.some(ext => source.url!.toLowerCase().includes(ext));
 
-            if (isLessCompatible) {
-              errorDescription = `This audio format may not be supported by your browser. Try converting to MP3 or WAV for best compatibility.`;
-            }
+          if (isLessCompatible) {
+            errorDescription = `This audio format may not be supported by your browser. Try converting to MP3 or WAV for best compatibility.`;
           }
+        }
 
-          toast({ variant: "destructive", title: "Media Load Error", description: errorDescription });
-          setIsLoading(false);
-          resetAppState();
+        toast({ variant: "destructive", title: "Media Load Error", description: errorDescription });
+        setIsLoading(false);
+        resetAppState();
       };
       tempMediaElement.src = newMediaSrc;
       tempMediaElement.load();
     } else {
-        if (processingIdRef.current !== currentProcessingId) return;
-        setIsLoading(false);
-        toast({ variant: "destructive", title: "Error", description: "Media source became unavailable." });
+      if (processingIdRef.current !== localProcessingId) return;
+      setIsLoading(false);
+      toast({ variant: "destructive", title: "Error", description: "Media source became unavailable." });
     }
-  }, [resetAppState, toast]);
+  }, [resetAppState, toast, mediaSources, isYouTubeUrl]);
 
 
   useEffect(() => {
@@ -779,123 +901,328 @@ export default function LinguaClipApp() {
   const currentClip = focusedClip || clips[currentClipIndex];
   const globalAppBusyState = isLoading || isSaving;
 
+  // Add this helper function at the top level, before the component
+  const generateUniqueId = () => {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  const handleSaveToSession = useCallback(() => {
+    if (!currentClip || !activeMediaSourceId) return;
+
+    // Calculate total duration including the new clip
+    const totalDuration = sessionClips.reduce((acc, clip) =>
+      acc + (clip.endTime - clip.startTime), 0
+    );
+    const newClipDuration = currentClip.endTime - currentClip.startTime;
+
+    // Check if adding this clip would exceed 30 minutes
+    if (totalDuration + newClipDuration > 30 * 60) {
+      toast({
+        variant: "destructive",
+        title: "Session Full",
+        description: "Cannot add more clips. Total duration would exceed 30 minutes.",
+      });
+      return;
+    }
+
+    // Create a new clip with reference to its media source
+    const sessionClip: SessionClip = {
+      ...currentClip,
+      id: generateUniqueId(),
+      displayName: `Clip ${sessionClips.length + 1}`,
+      mediaSourceId: activeMediaSourceId
+    };
+
+    // Add new clip at the start of the array
+    setSessionClips(prevClips => [sessionClip, ...prevClips]);
+
+    toast({
+      title: "Clip Saved",
+      description: "Clip has been saved to your session. You can now give it a name.",
+    });
+  }, [currentClip, activeMediaSourceId, sessionClips, toast]);
+
+  const handleRenameClip = useCallback((clipId: string, newName: string) => {
+    setSessionClips(prevClips =>
+      prevClips.map(clip =>
+        clip.id === clipId
+          ? { ...clip, displayName: newName }
+          : clip
+      )
+    );
+
+    toast({
+      title: "Clip Renamed",
+      description: "The clip name has been updated.",
+    });
+  }, [toast]);
+
+  const handleLoadFromSession = useCallback((clipToLoad: SessionClip) => {
+    if (isAnyClipTranscribing) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Load Clip",
+        description: "Please wait for any ongoing transcriptions to complete.",
+      });
+      return;
+    }
+
+    // Find the media source for this clip
+    const mediaSource = mediaSources.find(source => source.id === clipToLoad.mediaSourceId);
+    if (!mediaSource) {
+      toast({
+        variant: "destructive",
+        title: "Media Not Found",
+        description: "The media source for this clip is no longer available.",
+      });
+      return;
+    }
+
+    // Switch to the correct media source if needed
+    if (mediaSource.id !== activeMediaSourceId) {
+      setActiveMediaSourceId(mediaSource.id);
+      setMediaSrc(mediaSource.src);
+      setMediaDisplayName(mediaSource.displayName);
+      setCurrentSourceType(mediaSource.type);
+    }
+
+    // Create a new focused clip
+    const loadedClip = {
+      ...clipToLoad,
+      startTime: clipToLoad.startTime,
+      endTime: clipToLoad.endTime,
+      userTranscription: clipToLoad.userTranscription || null,
+      automatedTranscription: clipToLoad.automatedTranscription || null,
+      translation: clipToLoad.translation || null,
+      translationTargetLanguage: clipToLoad.translationTargetLanguage || null,
+      comparisonResult: clipToLoad.comparisonResult || null,
+    };
+
+    // Set this as the only clip and focus on it
+    setClips([loadedClip]);
+    setCurrentClipIndex(0);
+    setFocusedClip(loadedClip);
+
+    toast({
+      title: "Clip Loaded",
+      description: `Loaded clip (${formatSecondsToMMSS(clipToLoad.startTime)} - ${formatSecondsToMMSS(clipToLoad.endTime)})`,
+    });
+  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, toast]);
+
+  const handleRemoveFromSession = useCallback((clipId: string) => {
+    setSessionClips(prevClips => prevClips.filter(clip => clip.id !== clipId));
+    toast({
+      title: "Clip Removed",
+      description: "Clip has been removed from your session.",
+    });
+  }, [toast]);
+
+  const handleRemoveMediaSource = useCallback((sourceId: string) => {
+    if (isAnyClipTranscribing) {
+      toast({
+        variant: "destructive",
+        title: "Action Disabled",
+        description: "Cannot remove media while transcription is in progress.",
+      });
+      return;
+    }
+
+    // Check if any session clips use this media source
+    const hasClipsUsingSource = sessionClips.some(clip => clip.mediaSourceId === sourceId);
+    if (hasClipsUsingSource) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Remove Media",
+        description: "This media source has saved clips. Please remove those clips first.",
+      });
+      return;
+    }
+
+    setMediaSources(prev => prev.filter(source => source.id !== sourceId));
+
+    // If we removed the active source, clear current state
+    if (sourceId === activeMediaSourceId) {
+      setActiveMediaSourceId(null);
+      setMediaSrc(undefined);
+      setMediaDisplayName(null);
+      setCurrentSourceType(null);
+      setClips([]);
+      setCurrentClipIndex(0);
+    }
+
+    toast({
+      title: "Media Source Removed",
+      description: "The media source has been removed.",
+    });
+  }, [isAnyClipTranscribing, sessionClips, activeMediaSourceId]);
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <Header />
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg border-border">
           <CardContent className="p-6 space-y-6">
-            {mediaSrc && mediaDisplayName ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/50 shadow-sm">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <LoadedMediaIcon className="h-6 w-6 text-primary flex-shrink-0" />
-                    <span className="text-sm font-medium truncate text-foreground" title={mediaDisplayName}>
-                      {mediaDisplayName}
-                    </span>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={handleResetAppWithCheck} aria-label="Remove media" disabled={globalAppBusyState || isAnyClipTranscribing}>
-                    <XIcon className="h-5 w-5 text-muted-foreground hover:text-foreground" />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <LanguageSelector
-                        selectedLanguage={language}
-                        onLanguageChange={handleLanguageChange}
-                        disabled={globalAppBusyState || isAnyClipTranscribing || !mediaSrc}
-                    />
-                </div>
-                 {user && mediaSrc && clips.length > 0 && (
-                    <Button onClick={handleSaveMedia} disabled={globalAppBusyState || isAnyClipTranscribing} className="w-full sm:w-auto">
-                    <Save className="mr-2 h-4 w-4" />
-                    {isSaving ? "Saving..." : "Save Media"}
-                    </Button>
-                  )}
-              </div>
-            ) : (
+            {mediaSources.length > 0 && (
+              <MediaSourceList
+                sources={mediaSources}
+                activeSourceId={activeMediaSourceId}
+                onSelectSource={(sourceId) => {
+                  const source = mediaSources.find(s => s.id === sourceId);
+                  if (source) {
+                    setActiveMediaSourceId(sourceId);
+                    setMediaSrc(source.src);
+                    setMediaDisplayName(source.displayName);
+                    setCurrentSourceType(source.type);
+                  }
+                }}
+                onRemoveSource={handleRemoveMediaSource}
+                disabled={globalAppBusyState || isAnyClipTranscribing}
+              />
+            )}
+            {mediaSources.length < 3 && (
               <>
-                <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading} />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <LanguageSelector
-                        selectedLanguage={language}
-                        onLanguageChange={handleLanguageChange}
-                        disabled={isLoading}
-                    />
-                </div>
+                <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading && !isYouTubeProcessing} />
+                {isYouTubeProcessing && (
+                  <YouTubeProcessingLoader status={processingStatus} />
+                )}
               </>
             )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <LanguageSelector
+                selectedLanguage={language}
+                onLanguageChange={handleLanguageChange}
+                disabled={isLoading}
+              />
+            </div>
           </CardContent>
         </Card>
 
         {mediaSrc && clips.length > 0 && currentClip && (
-          <TranscriptionWorkspace
-            currentClip={currentClip}
-            clips={clips}
-            mediaSrc={mediaSrc}
-            currentClipIndex={currentClipIndex}
-            onSelectClip={handleSelectClip}
-            onTranscribeAudio={handleTranscribeAudio}
-            onGetCorrections={handleGetCorrections}
-            onTranslate={handleTranslate}
-            onRemoveClip={handleRemoveClip}
-            onUserTranscriptionChange={handleUserTranscriptionChange}
-            isYouTubeVideo={isYouTubeVideo}
-            language={currentClip.language || language}
-            isAudioSource={currentSourceType === 'audio'}
-            clipSegmentationDuration={clipSegmentationDuration}
-            onClipDurationChange={handleClipDurationChange}
-            isLoadingMedia={isLoading}
-            isSavingMedia={isSaving}
-            isAnyClipTranscribing={isAnyClipTranscribing}
-            // Focused clip functionality
-            mediaDuration={mediaDuration}
-            focusedClip={focusedClip}
-            showClipTrimmer={showClipTrimmer}
-            onCreateFocusedClip={handleCreateFocusedClip}
-            onToggleClipTrimmer={handleToggleClipTrimmer}
-            onBackToAutoClips={handleBackToAutoClips}
-          />
+          <div className="space-y-4">
+            <TranscriptionWorkspace
+              currentClip={currentClip}
+              clips={clips}
+              mediaSrc={mediaSrc}
+              currentClipIndex={currentClipIndex}
+              onSelectClip={handleSelectClip}
+              onTranscribeAudio={handleTranscribeAudio}
+              onGetCorrections={handleGetCorrections}
+              onTranslate={handleTranslate}
+              onRemoveClip={handleRemoveClip}
+              onUserTranscriptionChange={handleUserTranscriptionChange}
+              isYouTubeVideo={isYouTubeVideo}
+              language={currentClip.language || language}
+              isAudioSource={currentSourceType === 'audio'}
+              clipSegmentationDuration={clipSegmentationDuration}
+              onClipDurationChange={handleClipDurationChange}
+              isLoadingMedia={isLoading}
+              isSavingMedia={isSaving}
+              isAnyClipTranscribing={isAnyClipTranscribing}
+              mediaDuration={mediaDuration}
+              focusedClip={focusedClip}
+              showClipTrimmer={showClipTrimmer}
+              onCreateFocusedClip={handleCreateFocusedClip}
+              onToggleClipTrimmer={handleToggleClipTrimmer}
+              onBackToAutoClips={handleBackToAutoClips}
+              onSaveToSession={handleSaveToSession}
+              canSaveToSession={
+                currentClip &&
+                !sessionClips.some(clip => clip.id === currentClip.id) &&
+                (sessionClips.reduce((acc, clip) => acc + (clip.endTime - clip.startTime), 0) +
+                 (currentClip.endTime - currentClip.startTime)) <= 30 * 60
+              }
+            />
+          </div>
         )}
-        {isLoading && !mediaDisplayName && (
+        {isLoading && !mediaDisplayName && !isYouTubeProcessing && (
           <Card className="shadow-lg border-border">
             <CardContent className="p-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-center">
                   <h3 className="text-lg font-semibold text-primary">
-                    {isYouTubeProcessing ? "Extracting YouTube Audio" : "Processing Media"}
+                    Processing Media
                   </h3>
                 </div>
-
-                {isYouTubeProcessing ? (
-                  <div className="space-y-4">
-                    <div className="flex justify-center space-x-1">
-                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-3 h-3 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                    <div className="flex items-center justify-center">
-                      <span className="text-sm text-muted-foreground text-center">
-                        {processingStatus || "Processing YouTube video..."}
-                      </span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">
+                      {processingStatus || "Initializing..."}
+                    </span>
+                    <span className="text-sm font-medium text-primary">
+                      {processingProgress}%
+                    </span>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        {processingStatus || "Initializing..."}
-                      </span>
-                      <span className="text-sm font-medium text-primary">
-                        {processingProgress}%
-                      </span>
-                    </div>
-                    <Progress value={processingProgress} className="h-2" />
-                  </div>
-                )}
+                  <Progress value={processingProgress} className="h-2" />
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
+
+        {/* Floating Action Button for Session Storage */}
+        <div className="fixed bottom-6 right-6 z-50">
+          <Button
+            size="lg"
+            className="rounded-full w-14 h-14 shadow-lg hover:shadow-xl transition-shadow"
+            onClick={() => {
+              const drawer = document.getElementById('session-drawer');
+              if (drawer) {
+                drawer.classList.remove('translate-y-full');
+                drawer.classList.add('translate-y-0');
+              }
+            }}
+          >
+            <Save className="h-6 w-6" />
+            {sessionClips.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-sm">
+                {sessionClips.length}
+              </span>
+            )}
+          </Button>
+        </div>
+
+        {/* Session Storage Drawer */}
+        <div
+          id="session-drawer"
+          className="fixed bottom-0 left-0 right-0 z-50 transform translate-y-full transition-transform duration-300 ease-in-out"
+          style={{ maxHeight: 'calc(100vh - 64px)' }}
+        >
+          <div className="bg-background border-t border-border rounded-t-xl shadow-lg h-full flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-background">
+              <div className="flex items-center gap-2">
+                <Save className="h-5 w-5" />
+                <h3 className="text-lg font-semibold">Saved Clips</h3>
+                <span className="text-sm text-muted-foreground">
+                  ({sessionClips.length})
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  const drawer = document.getElementById('session-drawer');
+                  if (drawer) {
+                    drawer.classList.remove('translate-y-0');
+                    drawer.classList.add('translate-y-full');
+                  }
+                }}
+              >
+                <XIcon className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+              <SessionClipsManager
+                sessionClips={sessionClips}
+                onLoadFromSession={handleLoadFromSession}
+                onRemoveFromSession={handleRemoveFromSession}
+                onRenameClip={handleRenameClip}
+                disabled={isLoading || isSaving || isAnyClipTranscribing}
+                mediaSources={mediaSources}
+              />
+            </div>
+          </div>
+        </div>
       </main>
       <footer className="py-4 px-4 md:px-8 border-t border-border text-center">
         <div className="mb-2">
