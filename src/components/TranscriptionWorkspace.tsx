@@ -147,7 +147,7 @@ const MediaControls = ({
     {/* Timeline Controls Header */}
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
       <span className="text-sm font-medium text-foreground">
-        {isCurrentClipPlaying ? "Playing" : "Paused"} - {focusedClip ? "Focused Clip" : `Clip ${currentClipIndex + 1}`}
+        {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {focusedClip ? (focusedClip.displayName || 'Custom Clip') : `Clip ${currentClipIndex + 1} (Focused)`}
       </span>
       <span className="text-sm font-mono text-primary">
         {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
@@ -707,7 +707,7 @@ export default function TranscriptionWorkspace({
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-primary flex items-center gap-2">
                     <Eye className="h-4 w-4" />
-                    Focused Clip Mode
+                    {focusedClip.displayName || 'Custom Clip'} (Focused)
                   </span>
                   {onBackToAutoClips && (
                     <Button
@@ -721,7 +721,7 @@ export default function TranscriptionWorkspace({
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Working on your custom clip: {formatSecondsToMMSS(focusedClip.startTime)} - {formatSecondsToMMSS(focusedClip.endTime)}
+                  {formatSecondsToMMSS(focusedClip.startTime)} - {formatSecondsToMMSS(focusedClip.endTime)}
                 </p>
               </div>
 
