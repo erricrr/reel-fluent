@@ -152,6 +152,7 @@ export default function LinguaClipApp() {
   const isYouTubeVideo = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
   const [sessionClips, setSessionClips] = useState<SessionClip[]>([]);
+  const [isSessionDrawerOpen, setSessionDrawerOpen] = useState<boolean>(false);
 
   // Add state for media sources
   const [mediaSources, setMediaSources] = useState<MediaSource[]>([]);
@@ -705,6 +706,22 @@ export default function LinguaClipApp() {
       return;
     }
 
+    // Bail if translation already exists (to avoid redundant API calls)
+    if (targetLanguage === 'english') {
+      const existing = currentClipForTranslation.englishTranslation;
+      if (existing && !existing.startsWith("Error:") && existing !== "Translating...") {
+        toast({ title: "Already Translated", description: "This clip has already been translated to English." });
+        return;
+      }
+    } else {
+      const existing = currentClipForTranslation.translation;
+      const existingLang = currentClipForTranslation.translationTargetLanguage;
+      if (existingLang === targetLanguage && existing && !existing.startsWith("Error:") && existing !== "Translating...") {
+        toast({ title: "Already Translated", description: `This clip has already been translated to ${targetLanguage}.` });
+        return;
+      }
+    }
+
     // Then check transcription validity
     const transcription = currentClipForTranslation.automatedTranscription;
     if (transcription === null ||
@@ -777,6 +794,13 @@ export default function LinguaClipApp() {
     const currentClipForCorrections = clipsRef.current.find(c => c.id === clipId);
     if (!currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:") || currentClipForCorrections.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Comparison Error", description: "Ensure automated transcription is successful and you've typed something."});
+      return;
+    }
+
+    // Bail if corrections already exist (to avoid redundant API calls)
+    const existingCorrections = currentClipForCorrections.comparisonResult;
+    if (Array.isArray(existingCorrections) && existingCorrections.length > 0 && existingCorrections[0].token !== "Comparing...") {
+      toast({ title: "Already Compared", description: "Comparison already complete." });
       return;
     }
 
@@ -1316,6 +1340,7 @@ export default function LinguaClipApp() {
               onToggleClipTrimmer={handleToggleClipTrimmer}
               onBackToAutoClips={handleBackToAutoClips}
               onSaveToSession={handleSaveToSession}
+              onOpenSessionDrawer={() => setSessionDrawerOpen(true)}
               canSaveToSession={
                 currentClip &&
                 !sessionClips.some(sessionClip =>
@@ -1353,54 +1378,6 @@ export default function LinguaClipApp() {
             </CardContent>
           </Card>
         )}
-
-        {/* Session Storage Drawer */}
-        <div
-          id="session-drawer"
-          className="fixed inset-x-0 bottom-0 z-50 transform translate-y-full transition-transform duration-300 ease-in-out bg-background"
-          style={{
-            height: 'calc(100vh - 120px)',
-            maxHeight: 'calc(100vh - 120px)',
-            willChange: 'transform'
-          }}
-        >
-          <div className="h-full flex flex-col border-t border-border rounded-t-xl shadow-lg">
-            <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 z-10">
-              <div className="flex items-center gap-2">
-                <List className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">Saved Clips</h3>
-                <span className="text-sm text-muted-foreground">
-                  ({sessionClips.length})
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full"
-                onClick={() => {
-                  const drawer = document.getElementById('session-drawer');
-                  if (drawer) {
-                    drawer.classList.remove('translate-y-0');
-                    drawer.classList.add('translate-y-full');
-                  }
-                }}
-              >
-                <XIcon className="h-5 w-5" />
-              </Button>
-            </div>
-            <div className="flex-1 overflow-y-auto overscroll-contain p-4">
-              <SessionClipsManager
-                sessionClips={sessionClips}
-                onLoadFromSession={handleLoadFromSession}
-                onRemoveFromSession={handleRemoveFromSession}
-                onRenameClip={handleRenameClip}
-                disabled={isLoading || isSaving || isAnyClipTranscribing}
-                mediaSources={mediaSources}
-                focusedClipId={focusedClip?.id || null}
-              />
-            </div>
-          </div>
-        </div>
       </main>
       <footer className="py-4 px-4 md:px-8 border-t border-border text-center bg-background relative z-40">
         <div className="mb-2">
@@ -1411,6 +1388,47 @@ export default function LinguaClipApp() {
           </span>
         </div>
       </footer>
+
+      {/* Session Drawer Overlay */}
+      <div
+        className={`fixed inset-0 bg-black/80 transition-opacity duration-300 ease-in-out ${isSessionDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        style={{ zIndex: 100 }}
+        onClick={() => setSessionDrawerOpen(false)}
+      />
+      {/* Session Drawer */}
+      <div
+        className={`fixed inset-x-0 bottom-0 bg-background transform transition-transform duration-300 ease-in-out ${isSessionDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        style={{
+          height: 'calc(100vh - 120px)',
+          maxHeight: 'calc(100vh - 120px)',
+          willChange: 'transform',
+          zIndex: 101
+        }}
+      >
+        <div className="h-full flex flex-col border-t border-border rounded-t-xl shadow-lg">
+          <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 z-10">
+            <div className="flex items-center gap-2">
+              <List className="h-5 w-5" />
+              <h3 className="text-lg font-semibold">Saved Clips</h3>
+              <span className="text-sm text-muted-foreground">({sessionClips.length})</span>
+            </div>
+            <Button variant="ghost" size="sm" className="rounded-full" onClick={() => setSessionDrawerOpen(false)}>
+              <XIcon className="h-5 w-5" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4">
+            <SessionClipsManager
+              sessionClips={sessionClips}
+              onLoadFromSession={handleLoadFromSession}
+              onRemoveFromSession={handleRemoveFromSession}
+              onRenameClip={handleRenameClip}
+              disabled={isLoading || isSaving || isAnyClipTranscribing}
+              mediaSources={mediaSources}
+              focusedClipId={focusedClip?.id || null}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

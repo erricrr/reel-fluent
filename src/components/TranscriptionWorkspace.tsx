@@ -51,6 +51,7 @@ interface TranscriptionWorkspaceProps {
   onToggleClipTrimmer?: () => void;
   onBackToAutoClips?: () => void;
   onSaveToSession: () => void;
+  onOpenSessionDrawer?: () => void;
   canSaveToSession: boolean;
 }
 
@@ -292,6 +293,7 @@ export default function TranscriptionWorkspace({
   onToggleClipTrimmer,
   onBackToAutoClips,
   onSaveToSession,
+  onOpenSessionDrawer,
   canSaveToSession,
 }: TranscriptionWorkspaceProps) {
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
@@ -419,14 +421,9 @@ export default function TranscriptionWorkspace({
     const newValue = e.target.value;
     setUserTranscriptionInput(newValue);
     onUserTranscriptionChange(currentClip.id, newValue);
-
-    // Auto-save if this is a saved clip (when canSaveToSession is false), but don't show toast
-    if (onSaveToSession && !canSaveToSession) {
-      onSaveToSession();
-    }
   };
 
-  const handleTranscribe = async () => {
+  const handleTranscribeClip = async () => {
     if (!currentClip || (isAudioSource && !mediaSrc)) {
       toast({variant: "destructive", title: "Cannot Transcribe", description: "Please ensure media is loaded and a clip is selected."});
       return;
@@ -742,13 +739,7 @@ export default function TranscriptionWorkspace({
                 <Button
                   variant="outline"
                   className="flex items-center justify-center gap-2 h-auto py-3"
-                  onClick={() => {
-                    const drawer = document.getElementById('session-drawer');
-                    if (drawer) {
-                      drawer.classList.remove('translate-y-full');
-                      drawer.classList.add('translate-y-0');
-                    }
-                  }}
+                  onClick={onOpenSessionDrawer}
                 >
                   <List className="h-4 w-4" />
                   Saved Clips
@@ -825,13 +816,7 @@ export default function TranscriptionWorkspace({
                 <Button
                   variant="outline"
                   className="flex items-center justify-center gap-2 h-auto py-3"
-                  onClick={() => {
-                    const drawer = document.getElementById('session-drawer');
-                    if (drawer) {
-                      drawer.classList.remove('translate-y-full');
-                      drawer.classList.add('translate-y-0');
-                    }
-                  }}
+                  onClick={onOpenSessionDrawer}
                 >
                   <List className="h-4 w-4" />
                   Saved Clips
@@ -976,7 +961,7 @@ export default function TranscriptionWorkspace({
                   <div className="space-y-2">
                     <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
                     <Button
-                      onClick={handleTranscribe}
+                      onClick={handleTranscribeClip}
                       className="w-full mb-2"
                       disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
                     >
