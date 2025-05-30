@@ -374,6 +374,13 @@ export default function TranscriptionWorkspace({
       toast({variant: "destructive", title: "Cannot Transcribe", description: "Please ensure media is loaded and a clip is selected."});
       return;
     }
+
+    // Check if clip is already transcribed
+    if (currentClip.automatedTranscription && !currentClip.automatedTranscription.startsWith("Error:") && currentClip.automatedTranscription !== "Transcribing...") {
+      toast({title: "Already Transcribed", description: "This clip has already been transcribed."});
+      return;
+    }
+
     try {
       await onTranscribeAudio(currentClip.id);
     } catch (error) {

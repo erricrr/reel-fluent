@@ -36,7 +36,16 @@ const transcribeAudioPrompt = ai.definePrompt({
   input: {schema: TranscribeAudioInputSchema},
   output: {schema: TranscribeAudioOutputSchema},
   model: 'googleai/gemini-2.0-flash',
-  prompt: `Transcribe the following audio to text. The language of the audio is {{{language}}}.\n\nAudio: {{media url=audioDataUri}}`,
+  prompt: `Transcribe the following audio to text. The language of the audio is {{{language}}}.
+
+Instructions:
+1. Pay special attention to the specific accents and pronunciation patterns of {{{language}}}.
+2. For Vietnamese, ensure proper tone marks (dấu) are captured accurately.
+3. For English, note any regional accents (American, British, etc.).
+4. Maintain all language-specific punctuation and formatting.
+5. Preserve any dialect-specific expressions or colloquialisms.
+
+Audio: {{media url=audioDataUri}}`,
 });
 
 const transcribeAudioFlow = ai.defineFlow(
