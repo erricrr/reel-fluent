@@ -189,6 +189,20 @@ export default function LinguaClipApp() {
       }
       return prevFocusedClip;
     });
+
+    // Update sessionClips for saved clips (match by mediaSourceId and time)
+    const oldClip = clipsRef.current.find(c => c.id === clipId);
+    if (oldClip) {
+      setSessionClips(prevClips =>
+        prevClips.map(sessionClip =>
+          sessionClip.mediaSourceId === activeMediaSourceIdRef.current &&
+          sessionClip.startTime === oldClip.startTime &&
+          sessionClip.endTime === oldClip.endTime
+            ? { ...sessionClip, ...data }
+            : sessionClip
+        )
+      );
+    }
   }, [language]);
 
   const resetAppState = useCallback(() => {
@@ -603,21 +617,11 @@ export default function LinguaClipApp() {
 
     setIsAnyClipTranscribing(true);
 
-    // Update clip state to show it's transcribing
+    // Helper to update clip data (clips, focusedClip, sessionClips) and workInProgress
     const updateClipState = (newState: Partial<Clip>) => {
-      // Update in clips array if the clip exists there
-      setClips(prevClips =>
-        prevClips.map(c =>
-          c.id === clipId ? { ...c, ...newState } : c
-        )
-      );
-
-      // Update focused clip if this is the focused clip
-      if (focusedClip && focusedClip.id === clipId) {
-        setFocusedClip(prev => prev ? { ...prev, ...newState } : prev);
-      }
-
-      // Update work in progress
+      // Update main and focused clip arrays and session storage
+      updateClipData(clipId, newState);
+      // Update work in progress state
       setWorkInProgressClips(prev => ({
         ...prev,
         [clipId]: { ...(prev[clipId] || clipToTranscribe), ...newState } as Clip
@@ -689,10 +693,7 @@ export default function LinguaClipApp() {
     mediaSrc,
     language,
     currentSourceType,
-    setClips,
-    setFocusedClip,
-    setWorkInProgressClips,
-    setIsAnyClipTranscribing,
+    updateClipData,
     toast
   ]);
 
@@ -1317,7 +1318,11 @@ export default function LinguaClipApp() {
               onSaveToSession={handleSaveToSession}
               canSaveToSession={
                 currentClip &&
-                !sessionClips.some(clip => clip.id === currentClip.id) &&
+                !sessionClips.some(sessionClip =>
+                  sessionClip.mediaSourceId === activeMediaSourceId &&
+                  sessionClip.startTime === currentClip.startTime &&
+                  sessionClip.endTime === currentClip.endTime
+                ) &&
                 (sessionClips.reduce((acc, clip) => acc + (clip.endTime - clip.startTime), 0) +
                  (currentClip.endTime - currentClip.startTime)) <= 30 * 60
               }
