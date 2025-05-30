@@ -569,18 +569,6 @@ export default function TranscriptionWorkspace({
             isLooping={isLooping}
           />
 
-          {/* Transcribe Button - Only show outside focused clip mode */}
-          {!focusedClip && (
-            <Button
-              onClick={handleTranscribe}
-              className="w-full"
-              disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
-            </Button>
-          )}
-
           {/* Clip Controls - Show different UI based on focused clip mode */}
           {focusedClip ? (
             <div className="space-y-4">
@@ -607,7 +595,18 @@ export default function TranscriptionWorkspace({
                 </p>
               </div>
 
-              {/* Transcribe Button for focused clip */}
+              {/* Save to Session Button */}
+              <Button
+                onClick={onSaveToSession}
+                disabled={!canSaveToSession || disableTextarea}
+                variant="secondary"
+                className="w-full flex items-center justify-center gap-2 h-auto py-3"
+              >
+                <Save className="h-4 w-4" />
+                Save Current Clip to Session
+              </Button>
+
+              {/* Transcribe Button */}
               <Button
                 onClick={handleTranscribe}
                 className="w-full"
@@ -675,6 +674,16 @@ export default function TranscriptionWorkspace({
               >
                 <Save className="h-4 w-4" />
                 Save Current Clip to Session
+              </Button>
+
+              {/* Transcribe Button */}
+              <Button
+                onClick={handleTranscribe}
+                className="w-full"
+                disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {isAutomatedTranscriptionLoading ? "Transcribing..." : `Transcribe Clip ${currentClipIndex + 1}`}
               </Button>
             </div>
           )}
