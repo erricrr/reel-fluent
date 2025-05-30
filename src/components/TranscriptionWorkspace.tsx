@@ -650,8 +650,10 @@ export default function TranscriptionWorkspace({
                   onClick={onToggleClipTrimmer}
                   disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
                   className={cn(
-                    "w-full transition-all duration-200",
-                    !showClipTrimmer && "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/20 hover:ring-primary/30"
+                    "w-full transition-all duration-500",
+                    showClipTrimmer
+                      ? "border-primary/30 text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                      : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/30 hover:ring-primary/50"
                   )}
                 >
                   <Scissors className="mr-2 h-4 w-4" />

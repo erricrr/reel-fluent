@@ -186,88 +186,91 @@ export default function ClipTrimmer({
   const isValidClip = clipDuration >= 1 && clipDuration <= 300;
 
   return (
-    <Card className="shadow-lg border-gray-300 dark:border-gray-600 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900">
-      <CardHeader className="pb-3 border-b border-gray-300 dark:border-gray-600">
-        <CardTitle className="text-lg flex items-center gap-2 text-gray-800 dark:text-gray-200">
-          <Scissors className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-          Clip Trimmer
-        </CardTitle>
-        <CardDescription className="text-gray-600 dark:text-gray-400">
-          Select custom start and stop points to create your focused clip for AI processing.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-4">
-        {/* Range Slider for both start and end times */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="range-slider" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Clip Range
-            </Label>
-            <div className="flex items-center gap-2 text-sm font-mono">
-              <span className="text-gray-800 dark:text-gray-200 font-semibold">{formatSecondsToMMSS(startTime)}</span>
-              <span className="text-gray-500 dark:text-gray-400">to</span>
-              <span className="text-gray-800 dark:text-gray-200 font-semibold">{formatSecondsToMMSS(endTime)}</span>
+    <Card className="shadow-xl border-primary/40 bg-gradient-to-br from-background via-primary/5 to-primary/10 duration-500 relative">
+      <div className="absolute inset-0 bg-primary/5 blur-xl rounded-xl transition-opacity duration-500"></div>
+      <div className="relative">
+        <CardHeader className="pb-3 border-b border-primary/20">
+          <CardTitle className="text-lg flex items-center gap-2 text-primary">
+            <Scissors className="h-5 w-5" />
+            Clip Trimmer
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Select custom start and stop points to create your focused clip for AI processing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-4">
+          {/* Range Slider for both start and end times */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="range-slider" className="text-sm font-medium text-foreground">
+                Clip Range
+              </Label>
+              <div className="flex items-center gap-2 text-sm font-mono">
+                <span className="text-foreground font-semibold">{formatSecondsToMMSS(startTime)}</span>
+                <span className="text-muted-foreground">to</span>
+                <span className="text-foreground font-semibold">{formatSecondsToMMSS(endTime)}</span>
+              </div>
             </div>
+            <RangeSlider
+              id="range-slider"
+              value={[startTime, endTime]}
+              onValueChange={handleRangeChange}
+              min={0}
+              max={mediaDuration}
+              step={0.1}
+              minStepsBetweenThumbs={10}
+              className="w-full"
+              disabled={disabled}
+            />
           </div>
-          <RangeSlider
-            id="range-slider"
-            value={[startTime, endTime]}
-            onValueChange={handleRangeChange}
-            min={0}
-            max={mediaDuration}
-            step={0.1}
-            minStepsBetweenThumbs={10} // Ensures minimum 1 second gap (with step=0.1)
-            className="w-full"
-            disabled={disabled}
-          />
-        </div>
 
-        {/* Clip Duration Display */}
-        <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Clip Duration:</span>
-          <span className="text-sm font-mono text-gray-800 dark:text-gray-200 font-semibold">
-            {formatSecondsToMMSS(clipDuration)}
-          </span>
-        </div>
+          {/* Clip Duration Display */}
+          <div className="flex items-center justify-between p-3 bg-primary/10 backdrop-blur-sm rounded-lg border border-primary/30 shadow-sm transition-[background-color,border-color,shadow] duration-500">
+            <span className="text-sm font-medium text-foreground">Clip Duration:</span>
+            <span className="text-sm font-mono text-primary font-semibold">
+              {formatSecondsToMMSS(clipDuration)}
+            </span>
+          </div>
 
-        {/* Preview Button Only */}
-        <Button
-          variant="outline"
-          onClick={handlePreviewClip}
-          disabled={disabled || !isValidClip}
-          className="w-full border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-500"
-        >
-          {isPreviewPlaying ? (
-            <>
-              <Pause className="mr-2 h-4 w-4" />
-              Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)} remaining)
-            </>
-          ) : (
-            <>
-              <Play className="mr-2 h-4 w-4" />
-              Preview Clip
-            </>
+          {/* Preview Button Only */}
+          <Button
+            variant="outline"
+            onClick={handlePreviewClip}
+            disabled={disabled || !isValidClip}
+            className="w-full border-primary/30 text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40 shadow-sm hover:shadow-md transition-all duration-300"
+          >
+            {isPreviewPlaying ? (
+              <>
+                <Pause className="mr-2 h-4 w-4" />
+                Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)} remaining)
+              </>
+            ) : (
+              <>
+                <Play className="mr-2 h-4 w-4" />
+                Preview Clip
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleCreateTrimmedClip}
+            disabled={disabled || !isValidClip}
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/30 hover:ring-primary/50 transition-all duration-300"
+          >
+            <Scissors className="mr-2 h-4 w-4" />
+            Create Focused Clip ({formatSecondsToMMSS(clipDuration)})
+          </Button>
+
+          {!isValidClip && (
+            <p className="text-sm text-muted-foreground text-center">
+              {clipDuration < 1
+                ? "Clip must be at least 1 second long"
+                : "Clip must be no longer than 5 minutes"
+              }
+            </p>
           )}
-        </Button>
-
-        <Button
-          onClick={handleCreateTrimmedClip}
-          disabled={disabled || !isValidClip}
-          className="w-full bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white shadow-md hover:shadow-lg"
-        >
-          <Scissors className="mr-2 h-4 w-4" />
-          Create Focused Clip ({formatSecondsToMMSS(clipDuration)})
-        </Button>
-
-        {!isValidClip && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-            {clipDuration < 1
-              ? "Clip must be at least 1 second long"
-              : "Clip must be no longer than 5 minutes"
-            }
-          </p>
-        )}
-      </CardContent>
+        </CardContent>
+      </div>
     </Card>
   );
 }
