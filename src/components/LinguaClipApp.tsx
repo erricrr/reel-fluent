@@ -429,6 +429,10 @@ export default function LinguaClipApp() {
       duration: mediaDuration
     };
 
+    // Exit focused clip mode when loading new media
+    setFocusedClip(null);
+    setShowClipTrimmer(false);
+
     setMediaSources(prev => [...prev, newMediaSource]);
     setActiveMediaSourceId(newMediaSource.id);
 
@@ -1069,10 +1073,20 @@ export default function LinguaClipApp() {
                 onSelectSource={(sourceId) => {
                   const source = mediaSources.find(s => s.id === sourceId);
                   if (source) {
+                    // Exit focused clip mode when switching sources
+                    setFocusedClip(null);
+                    setShowClipTrimmer(false);
+
+                    // Then update the source
                     setActiveMediaSourceId(sourceId);
                     setMediaSrc(source.src);
                     setMediaDisplayName(source.displayName);
                     setCurrentSourceType(source.type);
+
+                    // Generate new auto clips for the selected source
+                    const newGeneratedClips = generateClips(source.duration, clipSegmentationDuration, language);
+                    setClips(newGeneratedClips);
+                    setCurrentClipIndex(0);
                   }
                 }}
                 onRemoveSource={handleRemoveMediaSource}
