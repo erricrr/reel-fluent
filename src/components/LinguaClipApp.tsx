@@ -882,7 +882,7 @@ export default function LinguaClipApp() {
 
       setClips(newClips);
       setCurrentClipIndex(newCurrentIdx);
-      toast({ title: "Clip Removed", description: "The selected clip has been removed from the list." });
+      toast({ title: "Clip Removed", description: "The selected clip has been removed. Remaining clips have been renumbered." });
     }
   };
 
@@ -1184,10 +1184,6 @@ export default function LinguaClipApp() {
 
   const handleRemoveFromSession = useCallback((clipId: string) => {
     setSessionClips(prevClips => prevClips.filter(clip => clip.id !== clipId));
-    // toast({
-    //   title: "Clip Removed",
-    //   description: "Clip has been removed from your session.",
-    // });
   }, [toast]);
 
   const handleRemoveMediaSource = useCallback((sourceId: string) => {
