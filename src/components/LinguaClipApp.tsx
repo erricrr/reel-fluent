@@ -311,12 +311,6 @@ export default function LinguaClipApp() {
         setProcessingStatus("Preparing to extract audio from YouTube video...");
 
         try {
-          toast({
-            title: "Processing YouTube Video",
-            description: "Starting audio extraction. This may take a moment...",
-            duration: 3000
-          });
-
           const youtubeStatusCallback = (progress: number, status: string) => {
             if (processingIdRef.current === localProcessingId) {
               setProcessingStatus(status || "Extracting audio...");
@@ -358,11 +352,6 @@ export default function LinguaClipApp() {
 
           // Successfully processed YouTube video
           setIsYouTubeProcessing(false);
-          toast({
-            title: "YouTube Audio Extracted",
-            description: `Successfully extracted audio from "${videoInfo.title}"`,
-            duration: 3000
-          });
 
         } catch (error: any) {
           setIsYouTubeProcessing(false);
@@ -547,34 +536,9 @@ export default function LinguaClipApp() {
 
       setProcessingProgress(90);
       setProcessingStatus("Finalizing clip setup...");
-
-      setClips(newGeneratedClips.map(clip => ({
-        ...clip,
-        language: language,
-        comparisonResult: null,
-        feedback: null,
-        englishTranslation: null,
-        automatedTranscription: null,
-        userTranscription: null
-      })));
+      setClips(newGeneratedClips);
       setCurrentClipIndex(0);
-
-      if (newGeneratedClips.length > 0) {
-        setProcessingProgress(100);
-        setProcessingStatus("Processing complete!");
-        const mediaTypeForToast = currentSourceType || "media";
-        toast({ title: "Media Processed", description: `${newGeneratedClips.length} clip(s) generated for ${mediaTypeForToast}.` });
-
-        // Show completion for a brief moment before hiding
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 1000);
-      } else if (mediaDuration > 0) {
-        toast({ variant: "destructive", title: "Processing Error", description: "Could not generate clips for the media." });
-        setIsLoading(false);
-      } else {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     } else if (!mediaSrc && clips.length > 0) {
       setClips([]);
       setCurrentClipIndex(0);
@@ -1263,11 +1227,6 @@ export default function LinguaClipApp() {
       setClips([]);
       setCurrentClipIndex(0);
     }
-
-    toast({
-      title: "Media Source Removed",
-      description: "The media source has been removed.",
-    });
   }, [isAnyClipTranscribing, sessionClips, activeMediaSourceId]);
 
   return (

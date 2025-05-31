@@ -294,8 +294,8 @@ export default function TranscriptionWorkspace({
   const reviewPracticeButton = (
     <div className="flex gap-2">
       <Button
-        variant="outline"
-        className="w-full flex items-center justify-center gap-2 h-auto py-3"
+        variant="secondary"
+        className="w-full flex items-center justify-center gap-2 h-auto py-3 transition-all duration-200 hover:bg-primary/90 hover:text-primary-foreground hover:shadow-lg"
         onClick={onOpenSessionDrawer}
       >
         <List className="h-4 w-4" />
@@ -837,28 +837,14 @@ export default function TranscriptionWorkspace({
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="manual" disabled={disableTextarea}>Your Transcription</TabsTrigger>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center w-full">
-                    <TabsTrigger
-                      value="ai"
-                      disabled={disableTextarea || !aiToolsEnabled}
-                      className="w-full flex items-center gap-2"
-                    >
-                      {aiToolsEnabled ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-                      AI Tools
-                    </TabsTrigger>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    {!isTranscriptionSaved
-                      ? "Save your transcription before accessing AI tools"
-                      : "Access AI transcription, translation, and correction tools"
-                    }
-                  </p>
-                </TooltipContent>
-              </Tooltip>
+              <TabsTrigger
+                value="ai"
+                disabled={disableTextarea || !aiToolsEnabled}
+                className="w-full flex items-center gap-2"
+              >
+                {aiToolsEnabled ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                AI Tools
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="manual" className="mt-4">
@@ -907,34 +893,20 @@ export default function TranscriptionWorkspace({
                   />
                 </CardContent>
                  <CardFooter className="flex-col items-stretch gap-2">
-                   <Tooltip>
-                     <TooltipTrigger asChild>
-                       <div>
-                         <Button
-                           onClick={() => {
-                             handleSaveOrUpdate();
-                             if (isTranscriptionSaved) {
-                               handleTabChange("ai");
-                             }
-                           }}
-                           disabled={disableTextarea}
-                           variant="secondary"
-                           className="w-full flex items-center justify-center gap-2"
-                         >
-                           {isTranscriptionSaved ? <Unlock className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                           Save & Unlock AI Tools
-                         </Button>
-                       </div>
-                     </TooltipTrigger>
-                     <TooltipContent>
-                       <p>
-                         {!isTranscriptionSaved
-                           ? "Save your transcription to unlock AI tools"
-                           : "Access AI transcription, translation, and correction tools"
-                         }
-                       </p>
-                     </TooltipContent>
-                   </Tooltip>
+                   <Button
+                     onClick={() => {
+                       handleSaveOrUpdate();
+                       if (isTranscriptionSaved) {
+                         handleTabChange("ai");
+                       }
+                     }}
+                     disabled={disableTextarea}
+                     variant="secondary"
+                     className="w-full flex items-center justify-center gap-2 transition-all duration-200 hover:bg-primary/90 hover:text-primary-foreground hover:shadow-lg"
+                   >
+                     {isTranscriptionSaved ? <Unlock className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+                     Save & Unlock AI Tools
+                   </Button>
                 </CardFooter>
               </Card>
             </TabsContent>
