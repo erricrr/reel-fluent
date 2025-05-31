@@ -970,7 +970,7 @@ export default function TranscriptionWorkspace({
                       <Sparkles className="mr-2 h-4 w-4" />
                       {isAnyClipTranscribing ? "Transcribing..." : focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
                     </Button>
-                    <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
+                    <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50" resizable>
                       {currentClip.automatedTranscription === "Transcribing..." && <ThreeDotsLoader className="mx-auto my-4" />}
                       {currentClip.automatedTranscription && currentClip.automatedTranscription !== "Transcribing..." ? <p className="text-sm">{currentClip.automatedTranscription}</p> : null}
                       {!currentClip.automatedTranscription && <p className="text-sm text-muted-foreground">Click "Transcribe" above to generate.</p>}
@@ -979,7 +979,7 @@ export default function TranscriptionWorkspace({
 
                   <div>
                     <h3 className="font-semibold mb-1 text-foreground">Your Input:</h3>
-                    <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30">
+                    <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30" resizable>
                        {userTranscriptionInput ?
                           <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> :
                           <p className="text-sm text-muted-foreground">You haven't typed anything for this clip yet.</p>
@@ -997,7 +997,7 @@ export default function TranscriptionWorkspace({
                       <FileDiff className="mr-2 h-4 w-4" />
                       {isCorrectionsLoading ? "Comparing..." : "Get Corrections"}
                     </Button>
-                    <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50">
+                    <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50" resizable>
                        {isCorrectionsLoading ? (
                          <ThreeDotsLoader className="mx-auto my-4" />
                        ) : currentClip.comparisonResult === null || currentClip.comparisonResult === undefined ? (
@@ -1031,7 +1031,7 @@ export default function TranscriptionWorkspace({
                       <Languages className="mr-2 h-4 w-4" />
                       {isTranslationLoading ? "Translating..." : `Translate to ${getLanguageLabel(translationTargetLanguage)}`}
                     </Button>
-                    <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50">
+                    <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50" resizable>
                        {isTranslationLoading ? (
                          <ThreeDotsLoader className="mx-auto my-4" />
                        ) : !getTranslationForCurrentTarget() ? (
