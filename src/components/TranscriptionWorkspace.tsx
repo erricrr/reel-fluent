@@ -857,12 +857,12 @@ export default function TranscriptionWorkspace({
                     {focusedClip ? (
                       <>
                         Listen to your focused clip ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                        and type the dialogue. Save your transcription to unlock AI tools.
+                        and type the dialogue.
                       </>
                     ) : (
                       <>
                         Listen to Clip {currentClipIndex + 1} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                        and type the dialogue. Save your transcription to unlock AI tools.
+                        and type the dialogue.
                       </>
                     )}
                   </CardDescription>
