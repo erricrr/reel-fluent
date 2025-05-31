@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -323,6 +323,61 @@ export default function TranscriptionWorkspace({
 
   // Add a new state to track if current transcription is saved
   const [isTranscriptionSaved, setIsTranscriptionSaved] = useState(true);
+
+  // Ref for left pane to reset width on small screens
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  // Dragging state for split-handle
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+  // Clear inline width when viewport is narrower than large breakpoint
+  useEffect(() => {
+    const handleResize = () => {
+      if (leftPaneRef.current && window.innerWidth < 1024) {
+        leftPaneRef.current.style.removeProperty('width');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    // initial check
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  // Set up global mousemove/up for dragging
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current || !leftPaneRef.current) return;
+      const delta = e.clientX - startX.current;
+      const newWidth = startWidth.current + delta;
+      const minWidth = 15 * 16; // 15rem
+      const maxWidth = window.innerWidth * 0.5; // 50%
+      const clamped = Math.min(Math.max(newWidth, minWidth), maxWidth);
+      leftPaneRef.current.style.width = `${clamped}px`;
+    };
+    const onMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+  // Mouse-down on gutter starts dragging
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (window.innerWidth < 1024) return;
+    isDragging.current = true;
+    startX.current = e.clientX;
+    if (leftPaneRef.current) {
+      startWidth.current = leftPaneRef.current.getBoundingClientRect().width;
+    }
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   // Stable callback for media time updates to prevent remount flicker
   const handlePlayerTimeUpdate = useCallback((time: number) => {
@@ -719,8 +774,8 @@ export default function TranscriptionWorkspace({
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 p-3 sm:p-4 md:p-6">
-        <div className="lg:w-1/2 w-full space-y-4">
+      <div className="flex flex-col lg:flex-row gap-y-4 lg:gap-y-0 lg:gap-x-2 p-3 sm:p-4 md:p-6">
+        <div ref={leftPaneRef} className="w-full space-y-4 resize-none overflow-visible lg:w-auto lg:min-w-[15rem] lg:max-w-[50%] lg:overflow-auto">
           <VideoPlayer
             ref={videoPlayerRef}
             src={mediaSrc}
@@ -827,7 +882,11 @@ export default function TranscriptionWorkspace({
           )}
         </div>
 
-        <div className="lg:w-1/2 w-full">
+        {/* Gutter handle for resizing */}
+        <div className="hidden lg:flex items-center justify-center px-1 cursor-col-resize select-none" onMouseDown={onMouseDown}>
+          <GripVertical className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div className="w-full lg:flex-1 lg:min-w-0">
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-[1fr_1fr_auto]">
               <TabsTrigger value="manual" disabled={disableTextarea}>Your Transcription</TabsTrigger>
