@@ -646,7 +646,7 @@ export default function TranscriptionWorkspace({
     if (canSaveToSession) {
       toast({
         title: "Clip Saved",
-        description: "Clip and transcription added to practice history"
+        description: "Your clip is now available in Saved Attempts. Click the Saved Attempts button to view your practice history."
       });
     }
     // No notification needed for updates - UI feedback is sufficient
@@ -761,9 +761,6 @@ export default function TranscriptionWorkspace({
                   {formatSecondsToMMSS(focusedClip.startTime)} - {formatSecondsToMMSS(focusedClip.endTime)}
                 </p>
               </div>
-
-              {/* Save to Session Button */}
-              {reviewPracticeButton}
             </div>
           ) : (
             <div className="space-y-4">
@@ -820,9 +817,6 @@ export default function TranscriptionWorkspace({
                 formatSecondsToMMSS={formatSecondsToMMSS}
                 disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
               />
-
-              {/* Save to Session Button */}
-              {reviewPracticeButton}
             </div>
           )}
           {isMobileBrowser() && (
@@ -835,7 +829,7 @@ export default function TranscriptionWorkspace({
 
         <div className="lg:w-1/2 w-full">
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-[1fr_1fr_auto]">
               <TabsTrigger value="manual" disabled={disableTextarea}>Your Transcription</TabsTrigger>
               <TabsTrigger
                 value="ai"
@@ -845,6 +839,14 @@ export default function TranscriptionWorkspace({
                 {aiToolsEnabled ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
                 AI Tools
               </TabsTrigger>
+              <Button
+                variant="ghost"
+                onClick={onOpenSessionDrawer}
+                className="px-4 h-9 flex items-center gap-2 rounded-none hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                <List className="h-3 w-3" />
+                Saved Attempts
+              </Button>
             </TabsList>
 
             <TabsContent value="manual" className="mt-4">
