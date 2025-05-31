@@ -39,8 +39,8 @@ export default function SessionClipsManager({
   // DRY: extracted empty session clips message
   const EmptySessionClipsMessage = (
     <div className="text-center py-8 text-muted-foreground">
-      <p>No clips saved in this session yet.</p>
-      <p className="text-sm mt-2">Save clips to access them quickly without re-uploading media.</p>
+      <p>No transcription attempts yet.</p>
+      <p className="text-sm mt-2">Your clips with transcription attempts will appear here.</p>
     </div>
   );
 
