@@ -147,7 +147,7 @@ const MediaControls = ({
     {/* Timeline Controls Header */}
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
       <span className="text-sm font-medium text-foreground">
-        {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {focusedClip ? (focusedClip.displayName || 'Custom Clip') : `Clip ${currentClipIndex + 1} (Focused)`}
+        {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {focusedClip ? (focusedClip.displayName || 'Custom Clip') : `Clip ${currentClipIndex + 1}`}
       </span>
       <span className="text-sm font-mono text-primary">
         {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
@@ -399,6 +399,8 @@ export default function TranscriptionWorkspace({
   useEffect(() => {
     setCurrentPlaybackTime(currentClip?.startTime || 0);
     setPlaybackRate(1.0); // Reset to normal speed when switching clips
+    // Clear any preview clip to ensure boundaries reset
+    setPreviewClip(null);
   }, [currentClip.id]); // Only run when clip ID changes
 
   // Poll for current time continuously (less frequent to avoid interference)

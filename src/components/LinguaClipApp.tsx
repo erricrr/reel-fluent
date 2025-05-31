@@ -605,7 +605,8 @@ export default function LinguaClipApp() {
   };
 
   const handleUserTranscriptionChange = (clipId: string, newUserTranscription: string) => {
-    updateClipData(clipId, { userTranscription: newUserTranscription });
+    // Update the user transcription and clear any existing comparison results to allow re-comparison
+    updateClipData(clipId, { userTranscription: newUserTranscription, comparisonResult: null });
   };
 
   const handleTranscribeAudio = useCallback(async (clipId: string) => {
