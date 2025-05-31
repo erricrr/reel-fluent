@@ -1116,12 +1116,7 @@ export default function LinguaClipApp() {
           : clip
       )
     );
-
-    toast({
-      title: "Clip Renamed",
-      description: "The clip name has been updated.",
-    });
-  }, [toast]);
+  }, []);
 
   const handleLoadFromSession = useCallback((clipToLoad: SessionClip) => {
     if (isAnyClipTranscribing) {
