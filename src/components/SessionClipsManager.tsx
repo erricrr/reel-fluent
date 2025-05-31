@@ -36,6 +36,14 @@ export default function SessionClipsManager({
   mediaSources,
   focusedClipId = null
 }: SessionClipsManagerProps) {
+  // DRY: extracted empty session clips message
+  const EmptySessionClipsMessage = (
+    <div className="text-center py-8 text-muted-foreground">
+      <p>No clips saved in this session yet.</p>
+      <p className="text-sm mt-2">Save clips to access them quickly without re-uploading media.</p>
+    </div>
+  );
+
   const MAX_TOTAL_DURATION = 30 * 60; // 30 minutes in seconds
   const [editingClipId, setEditingClipId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>("");
@@ -65,12 +73,7 @@ export default function SessionClipsManager({
   };
 
   if (sessionClips.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <p>No clips saved in this session yet.</p>
-        <p className="text-sm mt-2">Save clips to access them quickly without re-uploading media.</p>
-      </div>
-    );
+    return EmptySessionClipsMessage;
   }
 
   return (
@@ -191,13 +194,6 @@ export default function SessionClipsManager({
               </div>
             );
           })}
-
-          {sessionClips.length === 0 && (
-            <div className="text-center py-4 text-sm text-muted-foreground">
-              <p>No clips saved in this session yet.</p>
-              <p className="text-sm mt-2">Save clips to access them quickly without re-uploading media.</p>
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>

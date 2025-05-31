@@ -24,19 +24,20 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
   const [draggedFileType, setDraggedFileType] = useState<'video' | 'audio' | null>(null);
 
   const processFile = (file: File | null | undefined) => {
-    if (file) {
-      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
-        onSourceLoad({ file });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Invalid File Type",
-          description: "Please upload a valid video or audio file (e.g., mp4, mp3, wav, ogg).",
-        });
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ""; // Reset file input
-        }
-      }
+    if (!file) return;
+    const isValid = file.type.startsWith("video/") || file.type.startsWith("audio/");
+    if (isValid) {
+      onSourceLoad({ file });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Invalid File Type",
+        description: "Please upload a valid video or audio file (e.g., mp4, mp3, wav, ogg).",
+      });
+    }
+    // Always reset file input so selecting the same file again will trigger change
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 

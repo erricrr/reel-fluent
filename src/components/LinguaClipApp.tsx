@@ -21,6 +21,7 @@ import { saveMediaItemAction } from '@/app/actions';
 import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo, type ProgressCallback } from '@/lib/youtubeUtils';
 import { Progress } from "@/components/ui/progress";
 import SessionClipsManager from './SessionClipsManager';
+import { cn } from "@/lib/utils";
 
 const MAX_MEDIA_DURATION_MINUTES = 30;
 
@@ -527,6 +528,10 @@ export default function LinguaClipApp() {
 
 
   useEffect(() => {
+    if (focusedClip) {
+      // Skip auto-generation when working with a focused clip
+      return;
+    }
     if (mediaSrc && mediaDuration > 0) {
       const currentProcessingId = processingIdRef.current;
       setIsLoading(true);
@@ -574,7 +579,7 @@ export default function LinguaClipApp() {
       setClips([]);
       setCurrentClipIndex(0);
     }
-  }, [mediaSrc, mediaDuration, clipSegmentationDuration, language, toast, currentSourceType]);
+  }, [mediaSrc, mediaDuration, clipSegmentationDuration, language, toast, currentSourceType, focusedClip]);
 
 
   useEffect(() => {
@@ -1054,7 +1059,7 @@ export default function LinguaClipApp() {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
-  const handleSaveToSession = useCallback(() => {
+  const handleSaveToSession = useCallback((overrideUserTranscription?: string) => {
     if (!currentClip || !activeMediaSourceId) return;
 
     // Calculate total duration including the new clip
@@ -1080,7 +1085,10 @@ export default function LinguaClipApp() {
       clip.mediaSourceId === activeMediaSourceId
     );
 
-    // Create a new clip with reference to its media source and all transcription data
+    // Determine user transcription to save
+    const userTrans = overrideUserTranscription !== undefined
+      ? overrideUserTranscription
+      : (currentClip.userTranscription || "");
     const sessionClip: SessionClip = {
       id: existingClipIndex >= 0 ? sessionClips[existingClipIndex].id : generateUniqueId(),
       startTime: currentClip.startTime,
@@ -1091,7 +1099,7 @@ export default function LinguaClipApp() {
         : `Clip ${sessionClips.length + 1}`,
       mediaSourceId: activeMediaSourceId,
       // Ensure all transcription data is properly formatted
-      userTranscription: currentClip.userTranscription || "",
+      userTranscription: userTrans,
       automatedTranscription: currentClip.automatedTranscription || null,
       translation: currentClip.translation || null,
       translationTargetLanguage: currentClip.translationTargetLanguage || null,
@@ -1267,49 +1275,57 @@ export default function LinguaClipApp() {
       <Header />
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg border-border">
-          <CardContent className="p-6 space-y-6">
-            {mediaSources.length > 0 && (
-              <MediaSourceList
-                sources={mediaSources}
-                activeSourceId={activeMediaSourceId}
-                onSelectSource={(sourceId) => {
-                  const source = mediaSources.find(s => s.id === sourceId);
-                  if (source) {
-                    // Exit focused clip mode when switching sources
-                    setFocusedClip(null);
-                    setShowClipTrimmer(false);
-
-                    // Then update the source
-                    setActiveMediaSourceId(sourceId);
-                    setMediaSrc(source.src);
-                    setMediaDisplayName(source.displayName);
-                    setCurrentSourceType(source.type);
-
-                    // Generate new auto clips for the selected source
-                    const newGeneratedClips = generateClips(source.duration, clipSegmentationDuration, language);
-                    setClips(newGeneratedClips);
-                    setCurrentClipIndex(0);
-                  }
-                }}
-                onRemoveSource={handleRemoveMediaSource}
-                disabled={globalAppBusyState || isAnyClipTranscribing}
-              />
-            )}
+          <CardContent className="p-6 space-y-6 lg:space-y-0 lg:flex lg:gap-6">
             {mediaSources.length < 3 && (
-              <>
+              <div className={cn(
+                "w-full",
+                mediaSources.length > 0 ? "lg:w-1/2" : "lg:w-full"
+              )}>
                 <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading && !isYouTubeProcessing} />
                 {isYouTubeProcessing && (
                   <YouTubeProcessingLoader status={processingStatus} />
                 )}
-              </>
+                <div className="mt-6">
+                  <LanguageSelector
+                    selectedLanguage={language}
+                    onLanguageChange={handleLanguageChange}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <LanguageSelector
-                selectedLanguage={language}
-                onLanguageChange={handleLanguageChange}
-                disabled={isLoading}
-              />
-            </div>
+            {mediaSources.length > 0 && (
+              <div className={cn(
+                "w-full",
+                mediaSources.length < 3 ? "lg:w-1/2" : "w-full"
+              )}>
+                <MediaSourceList
+                  sources={mediaSources}
+                  activeSourceId={activeMediaSourceId}
+                  onSelectSource={(sourceId) => {
+                    const source = mediaSources.find(s => s.id === sourceId);
+                    if (source) {
+                      // Exit focused clip mode when switching sources
+                      setFocusedClip(null);
+                      setShowClipTrimmer(false);
+
+                      // Then update the source
+                      setActiveMediaSourceId(sourceId);
+                      setMediaSrc(source.src);
+                      setMediaDisplayName(source.displayName);
+                      setCurrentSourceType(source.type);
+
+                      // Generate new auto clips for the selected source
+                      const newGeneratedClips = generateClips(source.duration, clipSegmentationDuration, language);
+                      setClips(newGeneratedClips);
+                      setCurrentClipIndex(0);
+                    }
+                  }}
+                  onRemoveSource={handleRemoveMediaSource}
+                  disabled={globalAppBusyState || isAnyClipTranscribing}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1410,7 +1426,7 @@ export default function LinguaClipApp() {
           <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 z-10">
             <div className="flex items-center gap-2">
               <List className="h-5 w-5" />
-              <h3 className="text-lg font-semibold">Saved Clips</h3>
+              <h3 className="text-lg font-semibold">Saved Attempts</h3>
               <span className="text-sm text-muted-foreground">({sessionClips.length})</span>
             </div>
             <Button variant="ghost" size="sm" className="rounded-full" onClick={() => setSessionDrawerOpen(false)}>
