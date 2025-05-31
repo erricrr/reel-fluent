@@ -888,22 +888,22 @@ export default function TranscriptionWorkspace({
         </div>
         <div className="w-full lg:flex-1 lg:min-w-0">
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-[1fr_1fr_auto]">
-              <TabsTrigger value="manual" disabled={disableTextarea}>Your Transcription</TabsTrigger>
+            <TabsList className="flex w-full gap-2 overflow-x-auto whitespace-nowrap lg:grid lg:grid-cols-[1fr_1fr_auto] lg:overflow-visible">
+              <TabsTrigger value="manual" disabled={disableTextarea} className="text-xs sm:text-sm">Your Transcription</TabsTrigger>
               <TabsTrigger
                 value="ai"
                 disabled={disableTextarea || !aiToolsEnabled}
-                className="w-full flex items-center gap-2"
+                className="w-full flex items-center gap-2 text-xs sm:text-sm"
               >
-                {aiToolsEnabled ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                {aiToolsEnabled ? <Unlock className="hidden sm:inline-block h-3 w-3" /> : <Lock className="hidden sm:inline-block h-3 w-3" />}
                 AI Tools
               </TabsTrigger>
               <Button
                 variant="ghost"
                 onClick={onOpenSessionDrawer}
-                className="px-4 h-9 flex items-center gap-2 rounded-none hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                className="px-4 h-9 flex items-center gap-2 text-xs sm:text-sm rounded-none hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
-                <List className="h-3 w-3" />
+                <List className="hidden sm:inline-block h-3 w-3" />
                 Saved Attempts
               </Button>
             </TabsList>
