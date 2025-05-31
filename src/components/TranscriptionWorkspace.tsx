@@ -645,8 +645,8 @@ export default function TranscriptionWorkspace({
     // Only show notification for new clips being added to session
     if (canSaveToSession) {
       toast({
-        title: "Clip Saved",
-        description: "Your clip is now available in Saved Attempts. Click the Saved Attempts button to view your practice history."
+        title: "Transcription Attempt Saved",
+        description: "Your transcription attempt is saved! Use the Saved Attempts button to the left of the AI Tools to review or make changes anytime."
       });
     }
     // No notification needed for updates - UI feedback is sufficient
