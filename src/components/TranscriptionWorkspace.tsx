@@ -541,15 +541,6 @@ export default function TranscriptionWorkspace({
       return;
     }
 
-    // Check if already translated to the target language
-    const existingTranslation = getTranslationForCurrentTarget();
-    if (existingTranslation && !existingTranslation.startsWith("Error:") && existingTranslation !== "Translating...") {
-      toast({
-        title: `Already Translated to ${getLanguageLabel(translationTargetLanguage)}`
-      });
-      return;
-    }
-
     try {
       await onTranslate(currentClip.id, translationTargetLanguage);
       // Only auto-save if this is a new clip (not already in session) and canSaveToSession is true
