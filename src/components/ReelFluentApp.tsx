@@ -818,7 +818,7 @@ export default function ReelFluentApp() {
 
       toast({
         title: "Comparison Complete",
-        description: `${accuracy}% accuracy (${correctCount}/${totalCount} tokens correct)`
+        description: "Review the highlighted differences above to see how your transcription compares with the AI version."
       });
 
     } catch (error) {
