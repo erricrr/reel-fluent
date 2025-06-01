@@ -850,9 +850,6 @@ export default function TranscriptionWorkspace({
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {formatSecondsToMMSS(focusedClip.startTime)} - {formatSecondsToMMSS(focusedClip.endTime)}
-                </p>
               </div>
             </div>
           ) : (
