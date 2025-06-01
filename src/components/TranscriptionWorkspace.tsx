@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -23,6 +23,7 @@ import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import { useToast } from "@/hooks/use-toast";
 import { getLanguageLabel } from "@/lib/languageOptions";
 import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
@@ -712,6 +713,43 @@ export default function TranscriptionWorkspace({
     setIsTranscriptionSaved(true);
   }, [currentClip.id]);
 
+  // Add refs for clip navigation
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const activeClipRef = useRef<HTMLButtonElement>(null);
+
+  // Add handleClipClick function
+  const handleClipClick = useCallback((index: number) => {
+    onSelectClip(index);
+    // Ensure clip is visible after selection
+    setTimeout(() => {
+      if (activeClipRef.current && scrollContainerRef.current) {
+        const scrollAreaViewport = scrollContainerRef.current.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
+        if (scrollAreaViewport) {
+          const clipButton = activeClipRef.current;
+          const clipLeftRelative = clipButton.offsetLeft;
+          const clipWidth = clipButton.offsetWidth;
+          const scrollLeft = scrollAreaViewport.scrollLeft;
+          const viewportWidth = scrollAreaViewport.clientWidth;
+          const margin = 16;
+          const isClippedLeft = clipLeftRelative < scrollLeft + margin;
+          const isClippedRight = clipLeftRelative + clipWidth > scrollLeft + viewportWidth - margin;
+          if (isClippedLeft || isClippedRight) {
+            let newScrollLeft = scrollLeft;
+            if (isClippedLeft) {
+              newScrollLeft = clipLeftRelative - margin;
+            } else if (isClippedRight) {
+              newScrollLeft = clipLeftRelative + clipWidth - viewportWidth + margin;
+            }
+            scrollAreaViewport.scrollTo({
+              left: Math.max(0, newScrollLeft),
+              behavior: 'smooth'
+            });
+          }
+        }
+      }
+    }, 10);
+  }, [onSelectClip]);
+
   if (!currentClip) {
     return (
       <div className="text-center py-10 text-muted-foreground">
@@ -821,11 +859,72 @@ export default function TranscriptionWorkspace({
             <div className="space-y-4">
               {/* Auto Clip Controls */}
               <div className="space-y-3 p-3 bg-card rounded-lg shadow">
-                <ClipDurationSelector
+                <div className="flex justify-between items-center mb-2">
+                  <ClipDurationSelector
                     selectedDuration={clipSegmentationDuration}
                     onDurationChange={onClipDurationChange}
                     disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-                />
+                  />
+                  {currentClip && clips.length > 1 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground cursor-pointer"
+                          disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+                          aria-label="Clip options"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="left" align="center" className="w-48">
+                        <DropdownMenuItem
+                          onClick={() => onRemoveClip(currentClip.id)}
+                          className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+                        >
+                          <Trash2Icon className="h-4 w-4 mr-2" />
+                          Remove Clip {currentClipIndex + 1}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+
+                <ScrollArea className="w-full whitespace-nowrap rounded-md">
+                  <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-3.5">
+                    {clips.map((clip, index) => (
+                      <Button
+                        key={clip.id}
+                        ref={index === currentClipIndex ? activeClipRef : null}
+                        variant={index === currentClipIndex ? "default" : "outline"}
+                        className={cn(
+                          "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group",
+                          index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
+                        )}
+                        onClick={() => handleClipClick(index)}
+                      >
+                        <div className="flex flex-col items-start text-left">
+                          <div className="flex items-center gap-1.5">
+                            <Film className="h-4 w-4 text-inherit" />
+                            <span className="font-semibold text-xs">
+                              Clip {index + 1}
+                            </span>
+                          </div>
+                          <span className={cn(
+                            "text-xs",
+                            index === currentClipIndex
+                              ? "text-primary-foreground/80"
+                              : "text-muted-foreground group-hover:text-accent-foreground"
+                          )}>
+                            {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
+                          </span>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
               </div>
 
               {/* Clip Trimmer Toggle */}
@@ -862,16 +961,6 @@ export default function TranscriptionWorkspace({
                   onStopPreview={handleStopPreview}
                 />
               )}
-
-              <ClipNavigation
-                clips={clips}
-                currentClipIndex={currentClipIndex}
-                onSelectClip={onSelectClip}
-                onRemoveClip={onRemoveClip}
-                isYouTubeVideo={isYouTubeVideo}
-                formatSecondsToMMSS={formatSecondsToMMSS}
-                disableRemove={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
-              />
             </div>
           )}
           {isMobileBrowser() && (
