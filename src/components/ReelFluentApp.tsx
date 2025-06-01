@@ -1233,14 +1233,14 @@ export default function ReelFluentApp() {
             <div className="lg:flex lg:gap-6">
               {mediaSources.length < 3 && (
                 <div className={cn(
-                  "w-full grid gap-6",
+                  "w-full grid gap-4 sm:gap-6 transition-all duration-300 ease-in-out",
                   mediaSources.length > 0
-                    ? "md:grid-cols-[1.5fr_3.5fr] lg:grid-cols-3 lg:w-2/3"
-                    : "md:grid-cols-[1.5fr_3.5fr] lg:grid-cols-4"
+                    ? "grid-cols-1 sm:grid-cols-[1.2fr_2fr] lg:grid-cols-3 lg:w-2/3"
+                    : "grid-cols-1 sm:grid-cols-[1.2fr_2fr] lg:grid-cols-4"
                 )}>
                   <div className={cn(
                     mediaSources.length > 0 ? "lg:col-span-1" : "lg:col-span-1",
-                    "h-full flex flex-col"
+                    "h-full flex flex-col transition-all duration-300"
                   )}>
                     <LanguageSelector
                       selectedLanguage={language}
@@ -1250,7 +1250,7 @@ export default function ReelFluentApp() {
                   </div>
                   <div className={cn(
                     mediaSources.length > 0 ? "lg:col-span-2" : "lg:col-span-3",
-                    "h-full flex flex-col"
+                    "h-full flex flex-col transition-all duration-300"
                   )}>
                     <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading && !isYouTubeProcessing} />
                     {isYouTubeProcessing && (

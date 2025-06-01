@@ -63,7 +63,7 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
       </div>
 
       {/* Dropdown for small screens only */}
-      <div className="md:hidden">
+      <div className="sm:hidden">
         <Select
           value={selectedLanguage}
           onValueChange={onLanguageChange}
@@ -90,8 +90,8 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
         </Select>
       </div>
 
-            {/* Vertical list for medium and large screens */}
-      <div className="hidden md:block">
+      {/* Vertical list for medium and larger screens */}
+      <div className="hidden sm:block">
         <ScrollArea className="h-[240px] w-full rounded-xl border bg-gradient-to-b from-background to-background/50">
           <div className="relative">
             <RadioGroup

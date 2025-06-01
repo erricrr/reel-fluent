@@ -129,15 +129,23 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
   };
 
   return (
-    <Tabs value={inputType} onValueChange={(value) => setInputType(value as "url" | "file")} className="w-full">
-      <TabsList className="grid w-full grid-cols-2 mb-4">
-        <TabsTrigger value="file"><UploadCloud className="mr-2 h-4 w-4" />Upload File</TabsTrigger>
-        <TabsTrigger value="url"><LinkIcon className="mr-2 h-4 w-4" />From URL</TabsTrigger>
+    <Tabs
+      value={inputType}
+      onValueChange={(value) => setInputType(value as "url" | "file")}
+      className="w-full transition-all duration-300"
+    >
+      <TabsList className="grid w-full grid-cols-2 mb-4 transition-all duration-300">
+        <TabsTrigger value="file" className="transition-all duration-300">
+          <UploadCloud className="mr-2 h-4 w-4" />Upload File
+        </TabsTrigger>
+        <TabsTrigger value="url" className="transition-all duration-300">
+          <LinkIcon className="mr-2 h-4 w-4" />From URL
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="file">
         <div
           className={cn(
-            "space-y-3 border-2 border-dashed rounded-lg p-6 transition-colors",
+            "space-y-3 border-2 border-dashed rounded-lg p-4 sm:p-6 transition-all duration-300",
             isDraggingOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50",
             isLoading && "cursor-not-allowed opacity-70"
           )}
@@ -145,9 +153,15 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className="flex flex-col items-center justify-center space-y-2 text-center">
+          <div className="flex flex-col items-center justify-center space-y-2 text-center transition-all duration-300">
             {renderDragIcon()}
-            <Label htmlFor="media-file-upload" className={cn("text-lg font-medium", isLoading ? "cursor-not-allowed": "cursor-pointer")}>
+            <Label
+              htmlFor="media-file-upload"
+              className={cn(
+                "text-base sm:text-lg font-medium transition-all duration-300",
+                isLoading ? "cursor-not-allowed": "cursor-pointer"
+              )}
+            >
               Drag & drop a video or audio file here, or click to select
             </Label>
             <Input
@@ -165,11 +179,12 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
+              className="transition-all duration-300"
             >
               Browse Files
             </Button>
           </div>
-           <p className="text-xs text-muted-foreground text-center">
+          <p className="text-xs sm:text-sm text-muted-foreground text-center transition-all duration-300">
             Video and audio files will be divided into short clips (configurable length). Max 1 file.
           </p>
         </div>
@@ -177,7 +192,12 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
       <TabsContent value="url">
         <form onSubmit={handleUrlSubmit} className="space-y-3">
           <div className="space-y-2">
-            <Label htmlFor="video-url-input">YouTube or direct video file URL</Label>
+            <Label
+              htmlFor="video-url-input"
+              className="text-base sm:text-lg transition-all duration-300"
+            >
+              YouTube or direct video file URL
+            </Label>
             <Input
               id="video-url-input"
               type="url"
@@ -185,14 +205,19 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isLoading}
+              className="transition-all duration-300"
             />
           </div>
-          <Button type="submit" disabled={isLoading || !url.trim()} className="w-full sm:w-auto">
+          <Button
+            type="submit"
+            disabled={isLoading || !url.trim()}
+            className="w-full sm:w-auto transition-all duration-300"
+          >
             {isLoading ? "Loading..." : "Load Media from URL"}
           </Button>
-           <p className="text-xs text-muted-foreground">
-           Supports YouTube and direct media links (MP3, WAV, MP4, WebM). Format support may vary by browser. YouTube audio is extracted only for language learning.
-           </p>
+          <p className="text-xs sm:text-sm text-muted-foreground transition-all duration-300">
+            Supports YouTube and direct media links (MP3, WAV, MP4, WebM). Format support may vary by browser. YouTube audio is extracted only for language learning.
+          </p>
         </form>
       </TabsContent>
     </Tabs>
