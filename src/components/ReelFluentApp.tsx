@@ -1225,57 +1225,67 @@ export default function ReelFluentApp() {
       <Header />
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg border-border">
-          <CardContent className="p-6 space-y-6 lg:space-y-0 lg:flex lg:gap-6">
-            {mediaSources.length < 3 && (
-              <div className={cn(
-                "w-full",
-                mediaSources.length > 0 ? "lg:w-1/2" : "lg:w-full"
-              )}>
-                <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading && !isYouTubeProcessing} />
-                {isYouTubeProcessing && (
-                  <YouTubeProcessingLoader status={processingStatus} />
-                )}
-                <div className="mt-6">
-                  <LanguageSelector
-                    selectedLanguage={language}
-                    onLanguageChange={handleLanguageChange}
-                    disabled={isLoading}
+          <CardHeader className="pb-0">
+            <CardTitle>Upload Your Media</CardTitle>
+            <CardDescription>Select language and upload media</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="lg:flex lg:gap-6">
+              {mediaSources.length < 3 && (
+                <div className={cn(
+                  "w-full grid gap-6",
+                  mediaSources.length > 0
+                    ? "md:grid-cols-2 lg:w-1/2"
+                    : "md:grid-cols-2"
+                )}>
+                  <div>
+                    <LanguageSelector
+                      selectedLanguage={language}
+                      onLanguageChange={handleLanguageChange}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div>
+                    <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading && !isYouTubeProcessing} />
+                    {isYouTubeProcessing && (
+                      <YouTubeProcessingLoader status={processingStatus} />
+                    )}
+                  </div>
+                </div>
+              )}
+              {mediaSources.length > 0 && (
+                <div className={cn(
+                  "w-full",
+                  mediaSources.length < 3 && "mt-6 lg:mt-0 lg:w-1/2"
+                )}>
+                  <MediaSourceList
+                    sources={mediaSources}
+                    activeSourceId={activeMediaSourceId}
+                    onSelectSource={(sourceId) => {
+                      const source = mediaSources.find(s => s.id === sourceId);
+                      if (source) {
+                        // Exit focused clip mode when switching sources
+                        setFocusedClip(null);
+                        setShowClipTrimmer(false);
+
+                        // Then update the source
+                        setActiveMediaSourceId(sourceId);
+                        setMediaSrc(source.src);
+                        setMediaDisplayName(source.displayName);
+                        setCurrentSourceType(source.type);
+
+                        // Generate new auto clips for the selected source
+                        const generatedClips = generateClips(source.duration, clipSegmentationDuration, language);
+                        setClips(generatedClips);
+                        setCurrentClipIndex(0);
+                      }
+                    }}
+                    onRemoveSource={handleRemoveMediaSource}
+                    disabled={globalAppBusyState || isAnyClipTranscribing}
                   />
                 </div>
-              </div>
-            )}
-            {mediaSources.length > 0 && (
-              <div className={cn(
-                "w-full",
-                mediaSources.length < 3 ? "lg:w-1/2" : "w-full"
-              )}>
-                <MediaSourceList
-                  sources={mediaSources}
-                  activeSourceId={activeMediaSourceId}
-                  onSelectSource={(sourceId) => {
-                    const source = mediaSources.find(s => s.id === sourceId);
-                    if (source) {
-                      // Exit focused clip mode when switching sources
-                      setFocusedClip(null);
-                      setShowClipTrimmer(false);
-
-                      // Then update the source
-                      setActiveMediaSourceId(sourceId);
-                      setMediaSrc(source.src);
-                      setMediaDisplayName(source.displayName);
-                      setCurrentSourceType(source.type);
-
-                      // Generate new auto clips for the selected source
-                      const newGeneratedClips = generateClips(source.duration, clipSegmentationDuration, language);
-                      setClips(newGeneratedClips);
-                      setCurrentClipIndex(0);
-                    }
-                  }}
-                  onRemoveSource={handleRemoveMediaSource}
-                  disabled={globalAppBusyState || isAnyClipTranscribing}
-                />
-              </div>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
 
