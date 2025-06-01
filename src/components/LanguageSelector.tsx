@@ -92,7 +92,7 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
 
       {/* Vertical list for medium and large screens */}
       <div className="hidden md:block">
-        <ScrollArea className="h-[260px] w-full rounded-md border">
+        <ScrollArea className="h-[200px] w-full rounded-md border">
           <RadioGroup
             value={selectedLanguage}
             onValueChange={onLanguageChange}
@@ -104,7 +104,8 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
                 key={lang.value}
                 ref={selectedLanguage === lang.value ? selectedRef : null}
                 className={cn(
-                  "flex items-center space-x-2 p-2 cursor-pointer rounded-md transition-colors",
+                  "flex items-center space-x-2 p-1.5",
+                  "cursor-pointer rounded-md transition-colors",
                   selectedLanguage === lang.value
                     ? "bg-primary/10 text-primary"
                     : "hover:bg-muted",

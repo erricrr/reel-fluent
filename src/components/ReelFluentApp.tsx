@@ -1235,17 +1235,23 @@ export default function ReelFluentApp() {
                 <div className={cn(
                   "w-full grid gap-6",
                   mediaSources.length > 0
-                    ? "md:grid-cols-2 lg:w-1/2"
-                    : "md:grid-cols-2"
+                    ? "md:grid-cols-2 lg:grid-cols-3 lg:w-2/3"
+                    : "md:grid-cols-2 lg:grid-cols-4"  // Changed to 4 columns for better proportions
                 )}>
-                  <div>
+                  <div className={cn(
+                    mediaSources.length > 0 ? "lg:col-span-1" : "lg:col-span-1",
+                    "h-full flex flex-col"  // Added flex flex-col for better height control
+                  )}>
                     <LanguageSelector
                       selectedLanguage={language}
                       onLanguageChange={handleLanguageChange}
                       disabled={isLoading}
                     />
                   </div>
-                  <div>
+                  <div className={cn(
+                    mediaSources.length > 0 ? "lg:col-span-2" : "lg:col-span-3",  // Takes 3 columns when no media
+                    "h-full flex flex-col"  // Added flex flex-col for better height control
+                  )}>
                     <VideoInputForm onSourceLoad={handleSourceLoad} isLoading={isLoading && !isYouTubeProcessing} />
                     {isYouTubeProcessing && (
                       <YouTubeProcessingLoader status={processingStatus} />
@@ -1255,8 +1261,8 @@ export default function ReelFluentApp() {
               )}
               {mediaSources.length > 0 && (
                 <div className={cn(
-                  "w-full",
-                  mediaSources.length < 3 && "mt-6 lg:mt-0 lg:w-1/2"
+                  "w-full h-full flex flex-col",  // Added flex flex-col for better height control
+                  mediaSources.length < 3 && "mt-6 lg:mt-0 lg:w-1/3"
                 )}>
                   <MediaSourceList
                     sources={mediaSources}
