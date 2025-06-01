@@ -510,7 +510,7 @@ export default function TranscriptionWorkspace({
 
     // Check if clip is already transcribed
     if (currentClip.automatedTranscription && !currentClip.automatedTranscription.startsWith("Error:") && currentClip.automatedTranscription !== "Transcribing...") {
-      toast({title: "Already Transcribed", description: "This clip has already been transcribed."});
+      toast({title: `Already Transcribed in ${language.charAt(0).toUpperCase() + language.slice(1)}`});
       return;
     }
 
@@ -551,8 +551,7 @@ export default function TranscriptionWorkspace({
     const existingTranslation = getTranslationForCurrentTarget();
     if (existingTranslation && !existingTranslation.startsWith("Error:") && existingTranslation !== "Translating...") {
       toast({
-        title: "Already Translated",
-        description: `This clip has already been translated to ${getLanguageLabel(translationTargetLanguage)}.`
+        title: `Already Translated to ${getLanguageLabel(translationTargetLanguage)}`
       });
       return;
     }

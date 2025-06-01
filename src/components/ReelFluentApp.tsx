@@ -22,6 +22,7 @@ import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo, type ProgressCa
 import { Progress } from "@/components/ui/progress";
 import SessionClipsManager from './SessionClipsManager';
 import { cn } from "@/lib/utils";
+import { getLanguageLabel } from "@/lib/languageOptions";
 
 const MAX_MEDIA_DURATION_MINUTES = 30;
 
@@ -631,7 +632,9 @@ export default function ReelFluentApp() {
 
         // Update with transcription result
         updateClipState({ automatedTranscription: result.transcription });
-        toast({ title: "Transcription Complete" });
+        toast({
+          title: `${(currentClip.language || language).charAt(0).toUpperCase() + (currentClip.language || language).slice(1)} Transcription Complete`
+        });
         return; // Success, exit the retry loop
       } catch (error) {
         console.error(`Error transcribing audio (attempt ${attempt + 1}):`, error);
@@ -676,18 +679,18 @@ export default function ReelFluentApp() {
       return;
     }
 
-    // Bail if translation already exists (to avoid redundant API calls)
+    // Check if already translated to the target language
     if (targetLanguage === 'english') {
       const existing = currentClipForTranslation.englishTranslation;
       if (existing && !existing.startsWith("Error:") && existing !== "Translating...") {
-        toast({ title: "Already Translated", description: "This clip has already been translated to English." });
+        toast({ title: `Already Translated to English` });
         return;
       }
     } else {
       const existing = currentClipForTranslation.translation;
       const existingLang = currentClipForTranslation.translationTargetLanguage;
       if (existingLang === targetLanguage && existing && !existing.startsWith("Error:") && existing !== "Translating...") {
-        toast({ title: "Already Translated", description: `This clip has already been translated to ${targetLanguage}.` });
+        toast({ title: `Already Translated to ${getLanguageLabel(targetLanguage)}` });
         return;
       }
     }
@@ -746,7 +749,7 @@ export default function ReelFluentApp() {
         [clipId]: { ...(prev[clipId] || currentClipForTranslation), ...updateData }
       }));
 
-      toast({ title: "Translation Successful" });
+      toast({ title: `Translation to ${getLanguageLabel(targetLanguage)} Complete` });
     } catch (error) {
       console.warn("LinguaClipApp: AI Translation error:", error);
       toast({ variant: "destructive", title: "AI Error", description: "Failed to translate transcription." });
@@ -770,7 +773,7 @@ export default function ReelFluentApp() {
     // Bail if corrections already exist (to avoid redundant API calls)
     const existingCorrections = currentClipForCorrections.comparisonResult;
     if (Array.isArray(existingCorrections) && existingCorrections.length > 0 && existingCorrections[0].token !== "Comparing...") {
-      toast({ title: "Already Compared", description: "Comparison already complete." });
+      toast({ title: "Already Compared"});
       return;
     }
 
