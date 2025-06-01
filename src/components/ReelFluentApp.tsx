@@ -32,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 const MAX_MEDIA_DURATION_MINUTES = 30;
 
@@ -156,6 +157,11 @@ export default function ReelFluentApp() {
   // Focused clip state
   const [focusedClip, setFocusedClip] = useState<Clip | null>(null);
   const [showClipTrimmer, setShowClipTrimmer] = useState<boolean>(false);
+
+  // Custom clip naming state
+  const [showCustomClipNaming, setShowCustomClipNaming] = useState<boolean>(false);
+  const [pendingCustomClip, setPendingCustomClip] = useState<{ startTime: number; endTime: number } | null>(null);
+  const [customClipName, setCustomClipName] = useState<string>("");
 
   const processingIdRef = useRef<number>(0);
   const { user } = useAuth();
@@ -998,9 +1004,22 @@ export default function ReelFluentApp() {
   };
 
   const handleCreateFocusedClip = useCallback((startTime: number, endTime: number) => {
-    // Ensure we have a valid language
+    // Store the clip timing and show naming dialog
+    setPendingCustomClip({ startTime, endTime });
+    setCustomClipName(""); // Reset the name input
+    setShowCustomClipNaming(true);
+  }, []);
+
+  const handleCreateFocusedClipImmediate = useCallback((startTime: number, endTime: number, clipName?: string) => {
+    // Create the clip immediately without showing dialog (used for preview functionality)
     const clipLanguage = language || 'english';
+    const finalClipName = clipName || `Custom Clip ${formatSecondsToMMSS(startTime)}-${formatSecondsToMMSS(endTime)}`;
+
+    // Create the focused clip with the custom name
     const newFocusedClip = createFocusedClip(startTime, endTime, clipLanguage);
+    // Add the custom name to the clip
+    newFocusedClip.displayName = finalClipName;
+
     setFocusedClip(newFocusedClip);
     setShowClipTrimmer(false);
 
@@ -1014,14 +1033,37 @@ export default function ReelFluentApp() {
       [newFocusedClip.id]: newFocusedClip
     }));
 
-    toast({
-      title: "Focused Clip Mode",
-      description: `Now working with a custom clip from ${formatSecondsToMMSS(startTime)} to ${formatSecondsToMMSS(endTime)}`
-    });
+    return newFocusedClip;
   }, [language, toast]);
 
   const handleToggleClipTrimmer = useCallback(() => {
     setShowClipTrimmer(prev => !prev);
+  }, []);
+
+  const handleConfirmCustomClipName = useCallback(() => {
+    if (!pendingCustomClip) return;
+
+    const { startTime, endTime } = pendingCustomClip;
+    const clipName = customClipName.trim() || `Custom Clip ${formatSecondsToMMSS(startTime)}-${formatSecondsToMMSS(endTime)}`;
+
+    // Create the clip using the immediate function
+    const newFocusedClip = handleCreateFocusedClipImmediate(startTime, endTime, clipName);
+
+    // Close naming dialog and clear state
+    setShowCustomClipNaming(false);
+    setPendingCustomClip(null);
+    setCustomClipName("");
+
+    toast({
+      title: "Custom Clip Created",
+      description: `Now working with "${clipName}" (${formatSecondsToMMSS(startTime)} - ${formatSecondsToMMSS(endTime)})`
+    });
+  }, [pendingCustomClip, customClipName, handleCreateFocusedClipImmediate, toast]);
+
+  const handleCancelCustomClipName = useCallback(() => {
+    setShowCustomClipNaming(false);
+    setPendingCustomClip(null);
+    setCustomClipName("");
   }, []);
 
   const handleBackToAutoClips = useCallback(() => {
@@ -1132,7 +1174,7 @@ export default function ReelFluentApp() {
       language: currentClip.language || language,
       displayName: existingClipIndex >= 0
         ? sessionClips[existingClipIndex].displayName
-        : (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`),
+        : (currentClip.displayName || (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`)),
       mediaSourceId: activeMediaSourceId,
       originalClipNumber: originalClipNumber,
       // Ensure all transcription data is properly formatted
@@ -1534,6 +1576,49 @@ export default function ReelFluentApp() {
               onClick={handleConfirmDelete}
             >
               Delete All
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Custom Clip Naming Dialog */}
+      <Dialog open={showCustomClipNaming} onOpenChange={setShowCustomClipNaming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Name Your Custom Clip</DialogTitle>
+            <DialogDescription>
+              {pendingCustomClip &&
+                `Give your custom clip (${formatSecondsToMMSS(pendingCustomClip.startTime)} - ${formatSecondsToMMSS(pendingCustomClip.endTime)}) a memorable name.`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input
+              value={customClipName}
+              onChange={(e) => setCustomClipName(e.target.value)}
+              placeholder="Enter clip name (optional)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleConfirmCustomClipName();
+                } else if (e.key === 'Escape') {
+                  handleCancelCustomClipName();
+                }
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={handleCancelCustomClipName}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmCustomClipName}
+            >
+              Create Clip
             </Button>
           </DialogFooter>
         </DialogContent>

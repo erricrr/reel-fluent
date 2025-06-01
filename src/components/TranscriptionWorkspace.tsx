@@ -482,13 +482,13 @@ export default function TranscriptionWorkspace({
 
   // Clear preview clip when ClipTrimmer is hidden
   useEffect(() => {
-    if (!showClipTrimmer && previewClip) {
+    if (!showClipTrimmer) {
       setPreviewClip(null);
       if (videoPlayerRef.current) {
         videoPlayerRef.current.pause();
       }
     }
-  }, [showClipTrimmer, previewClip]);
+  }, [showClipTrimmer]); // Removed previewClip dependency to prevent infinite loops
 
   // Poll for current time continuously (less frequent to avoid interference)
   useEffect(() => {
