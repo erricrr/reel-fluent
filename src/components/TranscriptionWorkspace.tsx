@@ -1170,6 +1170,7 @@ export default function TranscriptionWorkspace({
                        )}
                     </ScrollArea>
                   </div>
+                  <p className="text-xs text-muted-foreground italic mt-6 pt-2 border-t">Note: While AI tools may not be 100% accurate, they provide helpful guidance for learning.</p>
                 </CardContent>
               </Card>
             </TabsContent>
