@@ -25,6 +25,16 @@ import { getLanguageLabel } from "@/lib/languageOptions";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
+interface SessionClip extends Clip {
+  displayName?: string;
+  mediaSourceId?: string;
+  originalClipNumber?: number;
+  // Legacy fields for backward compatibility
+  originalMediaName?: string;
+  mediaSrc?: string;
+  sourceType?: 'video' | 'audio' | 'url' | 'unknown';
+}
+
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
   clips: Clip[];
@@ -54,6 +64,9 @@ interface TranscriptionWorkspaceProps {
   onSaveToSession: (userTranscriptionInput: string) => void;
   onOpenSessionDrawer?: () => void;
   canSaveToSession: boolean;
+  // Session clips for showing saved indicators
+  sessionClips?: SessionClip[];
+  activeMediaSourceId?: string | null;
 }
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -290,6 +303,9 @@ export default function TranscriptionWorkspace({
   onSaveToSession,
   onOpenSessionDrawer,
   canSaveToSession,
+  // Session clips for showing saved indicators
+  sessionClips = [],
+  activeMediaSourceId,
 }: TranscriptionWorkspaceProps) {
   // DRY: Extracted Saved Attempts button
   const reviewPracticeButton = (
@@ -752,6 +768,17 @@ export default function TranscriptionWorkspace({
     }, 10);
   }, [onSelectClip]);
 
+  // Helper function to check if a clip is already saved in session
+  const isClipSaved = useCallback((clip: Clip): boolean => {
+    if (!sessionClips || !activeMediaSourceId) return false;
+
+    return sessionClips.some(sessionClip =>
+      sessionClip.mediaSourceId === activeMediaSourceId &&
+      sessionClip.startTime === clip.startTime &&
+      sessionClip.endTime === clip.endTime
+    );
+  }, [sessionClips, activeMediaSourceId]);
+
   if (!currentClip) {
     return (
       <div className="text-center py-10 text-muted-foreground">
@@ -898,11 +925,17 @@ export default function TranscriptionWorkspace({
                         ref={index === currentClipIndex ? activeClipRef : null}
                         variant={index === currentClipIndex ? "default" : "outline"}
                         className={cn(
-                          "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group",
+                          "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group relative",
                           index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
                         )}
                         onClick={() => handleClipClick(index)}
                       >
+                        {/* Saved indicator */}
+                        {isClipSaved(clip) && (
+                          <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
+                            <BookmarkPlus className="h-3 w-3" />
+                          </div>
+                        )}
                         <div className="flex flex-col items-start text-left">
                           <div className="flex items-center gap-1.5">
                             <Film className="h-4 w-4 text-inherit" />

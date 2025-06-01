@@ -1473,6 +1473,8 @@ export default function ReelFluentApp() {
                 (sessionClips.reduce((acc, clip) => acc + (clip.endTime - clip.startTime), 0) +
                  (currentClip.endTime - currentClip.startTime)) <= 30 * 60
               }
+              sessionClips={sessionClips}
+              activeMediaSourceId={activeMediaSourceId}
             />
           </div>
         )}
