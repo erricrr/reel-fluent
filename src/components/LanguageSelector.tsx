@@ -90,71 +90,71 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
         </Select>
       </div>
 
-      {/* Vertical list for medium and large screens */}
-<div className="hidden md:block">
-  <ScrollArea className="h-[240px] w-full rounded-xl border bg-gradient-to-b from-background to-background/50">
-    <div className="relative">
-      <RadioGroup
-        value={selectedLanguage}
-        onValueChange={onLanguageChange}
-        className="p-2 -space-y-0"
-        disabled={disabled}
-      >
-        {LANGUAGE_OPTIONS.map((lang, index) => (
-          <div
-            key={lang.value}
-            ref={selectedLanguage === lang.value ? selectedRef : null}
-            className={cn(
-              "group relative flex items-center space-x-3 p-2",
-              "cursor-pointer rounded-lg transition-all duration-300 ease-out",
-              "hover:bg-muted/50 hover:shadow-sm",
-              disabled && "opacity-50 cursor-not-allowed"
-            )}
-            onClick={() => !disabled && onLanguageChange(lang.value)}
-            style={{
-              animationDelay: `${index * 50}ms`
-            }}
-          >
-            <RadioGroupItem value={lang.value} id={`lang-${lang.value}`} className="sr-only" />
-
-            {/* Custom radio indicator */}
-            <div className={cn(
-              "relative w-4 h-4 rounded-full border-2 transition-all duration-200",
-              "flex items-center justify-center",
-              selectedLanguage === lang.value
-                ? "border-primary bg-primary"
-                : "border-muted-foreground/30 group-hover:border-primary/50"
-            )}>
-              {selectedLanguage === lang.value && (
-                <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-in fade-in-0 zoom-in-75 duration-200" />
-              )}
-            </div>
-
-            {/* Language label with enhanced typography */}
-            <Label
-              htmlFor={`lang-${lang.value}`}
-              className={cn(
-                "cursor-pointer text-sm font-medium select-none",
-                "transition-all duration-200 tracking-wide",
-                selectedLanguage === lang.value
-                  ? "text-primary font-semibold"
-                  : "text-foreground/80 group-hover:text-foreground"
-              )}
+            {/* Vertical list for medium and large screens */}
+      <div className="hidden md:block">
+        <ScrollArea className="h-[240px] w-full rounded-xl border bg-gradient-to-b from-background to-background/50">
+          <div className="relative">
+            <RadioGroup
+              value={selectedLanguage}
+              onValueChange={onLanguageChange}
+              className="p-2 -space-y-0"
+              disabled={disabled}
             >
-              {lang.label}
-            </Label>
+              {LANGUAGE_OPTIONS.map((lang, index) => (
+                <div
+                  key={lang.value}
+                  ref={selectedLanguage === lang.value ? selectedRef : null}
+                  className={cn(
+                    "group relative flex items-center space-x-3 p-2",
+                    "cursor-pointer rounded-lg transition-all duration-300 ease-out",
+                    "hover:bg-muted/50 hover:shadow-sm",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                  onClick={() => !disabled && onLanguageChange(lang.value)}
+                  style={{
+                    animationDelay: `${index * 50}ms`
+                  }}
+                >
+                  <RadioGroupItem value={lang.value} id={`lang-${lang.value}`} className="sr-only" />
+
+                  {/* Custom radio indicator */}
+                  <div className={cn(
+                    "relative w-4 h-4 rounded-full border-2 transition-all duration-200",
+                    "flex items-center justify-center",
+                    selectedLanguage === lang.value
+                      ? "border-primary bg-primary"
+                      : "border-muted-foreground/30 group-hover:border-primary/50"
+                  )}>
+                    {selectedLanguage === lang.value && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-in fade-in-0 zoom-in-75 duration-200" />
+                    )}
+                  </div>
+
+                  {/* Language label with enhanced typography */}
+                  <Label
+                    htmlFor={`lang-${lang.value}`}
+                    className={cn(
+                      "cursor-pointer text-sm font-medium select-none",
+                      "transition-all duration-200 tracking-wide",
+                      selectedLanguage === lang.value
+                        ? "text-primary font-semibold"
+                        : "text-foreground/80 group-hover:text-foreground"
+                    )}
+                  >
+                    {lang.label}
+                  </Label>
 
 
+                </div>
+              ))}
+            </RadioGroup>
+
+            {/* Subtle top fade effect using CSS */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-b from-background/80 to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
           </div>
-        ))}
-      </RadioGroup>
-
-      {/* Subtle top fade effect using CSS */}
-      <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-b from-background/80 to-transparent pointer-events-none" />
-      <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
-    </div>
-  </ScrollArea>
-</div>
+        </ScrollArea>
+      </div>
     </div>
   );
 }
