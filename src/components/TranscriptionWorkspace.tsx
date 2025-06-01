@@ -475,9 +475,20 @@ export default function TranscriptionWorkspace({
   useEffect(() => {
     setCurrentPlaybackTime(currentClip?.startTime || 0);
     setPlaybackRate(1.0); // Reset to normal speed when switching clips
-    // Clear any preview clip to ensure boundaries reset
+    // Only clear preview clip when actually switching between different clips
+    // Don't clear it when just re-rendering the same clip
     setPreviewClip(null);
   }, [currentClip.id]); // Only run when clip ID changes
+
+  // Clear preview clip when ClipTrimmer is hidden
+  useEffect(() => {
+    if (!showClipTrimmer && previewClip) {
+      setPreviewClip(null);
+      if (videoPlayerRef.current) {
+        videoPlayerRef.current.pause();
+      }
+    }
+  }, [showClipTrimmer, previewClip]);
 
   // Poll for current time continuously (less frequent to avoid interference)
   useEffect(() => {
@@ -641,12 +652,13 @@ export default function TranscriptionWorkspace({
   // Handle preview clip start
   const handlePreviewClip = useCallback((startTime: number, endTime: number) => {
     setPreviewClip({ startTime, endTime });
-    // Start playing the preview
+    // Start playing the preview after a small delay to ensure state is set
     setTimeout(() => {
       if (videoPlayerRef.current) {
-        videoPlayerRef.current.play();
+        videoPlayerRef.current.seek(startTime);
+        videoPlayerRef.current.play(); // VideoPlayerRef.play() handles errors internally
       }
-    }, 100);
+    }, 50);
   }, []);
 
   // Handle preview clip stop
@@ -654,8 +666,14 @@ export default function TranscriptionWorkspace({
     setPreviewClip(null);
     if (videoPlayerRef.current) {
       videoPlayerRef.current.pause();
+      // Reset to the original clip's start time
+      setTimeout(() => {
+        if (videoPlayerRef.current && currentClip) {
+          videoPlayerRef.current.seek(currentClip.startTime);
+        }
+      }, 50);
     }
-  }, []);
+  }, [currentClip]);
 
   // Determine which clip times to use for the VideoPlayer
   const effectiveClip = previewClip ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime } : currentClip;
