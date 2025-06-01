@@ -1049,8 +1049,9 @@ export default function TranscriptionWorkspace({
             <TabsContent value="ai" className="mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Automated Transcription & Analysis</CardTitle>
-                  <CardDescription>View the AI-generated transcription, compare with your input, and translate to your preferred language.</CardDescription>
+                  <CardTitle>Transcription Support</CardTitle>
+                  <CardDescription>
+                  Compare the Automated Transcription with your version and translate to available languages.                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <MediaControls
@@ -1089,7 +1090,7 @@ export default function TranscriptionWorkspace({
                   </div>
 
                   <div>
-                    <h3 className="font-semibold mb-1 text-foreground">Your Input:</h3>
+                    <h3 className="font-semibold mb-1 text-foreground">Your Transcription:</h3>
                     <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30" resizable>
                        {userTranscriptionInput ?
                           <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> :
