@@ -116,7 +116,7 @@ const YouTubeProcessingLoader = ({ status }: { status: string }) => (
   </div>
 );
 
-export default function LinguaClipApp() {
+export default function ReelFluentApp() {
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string | undefined>(undefined);
   const [mediaSrc, setMediaSrc] = useState<string | undefined>(undefined);

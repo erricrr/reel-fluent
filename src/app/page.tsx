@@ -1,5 +1,5 @@
-import LinguaClipApp from '@/components/LinguaClipApp';
+import ReelFluentApp from '@/components/ReelFluentApp';
 
-export default function HomePage() {
-  return <LinguaClipApp />;
+export default function Home() {
+  return <ReelFluentApp />;
 }

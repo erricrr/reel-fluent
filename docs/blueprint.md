@@ -1,4 +1,4 @@
-# **App Name**: LinguaClip
+# **App Name**: ReelFluent
 
 ## Core Features:
 

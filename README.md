@@ -1,4 +1,4 @@
-# LinguaClip
+# ReelFluent
 
 A feature-rich language learning application that allows users to download YouTube videos, transcribe them, and create interactive learning experiences.
 

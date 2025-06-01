@@ -1,4 +1,3 @@
-
 "use client";
 
 import type * as React from 'react';
@@ -17,7 +16,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light'); // Default to light
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem('linguaClipTheme') as Theme | null;
+    const storedTheme = localStorage.getItem('reelFluentTheme') as Theme | null;
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (storedTheme) {
       setTheme(storedTheme);
@@ -32,7 +31,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('linguaClipTheme', theme);
+    localStorage.setItem('reelFluentTheme', theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {

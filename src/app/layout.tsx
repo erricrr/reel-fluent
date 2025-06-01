@@ -1,4 +1,3 @@
-
 import type {Metadata} from 'next';
 import {Geist_Mono, Geist} from 'next/font/google';
 import './globals.css';
@@ -17,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'LinguaClip',
+  title: 'ReelFluent',
   description: 'Practice language listening and transcription with video clips.',
 };
 

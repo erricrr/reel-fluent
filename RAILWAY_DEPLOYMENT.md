@@ -1,6 +1,6 @@
 # Railway Deployment Guide
 
-This guide will help you deploy LinguaClip to Railway with all the required environment variables.
+This guide will help you deploy ReelFluent to Railway with all the required environment variables.
 
 ## Prerequisites
 
