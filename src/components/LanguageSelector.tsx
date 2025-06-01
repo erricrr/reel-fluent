@@ -37,7 +37,7 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
     if (selectedRef.current) {
       selectedRef.current.scrollIntoView({
         behavior: 'smooth',
-        block: 'nearest'
+        block: 'center'
       });
     }
   }, [selectedLanguage]);
@@ -97,56 +97,58 @@ export default function LanguageSelector({ selectedLanguage, onLanguageChange, d
             <RadioGroup
               value={selectedLanguage}
               onValueChange={onLanguageChange}
-              className="p-2 -space-y-0"
+              className="px-1 py-1 space-y-1"
               disabled={disabled}
             >
-              {LANGUAGE_OPTIONS.map((lang, index) => (
-                <div
-                  key={lang.value}
-                  ref={selectedLanguage === lang.value ? selectedRef : null}
-                  className={cn(
-                    "group relative flex items-center space-x-3 p-2",
-                    "cursor-pointer rounded-lg transition-all duration-300 ease-out",
-                    "hover:bg-muted/50 hover:shadow-sm",
-                    disabled && "opacity-50 cursor-not-allowed"
-                  )}
-                  onClick={() => !disabled && onLanguageChange(lang.value)}
-                  style={{
-                    animationDelay: `${index * 50}ms`
-                  }}
-                >
-                  <RadioGroupItem value={lang.value} id={`lang-${lang.value}`} className="sr-only" />
-
-                  {/* Custom radio indicator */}
-                  <div className={cn(
-                    "relative w-4 h-4 rounded-full border-2 transition-all duration-200",
-                    "flex items-center justify-center",
-                    selectedLanguage === lang.value
-                      ? "border-primary bg-primary"
-                      : "border-muted-foreground/30 group-hover:border-primary/50"
-                  )}>
-                    {selectedLanguage === lang.value && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-in fade-in-0 zoom-in-75 duration-200" />
-                    )}
-                  </div>
-
-                  {/* Language label with enhanced typography */}
-                  <Label
-                    htmlFor={`lang-${lang.value}`}
+              <div className="py-1">
+                {LANGUAGE_OPTIONS.map((lang, index) => (
+                  <div
+                    key={lang.value}
+                    ref={selectedLanguage === lang.value ? selectedRef : null}
                     className={cn(
-                      "cursor-pointer text-sm font-medium select-none",
-                      "transition-all duration-200 tracking-wide",
-                      selectedLanguage === lang.value
-                        ? "text-primary font-semibold"
-                        : "text-foreground/80 group-hover:text-foreground"
+                      "group relative flex items-center space-x-3 p-1.5",
+                      "cursor-pointer rounded-lg transition-all duration-300 ease-out",
+                      "hover:bg-muted/50 hover:shadow-sm",
+                      disabled && "opacity-50 cursor-not-allowed"
                     )}
+                    onClick={() => !disabled && onLanguageChange(lang.value)}
+                    style={{
+                      animationDelay: `${index * 50}ms`
+                    }}
                   >
-                    {lang.label}
-                  </Label>
+                    <RadioGroupItem value={lang.value} id={`lang-${lang.value}`} className="sr-only" />
+
+                    {/* Custom radio indicator */}
+                    <div className={cn(
+                      "relative w-4 h-4 rounded-full border-2 transition-all duration-200",
+                      "flex items-center justify-center",
+                      selectedLanguage === lang.value
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/30 group-hover:border-primary/50"
+                    )}>
+                      {selectedLanguage === lang.value && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-in fade-in-0 zoom-in-75 duration-200" />
+                      )}
+                    </div>
+
+                    {/* Language label with enhanced typography */}
+                    <Label
+                      htmlFor={`lang-${lang.value}`}
+                      className={cn(
+                        "cursor-pointer text-sm font-medium select-none",
+                        "transition-all duration-200 tracking-wide",
+                        selectedLanguage === lang.value
+                          ? "text-primary font-semibold"
+                          : "text-foreground/80 group-hover:text-foreground"
+                      )}
+                    >
+                      {lang.label}
+                    </Label>
 
 
-                </div>
-              ))}
+                  </div>
+                ))}
+              </div>
             </RadioGroup>
 
             {/* Subtle top fade effect using CSS */}
