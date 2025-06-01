@@ -508,26 +508,6 @@ export default function TranscriptionWorkspace({
       return;
     }
 
-    // Check if clip is already transcribed (DRY behavior - prevents duplicate API calls)
-    if (currentClip.automatedTranscription &&
-        !currentClip.automatedTranscription.startsWith("Error:") &&
-        currentClip.automatedTranscription !== "Transcribing...") {
-      toast({
-        title: "Already Transcribed",
-        description: `This clip is already transcribed in ${language.charAt(0).toUpperCase() + language.slice(1)}. No additional API call needed.`
-      });
-      return;
-    }
-
-    // Check if currently transcribing to prevent concurrent attempts
-    if (currentClip.automatedTranscription === "Transcribing...") {
-      toast({
-        title: "Transcription in Progress",
-        description: "This clip is already being transcribed. Please wait for it to complete."
-      });
-      return;
-    }
-
     // Set loading state immediately
     const clipId = currentClip.id;
     setLocalTranscribingState(clipId);

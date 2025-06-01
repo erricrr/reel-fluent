@@ -601,8 +601,7 @@ export default function ReelFluentApp() {
         !clipToTranscribe.automatedTranscription.startsWith("Error:") &&
         clipToTranscribe.automatedTranscription !== "Transcribing...") {
       toast({
-        title: "Already Transcribed",
-        description: `This clip is already transcribed in ${(clipToTranscribe.language || language).charAt(0).toUpperCase() + (clipToTranscribe.language || language).slice(1)}. No additional API call needed.`
+        title: `Already Transcribed in ${(clipToTranscribe.language || language).charAt(0).toUpperCase() + (clipToTranscribe.language || language).slice(1)}`
       });
       return;
     }
@@ -668,7 +667,6 @@ export default function ReelFluentApp() {
         // Success toast
         toast({
           title: `${transcriptionLanguage.charAt(0).toUpperCase() + transcriptionLanguage.slice(1)} Transcription Complete`,
-          description: "Your clip has been successfully transcribed!"
         });
 
         // Success - exit the function and stop the loading state
