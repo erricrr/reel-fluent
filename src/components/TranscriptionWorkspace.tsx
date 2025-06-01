@@ -962,14 +962,14 @@ export default function TranscriptionWorkspace({
               {/* Clip Trimmer Toggle */}
               {onToggleClipTrimmer && (
                 <Button
-                  variant={showClipTrimmer ? "outline" : "default"}
+                  variant={showClipTrimmer ? "outline" : "secondary"}
                   onClick={onToggleClipTrimmer}
                   disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
                   className={cn(
-                    "w-full transition-all duration-500",
+                    "w-full transition-all duration-300",
                     showClipTrimmer
                       ? "border-primary/30 text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40"
-                      : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/30 hover:ring-primary/50"
+                      : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border hover:border-primary/20"
                   )}
                 >
                   <Scissors className="mr-2 h-4 w-4" />
