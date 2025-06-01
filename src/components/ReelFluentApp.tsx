@@ -23,6 +23,15 @@ import { Progress } from "@/components/ui/progress";
 import SessionClipsManager from './SessionClipsManager';
 import { cn } from "@/lib/utils";
 import { getLanguageLabel } from "@/lib/languageOptions";
+import { ToastAction } from "@/components/ui/toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const MAX_MEDIA_DURATION_MINUTES = 30;
 
@@ -1186,7 +1195,10 @@ export default function ReelFluentApp() {
 
   const handleRemoveFromSession = useCallback((clipId: string) => {
     setSessionClips(prevClips => prevClips.filter(clip => clip.id !== clipId));
-  }, [toast]);
+  }, []);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [pendingDeleteSourceId, setPendingDeleteSourceId] = useState<string | null>(null);
 
   const handleRemoveMediaSource = useCallback((sourceId: string) => {
     if (isAnyClipTranscribing) {
@@ -1201,11 +1213,8 @@ export default function ReelFluentApp() {
     // Check if any session clips use this media source
     const hasClipsUsingSource = sessionClips.some(clip => clip.mediaSourceId === sourceId);
     if (hasClipsUsingSource) {
-      toast({
-        variant: "destructive",
-        title: "Cannot Remove Media",
-        description: "This media source has saved clips. Please remove those clips first.",
-      });
+      setPendingDeleteSourceId(sourceId);
+      setDeleteDialogOpen(true);
       return;
     }
 
@@ -1220,7 +1229,31 @@ export default function ReelFluentApp() {
       setClips([]);
       setCurrentClipIndex(0);
     }
-  }, [isAnyClipTranscribing, sessionClips, activeMediaSourceId]);
+  }, [isAnyClipTranscribing, sessionClips, activeMediaSourceId, toast]);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!pendingDeleteSourceId) return;
+
+    // Delete associated clips from Saved Attempts
+    setSessionClips(prev => prev.filter(clip => clip.mediaSourceId !== pendingDeleteSourceId));
+
+    // Remove the media source
+    setMediaSources(prev => prev.filter(source => source.id !== pendingDeleteSourceId));
+
+    // Clear current state if we removed the active source
+    if (pendingDeleteSourceId === activeMediaSourceId) {
+      setActiveMediaSourceId(null);
+      setMediaSrc(undefined);
+      setMediaDisplayName(null);
+      setCurrentSourceType(null);
+      setClips([]);
+      setCurrentClipIndex(0);
+    }
+
+    // Close dialog and clear pending delete
+    setDeleteDialogOpen(false);
+    setPendingDeleteSourceId(null);
+  }, [pendingDeleteSourceId, activeMediaSourceId]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -1414,6 +1447,35 @@ export default function ReelFluentApp() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Deleting this media file will also delete all associated saved attempts. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setPendingDeleteSourceId(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+            >
+              Delete All
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
