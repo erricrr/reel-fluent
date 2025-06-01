@@ -16,6 +16,7 @@ interface SessionClip extends Clip {
   originalMediaSource?: string;
   originalMediaName?: string;
   mediaSourceId?: string;
+  originalClipNumber?: number;
 }
 
 interface SessionClipsManagerProps {
@@ -153,7 +154,7 @@ export default function SessionClipsManager({
                     ) : (
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium break-words">
-                          {clip.displayName || "Unnamed Clip"}
+                          {clip.displayName || (clip.originalClipNumber ? `Clip ${clip.originalClipNumber}` : "Unnamed Clip")}
                         </h3>
                         <Button
                           size="icon"

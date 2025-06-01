@@ -46,6 +46,7 @@ interface MediaSource {
 interface SessionClip extends Clip {
   displayName?: string;
   mediaSourceId?: string;  // Make optional for backward compatibility
+  originalClipNumber?: number; // Add this to preserve the original auto clip number
   // Legacy fields for backward compatibility
   originalMediaName?: string;
   mediaSrc?: string;
@@ -1118,6 +1119,12 @@ export default function ReelFluentApp() {
     const userTrans = overrideUserTranscription !== undefined
       ? overrideUserTranscription
       : (currentClip.userTranscription || "");
+
+    // Determine original clip number - for auto clips, use currentClipIndex + 1, for focused clips use existing or undefined
+    const originalClipNumber = existingClipIndex >= 0
+      ? sessionClips[existingClipIndex].originalClipNumber
+      : (focusedClip ? undefined : currentClipIndex + 1);
+
     const sessionClip: SessionClip = {
       id: existingClipIndex >= 0 ? sessionClips[existingClipIndex].id : generateUniqueId(),
       startTime: currentClip.startTime,
@@ -1125,8 +1132,9 @@ export default function ReelFluentApp() {
       language: currentClip.language || language,
       displayName: existingClipIndex >= 0
         ? sessionClips[existingClipIndex].displayName
-        : `Clip ${sessionClips.length + 1}`,
+        : (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`),
       mediaSourceId: activeMediaSourceId,
+      originalClipNumber: originalClipNumber,
       // Ensure all transcription data is properly formatted
       userTranscription: userTrans,
       automatedTranscription: currentClip.automatedTranscription || null,
