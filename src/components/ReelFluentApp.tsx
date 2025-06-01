@@ -596,6 +596,26 @@ export default function ReelFluentApp() {
       return;
     }
 
+    // Check if clip is already transcribed (DRY behavior)
+    if (clipToTranscribe.automatedTranscription &&
+        !clipToTranscribe.automatedTranscription.startsWith("Error:") &&
+        clipToTranscribe.automatedTranscription !== "Transcribing...") {
+      toast({
+        title: "Already Transcribed",
+        description: `This clip is already transcribed in ${(clipToTranscribe.language || language).charAt(0).toUpperCase() + (clipToTranscribe.language || language).slice(1)}. No additional API call needed.`
+      });
+      return;
+    }
+
+    // Check if currently transcribing to prevent concurrent attempts
+    if (clipToTranscribe.automatedTranscription === "Transcribing...") {
+      toast({
+        title: "Transcription in Progress",
+        description: "This clip is already being transcribed. Please wait for it to complete."
+      });
+      return;
+    }
+
     setIsAnyClipTranscribing(true);
 
     // Helper to update clip data (clips, focusedClip, sessionClips) and workInProgress
@@ -634,17 +654,26 @@ export default function ReelFluentApp() {
           throw new Error("Failed to extract audio from the clip");
         }
 
+        // Ensure language is provided for the transcription
+        const transcriptionLanguage = clipToTranscribe.language || language || 'auto-detect';
+
         const result = await transcribeAudio({
           audioDataUri,
-          language: clipToTranscribe.language || language,
+          language: transcriptionLanguage,
         });
 
-        // Update with transcription result
+        // Update with transcription result - this is the final success state
         updateClipState({ automatedTranscription: result.transcription });
+
+        // Success toast
         toast({
-          title: `${(currentClip.language || language).charAt(0).toUpperCase() + (currentClip.language || language).slice(1)} Transcription Complete`
+          title: `${transcriptionLanguage.charAt(0).toUpperCase() + transcriptionLanguage.slice(1)} Transcription Complete`,
+          description: "Your clip has been successfully transcribed!"
         });
-        return; // Success, exit the retry loop
+
+        // Success - exit the function and stop the loading state
+        setIsAnyClipTranscribing(false);
+        return;
       } catch (error) {
         console.error(`Error transcribing audio (attempt ${attempt + 1}):`, error);
         lastError = error;
@@ -656,20 +685,47 @@ export default function ReelFluentApp() {
 
         // On final attempt, handle the error
         console.error("All transcription attempts failed:", error);
-        const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
-        const errorState = { automatedTranscription: errorMessage };
+
+        // Provide user-friendly error messages
+        let errorMessage = "Failed to transcribe the clip. Please try again.";
+        let errorTitle = "Transcription Failed";
+
+        if (error instanceof Error) {
+          // Check for specific error types and provide better messages
+          if (error.message.includes('AI service is temporarily busy') ||
+              error.message.includes('overloaded')) {
+            errorTitle = "Service Busy";
+            errorMessage = "The AI transcription service is currently busy. Please wait a moment and try again.";
+          } else if (error.message.includes('Too many requests')) {
+            errorTitle = "Rate Limited";
+            errorMessage = "Too many transcription requests. Please wait a moment before trying again.";
+          } else if (error.message.includes('temporarily unavailable')) {
+            errorTitle = "Service Unavailable";
+            errorMessage = "The AI transcription service is temporarily unavailable. Please try again in a few minutes.";
+          } else if (error.message.includes('Network error') ||
+                     error.message.includes('fetch')) {
+            errorTitle = "Connection Error";
+            errorMessage = "Network connection issue. Please check your internet connection and try again.";
+          } else {
+            // Use the error message if it's user-friendly, otherwise use generic message
+            errorMessage = error.message.length < 100 ? error.message : errorMessage;
+          }
+        }
+
+        const errorState = { automatedTranscription: `Error: ${errorMessage}` };
 
         // Update all states with error
         updateClipState(errorState);
 
         toast({
           variant: "destructive",
-          title: "Transcription Failed",
-          description: "Failed to transcribe the clip. Please try again."
+          title: errorTitle,
+          description: errorMessage
         });
       }
     }
 
+    // This will only be reached if all attempts failed
     setIsAnyClipTranscribing(false);
   }, [
     focusedClip,
