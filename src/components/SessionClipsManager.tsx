@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Save, Trash2, Edit2, FileAudio, FileVideo, Play, X as XIcon, Eye, List } from "lucide-react";
+import { Film, Save, Trash2, Edit2, FileAudio, FileVideo, Play, X as XIcon, Eye, Clock, Info } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SessionClip extends Clip {
   displayName?: string;
@@ -81,8 +82,18 @@ export default function SessionClipsManager({
       <CardHeader className="pb-3 bg-primary/5">
         <CardTitle className="text-sm font-medium flex items-center justify-between">
           <div className="flex items-center gap-2 text-primary">
-            <List className="h-4 w-4" />
-            Saved Clips
+            <Clock className="h-4 w-4" />
+            Total Clip Time
+            <TooltipProvider>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground/70 hover:text-primary cursor-help transition-colors" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[300px] text-xs">
+                  <p>Total duration of all your saved transcription attempts. Maximum of 30 minutes total allowed.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
           <span className="text-xs text-muted-foreground">
             {formatSecondsToMMSS(totalDuration)} / {formatSecondsToMMSS(MAX_TOTAL_DURATION)}

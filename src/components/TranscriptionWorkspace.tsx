@@ -963,12 +963,6 @@ export default function TranscriptionWorkspace({
               )}
             </div>
           )}
-          {isMobileBrowser() && (
-            <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-2 rounded border border-blue-200 dark:border-blue-800">
-              <span className="font-medium text-blue-700 dark:text-blue-300">📱 Mobile Device Detected:</span>
-              <span className="text-blue-600 dark:text-blue-400"> Using server-side audio processing for better compatibility.</span>
-            </div>
-          )}
         </div>
 
         {/* Gutter handle for resizing */}
@@ -977,20 +971,25 @@ export default function TranscriptionWorkspace({
         </div>
         <div className="w-full lg:flex-1 lg:min-w-0">
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="flex w-full gap-2 overflow-x-auto whitespace-nowrap lg:grid lg:grid-cols-[1fr_1fr_auto] lg:overflow-visible">
-              <TabsTrigger value="manual" disabled={disableTextarea} className="text-xs sm:text-sm">Your Transcription</TabsTrigger>
+            <TabsList className="flex w-full gap-2 whitespace-nowrap lg:grid lg:grid-cols-[1fr_1fr_auto] lg:overflow-visible min-h-[2.25rem]">
+              <TabsTrigger value="manual" disabled={disableTextarea} className="flex-1 text-xs sm:text-sm">Your Transcription</TabsTrigger>
               <TabsTrigger
                 value="ai"
                 disabled={disableTextarea || !aiToolsEnabled}
-                className="w-full flex items-center gap-2 text-xs sm:text-sm"
+                className="flex-1 flex items-center justify-center gap-2 text-xs sm:text-sm"
               >
-                {aiToolsEnabled ? <Unlock className="hidden sm:inline-block h-3 w-3" /> : <Lock className="hidden sm:inline-block h-3 w-3" />}
+                {aiToolsEnabled ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
                 AI Tools
               </TabsTrigger>
               <Button
                 variant="ghost"
                 onClick={onOpenSessionDrawer}
-                className="px-4 h-9 flex items-center gap-2 text-xs sm:text-sm rounded-none hover:bg-muted/60 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                className={cn(
+                  "flex-1 h-9 flex items-center justify-center gap-2 text-xs sm:text-sm rounded-none",
+                  "transition-all duration-200",
+                  "hover:bg-primary/10 hover:text-primary hover:shadow-sm",
+                  "data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                )}
               >
                 <List className="hidden sm:inline-block h-3 w-3" />
                 Saved Attempts
