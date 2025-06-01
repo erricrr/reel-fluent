@@ -383,7 +383,7 @@ const compareTranscriptionsFlow = ai.defineFlow(
     };
 
     // Attempt the comparison with retry logic
-    const maxRetries = 2;
+    const maxRetries = 3;
     let lastError: any = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -446,22 +446,52 @@ const compareTranscriptionsFlow = ai.defineFlow(
         lastError = error;
         console.warn(`CompareTranscriptionsFlow: Attempt ${attempt} failed:`, error);
 
-        if (attempt === maxRetries) {
-          console.error('CompareTranscriptionsFlow: All attempts failed, returning error result');
+        // Check if this is a retryable error (similar to transcription/translation flows)
+        const isRetryable = error instanceof Error && (
+          error.message.includes('503') ||
+          error.message.includes('Service Unavailable') ||
+          error.message.includes('overloaded') ||
+          error.message.includes('429') ||
+          error.message.includes('Too Many Requests') ||
+          error.message.includes('temporarily unavailable') ||
+          error.message.includes('rate limit') ||
+          error.message.includes('Validation failed') // Also retry validation failures
+        );
+
+        if (!isRetryable || attempt === maxRetries) {
+          // Don't retry for non-retryable errors or on final attempt
           break;
         }
 
-        // Wait a bit before retrying
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        // Wait before retrying (exponential backoff)
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`CompareTranscriptionsFlow: Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
 
-    // If all attempts failed, return a helpful error
+    // If all attempts failed, return a helpful error with better messaging
+    let errorMessage = "Comparison failed after multiple attempts.";
+
+    if (lastError instanceof Error) {
+      if (lastError.message.includes('503') || lastError.message.includes('overloaded')) {
+        errorMessage = "AI comparison service is temporarily busy. Please wait a moment and try again.";
+      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
+        errorMessage = "Too many comparison requests. Please wait a moment and try again.";
+      } else if (lastError.message.includes('400') || lastError.message.includes('Bad Request')) {
+        errorMessage = "Comparison request format error. Please try again or contact support.";
+      } else if (lastError.message.includes('401') || lastError.message.includes('403')) {
+        errorMessage = "Authentication error with AI service. Please contact support.";
+      } else {
+        errorMessage = `Comparison failed: ${lastError.message}`;
+      }
+    }
+
     return {
       comparisonResult: [{
-        token: "Error: Comparison failed after multiple attempts.",
+        token: "Error generating comparison.",
         status: "incorrect" as const,
-        suggestion: `Please try again. Last error: ${lastError?.message || 'Unknown error'}`
+        suggestion: errorMessage
       }]
     } satisfies CompareTranscriptionsOutput;
   }

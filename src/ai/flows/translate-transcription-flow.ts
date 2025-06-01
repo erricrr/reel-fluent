@@ -64,7 +64,56 @@ const translateTranscriptionFlow = ai.defineFlow(
     outputSchema: TranslateTranscriptionOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    // Implement retry logic for 503 and other temporary errors
+    const maxRetries = 3;
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const {output} = await prompt(input);
+        return output!;
+      } catch (error) {
+        lastError = error;
+
+        // Check if this is a retryable error
+        const isRetryable = error instanceof Error && (
+          error.message.includes('503') ||
+          error.message.includes('Service Unavailable') ||
+          error.message.includes('overloaded') ||
+          error.message.includes('429') ||
+          error.message.includes('Too Many Requests') ||
+          error.message.includes('temporarily unavailable') ||
+          error.message.includes('rate limit')
+        );
+
+        if (!isRetryable || attempt === maxRetries - 1) {
+          // Don't retry for non-retryable errors or on final attempt
+          break;
+        }
+
+        // Wait before retrying (exponential backoff)
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 5000);
+        console.log(`Translation attempt ${attempt + 1} failed, retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+
+    // If we reach here, all attempts failed
+    if (lastError instanceof Error) {
+      // Provide user-friendly error messages for common issues
+      if (lastError.message.includes('503') || lastError.message.includes('overloaded')) {
+        throw new Error('AI translation service is temporarily busy. Please wait a moment and try again.');
+      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
+        throw new Error('Too many translation requests. Please wait a moment and try again.');
+      } else if (lastError.message.includes('400') || lastError.message.includes('Bad Request')) {
+        throw new Error('Translation request format error. Please try again or contact support.');
+      } else if (lastError.message.includes('401') || lastError.message.includes('403')) {
+        throw new Error('Authentication error with AI service. Please contact support.');
+      } else {
+        throw new Error(`Translation failed: ${lastError.message}`);
+      }
+    } else {
+      throw new Error('Translation failed due to an unknown error. Please try again.');
+    }
   }
 );
