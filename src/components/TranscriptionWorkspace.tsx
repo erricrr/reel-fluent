@@ -998,17 +998,7 @@ export default function TranscriptionWorkspace({
                 <CardHeader>
                   <CardTitle>Type What You Hear</CardTitle>
                   <CardDescription>
-                    {focusedClip ? (
-                      <>
-                        Listen to your focused clip ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                        and type the dialogue.
-                      </>
-                    ) : (
-                      <>
-                        Listen to Clip {currentClipIndex + 1} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)})
-                        and type the dialogue.
-                      </>
-                    )}
+                    Listen to {focusedClip ? (focusedClip.displayName || 'Custom Clip') : `Clip ${currentClipIndex + 1}`} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)}) and type the dialogue.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
