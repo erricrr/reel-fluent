@@ -450,7 +450,7 @@ export default function TranscriptionWorkspace({
     setPracticeText("");
 
     // Only reset tab if there's no transcription data AND user is not actively using AI tools
-    const shouldResetTab = (!currentClip.automatedTranscription || currentClip.automatedTranscription === "Transcribing...") && 
+    const shouldResetTab = (!currentClip.automatedTranscription || currentClip.automatedTranscription === "Transcribing...") &&
         !userActivelyUsingAITools && !aiToolsButtonClicked;
 
     if (shouldResetTab) {
@@ -495,7 +495,7 @@ export default function TranscriptionWorkspace({
     setActiveTab(newTab);
     setHasUserManuallyChangedTab(true);
     setLastUserSelectedTab(newTab);
-    
+
     // Track when user manually switches to AI tab to prevent auto-switching them out
     if (newTab === "ai") {
       setUserActivelyUsingAITools(true);
@@ -658,10 +658,10 @@ export default function TranscriptionWorkspace({
       toast({variant: "destructive", title: "Processing...", description: "Transcription for this clip is in progress. Please wait."});
       return;
     }
-    
+
     // BLOCK ALL TAB SWITCHING - User clicked AI tools button
     setAiToolsButtonClicked(true);
-    
+
     await withAIToolsProtection(async () => {
       try {
         await onGetCorrections(currentClip.id);
@@ -813,13 +813,64 @@ export default function TranscriptionWorkspace({
     setAiToolsButtonClicked(false);
   }, [currentClip.id, isCurrentClipSaved]);
 
+  // Add a ref to track the last loaded state to prevent infinite loops
+  const lastLoadedStateRef = useRef<{clipId: string, mediaSourceId: string, userTranscription: string} | null>(null);
+
+  // FIXED: Auto-load saved transcription data when clip or media source changes
+  // This ensures that saved transcriptions appear immediately when switching media files or clips
+  useEffect(() => {
+    if (currentClip && sessionClips && activeMediaSourceId) {
+      const savedClip = sessionClips.find(sessionClip =>
+        sessionClip.mediaSourceId === activeMediaSourceId &&
+        sessionClip.startTime === currentClip.startTime &&
+        sessionClip.endTime === currentClip.endTime
+      );
+
+      // Always load the correct data for the current clip and media source
+      if (savedClip && savedClip.userTranscription) {
+        // Load saved transcription
+        setUserTranscriptionInput(savedClip.userTranscription);
+        setIsTranscriptionSaved(true);
+
+        // Only update the clip if we haven't already loaded this exact state
+        const currentState = {
+          clipId: currentClip.id,
+          mediaSourceId: activeMediaSourceId,
+          userTranscription: savedClip.userTranscription
+        };
+
+        if (!lastLoadedStateRef.current ||
+            lastLoadedStateRef.current.clipId !== currentState.clipId ||
+            lastLoadedStateRef.current.mediaSourceId !== currentState.mediaSourceId ||
+            lastLoadedStateRef.current.userTranscription !== currentState.userTranscription) {
+
+          lastLoadedStateRef.current = currentState;
+
+          if (currentClip.userTranscription !== savedClip.userTranscription) {
+            onUserTranscriptionChange(currentClip.id, savedClip.userTranscription);
+          }
+        }
+      } else {
+        // No saved data, use clip's existing data or clear
+        const fallbackValue = currentClip.userTranscription || "";
+        setUserTranscriptionInput(fallbackValue);
+        setIsTranscriptionSaved(false);
+
+        // Reset the ref for non-saved clips
+        lastLoadedStateRef.current = null;
+      }
+    }
+  }, [currentClip.id, currentClip.startTime, currentClip.endTime, activeMediaSourceId, sessionClips?.length, onUserTranscriptionChange]);
+
   // Add refs for clip navigation
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const activeClipRef = useRef<HTMLButtonElement>(null);
 
   // Add handleClipClick function
   const handleClipClick = useCallback((index: number) => {
+    // Select the clip first - this will trigger the auto-load useEffect
     onSelectClip(index);
+
     // Ensure clip is visible after selection
     setTimeout(() => {
       if (activeClipRef.current && scrollContainerRef.current) {
@@ -909,7 +960,7 @@ export default function TranscriptionWorkspace({
 
   // AI tools enabled check depends on saved state, basic validation, or active usage
   const aiToolsEnabled = (isTranscriptionSaved || userActivelyUsingAITools) && shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription, userActivelyUsingAITools);
-  
+
 
 
   const renderCorrectionToken = (token: CorrectionToken, index: number) => {
@@ -1139,7 +1190,7 @@ export default function TranscriptionWorkspace({
                 </div>
                 <h3 className="text-xl font-semibold text-primary mb-3">Focus on Clip Trimmer</h3>
                 <p className="text-muted-foreground mb-4 leading-relaxed">
-                  Use the <strong>Clip Trimmer</strong> on the left to select your custom clip range. 
+                  Use the <strong>Clip Trimmer</strong> on the left to select your custom clip range.
                   Preview your selection and create a focused clip for AI processing.
                 </p>
                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -1216,10 +1267,10 @@ export default function TranscriptionWorkspace({
                       if (!isTranscriptionSaved) {
                         // Save the transcription
                         if (!currentClip || !onSaveToSession) return;
-                         
+
                         // Check if there's any transcription to save
                         const hasTranscription = userTranscriptionInput.trim().length > 0;
-                         
+
                         if (!hasTranscription) {
                           toast({
                             title: "Nothing to Save",
@@ -1227,21 +1278,13 @@ export default function TranscriptionWorkspace({
                           });
                           return;
                         }
-                         
+
                         // Update clip with user's transcription
                         onUserTranscriptionChange(currentClip.id, userTranscriptionInput);
                         // Save or update session clip, passing newest transcription
                         onSaveToSession(userTranscriptionInput);
                         setIsTranscriptionSaved(true);
-                         
-                        // Show notification for new clips being added to session
-                        if (canSaveToSession) {
-                          toast({
-                            title: "Transcription Attempt Saved",
-                            description: "Your transcription attempt is saved! Use the Saved Attempts button to the left of the AI Tools to review or make changes anytime."
-                          });
-                        }
-                         
+
                         // Switch to AI tab after saving
                         setActiveTab("ai");
                         setHasUserManuallyChangedTab(true);
