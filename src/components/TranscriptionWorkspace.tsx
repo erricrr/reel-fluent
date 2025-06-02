@@ -1109,7 +1109,7 @@ export default function TranscriptionWorkspace({
                      className="w-full flex items-center justify-center gap-2 transition-all duration-200 hover:bg-primary/90 hover:text-primary-foreground hover:shadow-lg"
                    >
                      {isTranscriptionSaved ? <Unlock className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                     Save & Unlock AI Tools
+                     {isTranscriptionSaved ? "Access AI Tools" : "Save & Unlock AI Tools"}
                    </Button>
                 </CardFooter>
               </Card>
