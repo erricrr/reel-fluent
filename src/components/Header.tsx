@@ -1,6 +1,7 @@
 "use client";
 import type * as React from 'react';
-import { Captions, Sun, Moon, LogOut, UserCircle } from 'lucide-react';
+import { Sun, Moon, LogOut, UserCircle } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -29,7 +30,13 @@ export default function Header() {
     <header className="py-4 px-4 md:px-8 border-b">
       <div className="container mx-auto flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Captions className="h-8 w-8 text-primary" />
+          <Image 
+            src={theme === 'light' ? '/logo-light.png' : '/logo-dark.png'}
+            alt="ReelFluent Logo"
+            width={32}
+            height={32}
+            className="h-8 w-8"
+          />
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">ReelFluent</h1>
         </div>
         <div className="flex items-center gap-2 md:gap-4">

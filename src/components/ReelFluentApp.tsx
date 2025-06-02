@@ -856,14 +856,45 @@ export default function ReelFluentApp() {
       return;
     }
 
+    if (automatedText.length < 2) {
+      toast({variant: "destructive", title: "Automated Transcription Too Short", description: "The automated transcription appears to be too short for comparison."});
+      return;
+    }
+
+    // Check for reasonable input lengths to prevent API abuse
+    if (userText.length > 10000 || automatedText.length > 10000) {
+      toast({variant: "destructive", title: "Input Too Long", description: "Transcriptions are too long for comparison. Please use shorter clips."});
+      return;
+    }
+
     updateClipData(clipId, { comparisonResult: [{token: "Comparing...", status: "correct"}] });
 
     try {
-      const result = await compareTranscriptions({
+      // Add timeout to prevent hanging requests
+      const comparisonPromise = compareTranscriptions({
         userTranscription: userText,
         automatedTranscription: automatedText,
         language: (currentClipForCorrections.language || languageRef.current).trim(),
       });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Comparison request timed out after 30 seconds')), 30000);
+      });
+
+      const result = await Promise.race([comparisonPromise, timeoutPromise]) as any;
+
+      // Validate the result before using it
+      if (!result || typeof result !== 'object') {
+        throw new Error('Invalid comparison result: expected object response');
+      }
+
+      if (!result.comparisonResult || !Array.isArray(result.comparisonResult)) {
+        throw new Error('Invalid comparison result: expected array of comparison tokens');
+      }
+
+      if (result.comparisonResult.length === 0) {
+        throw new Error('Empty comparison result: no tokens returned from comparison');
+      }
 
       // Update clip data with comparison results
       updateClipData(clipId, { comparisonResult: result.comparisonResult });
@@ -885,7 +916,7 @@ export default function ReelFluentApp() {
 
       // Provide more specific success feedback
       const summary = result.comparisonResult;
-      const correctCount = summary.filter(t => t.status === 'correct').length;
+      const correctCount = summary.filter((t: any) => t.status === 'correct').length;
       const totalCount = summary.length;
       const accuracy = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
 
@@ -895,7 +926,7 @@ export default function ReelFluentApp() {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      console.error("LinguaClipApp: Comparison failed with detailed error:", {
+      const errorDetails = {
         clipId,
         error: errorMessage,
         stack: error instanceof Error ? error.stack : undefined,
@@ -903,8 +934,14 @@ export default function ReelFluentApp() {
           user: userText.length,
           automated: automatedText.length
         },
-        timestamp: new Date().toISOString()
-      });
+        timestamp: new Date().toISOString(),
+        fullError: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          cause: error.cause
+        } : String(error)
+      };
+      console.error("LinguaClipApp: Comparison failed with detailed error:", errorDetails);
 
       toast({
         variant: "destructive",
