@@ -320,8 +320,8 @@ export default function TranscriptionWorkspace({
   const reviewPracticeButton = (
     <div className="flex gap-2">
       <Button
-        variant="secondary"
-        className="w-full flex items-center justify-center gap-2 h-auto py-3 transition-all duration-200 hover:bg-primary/90 hover:text-primary-foreground hover:shadow-lg"
+        variant="outline"
+        className="w-full flex items-center justify-center gap-2 h-auto py-3 transition-all duration-200 hover:bg-accent hover:text-accent-foreground"
         onClick={onOpenSessionDrawer}
       >
         <List className="h-4 w-4" />
@@ -1235,11 +1235,11 @@ export default function TranscriptionWorkspace({
                         >
                           {/* Saved indicator */}
                           {isClipSaved(clip) && (
-                            <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
+                            <div className="absolute -top-1 -right-1 bg-accent text-accent-foreground rounded-full p-0.5 shadow-sm">
                               <BookmarkPlus className="h-3 w-3" />
                             </div>
                           )}
-                          <div className="flex flex-col items-start text-left">
+                          <div className="flex flex-col items-start gap-1">
                             <div className="flex items-center gap-1.5">
                               <Film className="h-4 w-4 text-inherit" />
                               <span className="font-semibold text-xs">
@@ -1258,7 +1258,6 @@ export default function TranscriptionWorkspace({
                         </Button>
                       );
 
-                      // Wrap with tooltip if name is truncated
                       return clipInfo.isTruncated ? (
                         <TooltipProvider key={clip.id}>
                           <Tooltip delayDuration={300}>
@@ -1356,7 +1355,7 @@ export default function TranscriptionWorkspace({
                 className={cn(
                   "flex-1 h-9 flex items-center justify-center gap-2 text-xs sm:text-sm rounded-none",
                   "transition-all duration-200",
-                  "hover:bg-primary/10 hover:text-primary hover:shadow-sm",
+                  "hover:bg-primary/10 hover:text-primary",
                   "data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 )}
               >
@@ -1436,8 +1435,7 @@ export default function TranscriptionWorkspace({
                       }
                      }}
                      disabled={disableTextarea}
-                     variant="secondary"
-                     className="w-full flex items-center justify-center gap-2 transition-all duration-200 hover:bg-primary/90 hover:text-primary-foreground hover:shadow-lg"
+                     variant="default"
                    >
                      {isTranscriptionSaved ? <Unlock className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
                      {isTranscriptionSaved ? "Access AI Tools" : "Save & Unlock AI Tools"}

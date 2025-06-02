@@ -180,15 +180,15 @@ export default function SessionClipsManager({
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Button
                       size="icon"
-                      variant={focusedClipId === clip.id ? "default" : "secondary"}
+                      variant="ghost"
                       onClick={() => onLoadFromSession(clip)}
                       disabled={disabled || !mediaSource}
                       title={!mediaSource ? "Media source not available" : "Focus on this clip"}
                       className={cn(
                         "transition-all duration-200",
                         focusedClipId === clip.id
-                          ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105"
-                          : "hover:bg-primary/20 hover:text-primary hover:scale-105"
+                          ? "bg-primary hover:bg-primary/90 text-primary-foreground hover:text-primary-foreground"
+                          : "hover:bg-muted hover:text-foreground"
                       )}
                     >
                       <Eye className="h-4 w-4" />
