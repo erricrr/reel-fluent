@@ -1,7 +1,7 @@
 "use client";
 
 import type * as React from 'react';
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import VideoPlayer, { type VideoPlayerRef } from "./VideoPlayer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -795,12 +795,23 @@ export default function TranscriptionWorkspace({
     // No notification needed for updates - UI feedback is sufficient
   }, [currentClip, userTranscriptionInput, onUserTranscriptionChange, onSaveToSession, canSaveToSession, toast]);
 
+  // Create stable identifier for whether clip is saved
+  const isCurrentClipSaved = useMemo(() => {
+    return sessionClips?.some(sessionClip =>
+      activeMediaSourceId &&
+      sessionClip.mediaSourceId === activeMediaSourceId &&
+      sessionClip.startTime === currentClip.startTime &&
+      sessionClip.endTime === currentClip.endTime
+    ) || false;
+  }, [sessionClips, activeMediaSourceId, currentClip.startTime, currentClip.endTime]);
+
   // Reset saved state and AI tools protection when clip changes
+  // But check if the new clip is already saved
   useEffect(() => {
-    setIsTranscriptionSaved(false);
+    setIsTranscriptionSaved(isCurrentClipSaved);
     setUserActivelyUsingAITools(false);
     setAiToolsButtonClicked(false);
-  }, [currentClip.id]);
+  }, [currentClip.id, isCurrentClipSaved]);
 
   // Add refs for clip navigation
   const scrollContainerRef = useRef<HTMLDivElement>(null);
