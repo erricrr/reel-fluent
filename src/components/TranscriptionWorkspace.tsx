@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon, Edit3, AlertTriangle } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -323,6 +323,8 @@ export default function TranscriptionWorkspace({
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [hasUserManuallyChangedTab, setHasUserManuallyChangedTab] = useState(false);
+  const [isPracticeMode, setIsPracticeMode] = useState(false);
+  const [practiceText, setPracticeText] = useState("");
   const [lastUserSelectedTab, setLastUserSelectedTab] = useState<string>("manual");
   const [isTranscriptionComplete, setIsTranscriptionComplete] = useState(false);
   const [isTranscriptionInProgress, setIsTranscriptionInProgress] = useState(false);
@@ -420,17 +422,16 @@ export default function TranscriptionWorkspace({
     setTranslationTargetLanguage(currentClip.translationTargetLanguage || "english");
     setIsTranscriptionComplete(false);
     setIsTranscriptionInProgress(false);
+    setIsPracticeMode(false);
+    setPracticeText("");
 
     // Only reset tab if there's no transcription data
     if (!currentClip.automatedTranscription || currentClip.automatedTranscription === "Transcribing...") {
       setActiveTab("manual");
       setHasUserManuallyChangedTab(false);
       setLastUserSelectedTab("manual");
-    } else {
-      // If there is transcription data, restore the last user selected tab
-      setActiveTab(lastUserSelectedTab);
     }
-  }, [currentClip.id]);
+  }, [currentClip]);
 
   // Watch for transcription state changes
   useEffect(() => {
@@ -1159,13 +1160,48 @@ export default function TranscriptionWorkspace({
                   </div>
 
                   <div>
-                    <h3 className="font-semibold mb-1 text-foreground">Your Transcription:</h3>
-                    <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30" resizable>
-                       {userTranscriptionInput ?
-                          <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> :
-                          <p className="text-sm text-muted-foreground">You haven't typed anything for this clip yet.</p>
-                       }
-                    </ScrollArea>
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-foreground">Your Transcription:</h3>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (isPracticeMode) {
+                            setPracticeText("");
+                          } else {
+                            setPracticeText(userTranscriptionInput);
+                          }
+                          setIsPracticeMode(!isPracticeMode);
+                        }}
+                        className="h-6 px-2 text-xs"
+                      >
+                        <Edit3 className="h-3 w-3 mr-1" />
+                        {isPracticeMode ? "Exit Practice" : "Practice"}
+                      </Button>
+                    </div>
+                    {isPracticeMode ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                          <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Practice mode: Changes won't be saved and will revert to your original transcription.
+                          </p>
+                        </div>
+                        <Textarea
+                          className="h-[70px] text-sm resize-y"
+                          placeholder="Practice typing here..."
+                          value={practiceText}
+                          onChange={(e) => setPracticeText(e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30" resizable>
+                         {userTranscriptionInput ?
+                            <p className="text-sm whitespace-pre-wrap">{userTranscriptionInput}</p> :
+                            <p className="text-sm text-muted-foreground">You haven't typed anything for this clip yet.</p>
+                         }
+                      </ScrollArea>
+                    )}
                   </div>
 
                   <div className="space-y-2">
