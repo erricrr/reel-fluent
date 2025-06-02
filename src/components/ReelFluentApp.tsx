@@ -175,8 +175,52 @@ export default function ReelFluentApp() {
   // Add state for media sources
   const [mediaSources, setMediaSources] = useState<MediaSource[]>([]);
   const [activeMediaSourceId, setActiveMediaSourceId] = useState<string | null>(null);
-
   const [workInProgressClips, setWorkInProgressClips] = useState<Record<string, Clip>>({});
+
+  // DRY SOLUTION: Create enhanced clip that merges auto clip with saved session data
+  // This ensures that when users click on saved clips in Auto Clip mode, they see all
+  // their transcription data and AI tools results instead of empty clips. When clips
+  // are renamed in "Saved Attempts", the names are reflected in "Clip Segmentation Duration".
+  // All data stays synchronized between both UI areas - true single source of truth.
+  const getEnhancedClip = useCallback((clipIndex: number): Clip => {
+    const baseClip = clips[clipIndex];
+    if (!baseClip || !activeMediaSourceId) return baseClip;
+
+    // Find matching saved session clip
+    const savedClip = sessionClips.find(sessionClip =>
+      sessionClip.mediaSourceId === activeMediaSourceId &&
+      sessionClip.startTime === baseClip.startTime &&
+      sessionClip.endTime === baseClip.endTime
+    );
+
+    if (savedClip) {
+      // CRITICAL: Only merge saved data when base clip data is actually empty/null
+      // Preserve current AI tool states like "Translating...", "Transcribing...", etc.
+      // This prevents breaking the "Already Translated" duplicate detection logic
+      const mergeField = (baseValue: any, savedValue: any) => {
+        // If base value exists and is not empty, use it (preserves current states)
+        if (baseValue !== null && baseValue !== undefined && baseValue !== "") {
+          return baseValue;
+        }
+        // Otherwise use saved value
+        return savedValue;
+      };
+
+      return {
+        ...baseClip,
+        userTranscription: mergeField(baseClip.userTranscription, savedClip.userTranscription),
+        automatedTranscription: mergeField(baseClip.automatedTranscription, savedClip.automatedTranscription),
+        translation: mergeField(baseClip.translation, savedClip.translation),
+        englishTranslation: mergeField(baseClip.englishTranslation, savedClip.englishTranslation),
+        translationTargetLanguage: mergeField(baseClip.translationTargetLanguage, savedClip.translationTargetLanguage),
+        comparisonResult: mergeField(baseClip.comparisonResult, savedClip.comparisonResult),
+        displayName: savedClip.displayName || baseClip.displayName,
+        language: mergeField(baseClip.language, savedClip.language)
+      };
+    }
+
+    return baseClip;
+  }, [clips, sessionClips, activeMediaSourceId]);
 
   const clipsRef = useRef(clips);
   const languageRef = useRef(language);
@@ -597,10 +641,18 @@ export default function ReelFluentApp() {
 
   const handleTranscribeAudio = useCallback(async (clipId: string) => {
     // Find the clip to transcribe - either from the clips array or the focused clip
-    const clipToTranscribe = focusedClip?.id === clipId ? focusedClip : clipsRef.current.find(c => c.id === clipId);
+    let clipToTranscribe = focusedClip?.id === clipId ? focusedClip : clipsRef.current.find(c => c.id === clipId);
     if (!clipToTranscribe || !mediaSrc) {
       toast({variant: "destructive", title: "Cannot Transcribe", description: "Please ensure media is loaded and a clip is selected."});
       return;
+    }
+
+    // For auto clips, check enhanced data for proper duplicate detection
+    if (!focusedClip) {
+      const clipIndex = clipsRef.current.findIndex(c => c.id === clipId);
+      if (clipIndex >= 0) {
+        clipToTranscribe = getEnhancedClip(clipIndex);
+      }
     }
 
     // Check if clip is already transcribed (DRY behavior)
@@ -738,15 +790,25 @@ export default function ReelFluentApp() {
     language,
     currentSourceType,
     updateClipData,
-    toast
+    toast,
+    getEnhancedClip
   ]);
 
   const handleTranslate = useCallback(async (clipId: string, targetLanguage: string): Promise<void> => {
     // First check if clip exists in either the clips array or as a focused clip
-    const currentClipForTranslation = focusedClip?.id === clipId ? focusedClip : clipsRef.current.find(c => c.id === clipId);
+    // Also check enhanced clips to get proper saved data for duplicate detection
+    let currentClipForTranslation = focusedClip?.id === clipId ? focusedClip : clipsRef.current.find(c => c.id === clipId);
     if (!currentClipForTranslation) {
       toast({variant: "destructive", title: "Translation Error", description: "Clip not found."});
       return;
+    }
+
+    // For auto clips, check if there's enhanced data that should be considered
+    if (!focusedClip) {
+      const clipIndex = clipsRef.current.findIndex(c => c.id === clipId);
+      if (clipIndex >= 0) {
+        currentClipForTranslation = getEnhancedClip(clipIndex);
+      }
     }
 
     // Check if already translated to the target language
@@ -831,11 +893,24 @@ export default function ReelFluentApp() {
 
       updateClipData(clipId, errorState);
     }
-  }, [focusedClip, updateClipData, toast]);
+  }, [focusedClip, updateClipData, toast, getEnhancedClip, clips, sessionClips, activeMediaSourceId]);
 
   const handleGetCorrections = useCallback(async (clipId: string): Promise<void> => {
-    const currentClipForCorrections = clipsRef.current.find(c => c.id === clipId);
-    if (!currentClipForCorrections || !currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:") || currentClipForCorrections.automatedTranscription === "Transcribing...") {
+    let currentClipForCorrections = clipsRef.current.find(c => c.id === clipId);
+    if (!currentClipForCorrections) {
+      toast({variant: "destructive", title: "Comparison Error", description: "Clip not found."});
+      return;
+    }
+
+    // For auto clips, check enhanced data for proper duplicate detection
+    if (!focusedClip) {
+      const clipIndex = clipsRef.current.findIndex(c => c.id === clipId);
+      if (clipIndex >= 0) {
+        currentClipForCorrections = getEnhancedClip(clipIndex);
+      }
+    }
+
+    if (!currentClipForCorrections.userTranscription || !currentClipForCorrections.automatedTranscription || currentClipForCorrections.automatedTranscription.startsWith("Error:") || currentClipForCorrections.automatedTranscription === "Transcribing...") {
       toast({variant: "destructive", title: "Comparison Error", description: "Ensure automated transcription is successful and you've typed something."});
       return;
     }
@@ -957,7 +1032,7 @@ export default function ReelFluentApp() {
         }]
       });
     }
-  }, [toast, updateClipData]);
+  }, [toast, updateClipData, getEnhancedClip, clips, sessionClips, activeMediaSourceId]);
 
   const handleRemoveClip = (clipIdToRemove: string) => {
     if (isAnyClipTranscribing) {
@@ -1161,40 +1236,6 @@ export default function ReelFluentApp() {
 
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
   
-  // DRY SOLUTION: Create enhanced clip that merges auto clip with saved session data
-  // This ensures that when users click on saved clips in Auto Clip mode, they see all
-  // their transcription data and AI tools results instead of empty clips. When clips
-  // are renamed in "Saved Attempts", the names are reflected in "Clip Segmentation Duration".
-  // All data stays synchronized between both UI areas - true single source of truth.
-  const getEnhancedClip = useCallback((clipIndex: number): Clip => {
-    const baseClip = clips[clipIndex];
-    if (!baseClip || !activeMediaSourceId) return baseClip;
-
-    // Find matching saved session clip
-    const savedClip = sessionClips.find(sessionClip =>
-      sessionClip.mediaSourceId === activeMediaSourceId &&
-      sessionClip.startTime === baseClip.startTime &&
-      sessionClip.endTime === baseClip.endTime
-    );
-
-    if (savedClip) {
-      // Merge saved data into the base clip
-      return {
-        ...baseClip,
-        userTranscription: savedClip.userTranscription || baseClip.userTranscription,
-        automatedTranscription: savedClip.automatedTranscription || baseClip.automatedTranscription,
-        translation: savedClip.translation || baseClip.translation,
-        englishTranslation: savedClip.englishTranslation || baseClip.englishTranslation,
-        translationTargetLanguage: savedClip.translationTargetLanguage || baseClip.translationTargetLanguage,
-        comparisonResult: savedClip.comparisonResult || baseClip.comparisonResult,
-        displayName: savedClip.displayName || baseClip.displayName,
-        language: savedClip.language || baseClip.language
-      };
-    }
-
-    return baseClip;
-  }, [clips, sessionClips, activeMediaSourceId]);
-
   // Create enhanced clips array that merges saved session data
   const enhancedClips = useMemo(() => {
     return clips.map((clip, index) => getEnhancedClip(index));
