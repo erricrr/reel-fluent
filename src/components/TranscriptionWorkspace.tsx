@@ -1383,7 +1383,7 @@ export default function TranscriptionWorkspace({
                 className={cn(
                   "flex-1 h-9 flex items-center justify-center gap-2 text-xs sm:text-sm rounded-none",
                   "transition-all duration-200",
-                  "hover:bg-primary/10 hover:text-primary",
+                  "hover:bg-accent hover:text-accent-foreground",
                   "data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 )}
               >
