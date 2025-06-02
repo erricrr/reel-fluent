@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon, Edit3, AlertTriangle } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon, Edit3, AlertTriangle, Focus } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -1129,7 +1129,26 @@ export default function TranscriptionWorkspace({
         <div className="hidden lg:flex items-center justify-center px-1 cursor-col-resize select-none" onMouseDown={onMouseDown}>
           <GripVertical className="h-5 w-5 text-muted-foreground" />
         </div>
-        <div className="w-full lg:flex-1 lg:min-w-0">
+        <div className="w-full lg:flex-1 lg:min-w-0 relative">
+          {/* ClipTrimmer Focus Overlay */}
+          {showClipTrimmer && (
+            <div className="absolute inset-0 z-10 bg-background/80 backdrop-blur-sm rounded-lg border-2 border-primary/20 flex items-center justify-center">
+              <div className="text-center p-8 max-w-md">
+                <div className="mb-4 mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Focus className="h-8 w-8 text-primary" />
+                </div>
+                <h3 className="text-xl font-semibold text-primary mb-3">Focus on Clip Trimmer</h3>
+                <p className="text-muted-foreground mb-4 leading-relaxed">
+                  Use the <strong>Clip Trimmer</strong> on the left to select your custom clip range. 
+                  Preview your selection and create a focused clip for AI processing.
+                </p>
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Scissors className="h-4 w-4" />
+                  <span>Custom clip creation in progress...</span>
+                </div>
+              </div>
+            </div>
+          )}
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="flex w-full gap-2 whitespace-nowrap lg:grid lg:grid-cols-[1fr_1fr_auto] lg:overflow-visible min-h-[2.25rem]">
               <TabsTrigger value="manual" disabled={disableTextarea} className="flex-1 text-xs sm:text-sm">Your Transcription</TabsTrigger>

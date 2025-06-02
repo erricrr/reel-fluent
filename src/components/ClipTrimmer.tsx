@@ -1,8 +1,14 @@
 "use client";
 
-import * as React from 'react';
+import * as React from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Scissors, Play, Pause } from "lucide-react";
@@ -19,7 +25,7 @@ const RangeSlider = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex w-full touch-none select-none items-center",
-      className
+      className,
     )}
     {...props}
   >
@@ -54,7 +60,7 @@ const formatSecondsToMMSS = (totalSeconds: number): string => {
     date.setSeconds(totalSeconds);
     const minutes = date.getUTCMinutes();
     const seconds = date.getUTCSeconds();
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   } catch (e) {
     console.error("Error formatting seconds to MM:SS:", totalSeconds, e);
     return "!!:!!";
@@ -68,7 +74,7 @@ export default function ClipTrimmer({
   disabled = false,
   currentTrimmedClip,
   onPreviewClip,
-  onStopPreview
+  onStopPreview,
 }: ClipTrimmerProps) {
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(Math.min(30, mediaDuration));
@@ -101,18 +107,21 @@ export default function ClipTrimmer({
     };
   }, []);
 
-  const handleRangeChange = useCallback((value: number[]) => {
-    if (value.length === 2) {
-      setStartTime(value[0]);
-      setEndTime(value[1]);
+  const handleRangeChange = useCallback(
+    (value: number[]) => {
+      if (value.length === 2) {
+        setStartTime(value[0]);
+        setEndTime(value[1]);
 
-      // When manually adjusting the range, seek to the new start position
-      // Only if not currently previewing
-      if (!isPreviewPlaying && videoPlayerRef.current) {
-        videoPlayerRef.current.seek(value[0]);
+        // When manually adjusting the range, seek to the new start position
+        // Only if not currently previewing
+        if (!isPreviewPlaying && videoPlayerRef.current) {
+          videoPlayerRef.current.seek(value[0]);
+        }
       }
-    }
-  }, [isPreviewPlaying, videoPlayerRef]);
+    },
+    [isPreviewPlaying, videoPlayerRef],
+  );
 
   const handlePreviewClip = useCallback(() => {
     if (isPreviewPlaying) {
@@ -150,7 +159,7 @@ export default function ClipTrimmer({
     }
 
     const updateCountdown = () => {
-      setPreviewTimeRemaining(prev => {
+      setPreviewTimeRemaining((prev) => {
         const newTime = prev - 0.1;
         if (newTime <= 0) {
           return 0; // Just return 0, don't call callbacks here
@@ -186,29 +195,41 @@ export default function ClipTrimmer({
   const isValidClip = clipDuration >= 1 && clipDuration <= 300;
 
   return (
-    <Card className="shadow-xl border-primary/40 bg-gradient-to-br from-background via-primary/5 to-primary/10 duration-500 relative">
-      <div className="absolute inset-0 bg-primary/5 blur-xl rounded-xl transition-opacity duration-500"></div>
+    <Card className="shadow-xl border-2 border-primary/60 bg-gradient-to-br from-background via-primary/10 to-primary/15 duration-500 relative animate-in slide-in-from-bottom-4 fade-in">
+      <div className="absolute inset-0 bg-primary/10 blur-xl rounded-lg transition-opacity duration-500"></div>
+      <div className="absolute inset-0 animate-pulse"></div>
       <div className="relative">
-        <CardHeader className="pb-3 border-b border-primary/20">
-          <CardTitle className="text-lg flex items-center gap-2 text-primary">
-            <Scissors className="h-5 w-5" />
+        <CardHeader className="pb-3 border-b border-primary/30">
+          <CardTitle className="text-lg flex items-center gap-2 text-primary font-semibold">
+            <Scissors className="h-5 w-5 animate-pulse" />
             Clip Trimmer
+            <span className="ml-auto text-xs bg-primary/20 text-primary px-2 py-1 rounded-full font-normal">
+              Active
+            </span>
           </CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Select custom start and stop points to create your focused clip for AI processing.
+          <CardDescription className="text-muted-foreground font-medium">
+            Select custom start and stop points to create your focused clip for
+            AI processing.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
           {/* Range Slider for both start and end times */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="range-slider" className="text-sm font-medium text-foreground">
+              <Label
+                htmlFor="range-slider"
+                className="text-sm font-medium text-foreground"
+              >
                 Clip Range
               </Label>
               <div className="flex items-center gap-2 text-sm font-mono">
-                <span className="text-foreground font-semibold">{formatSecondsToMMSS(startTime)}</span>
+                <span className="text-foreground font-semibold">
+                  {formatSecondsToMMSS(startTime)}
+                </span>
                 <span className="text-muted-foreground">to</span>
-                <span className="text-foreground font-semibold">{formatSecondsToMMSS(endTime)}</span>
+                <span className="text-foreground font-semibold">
+                  {formatSecondsToMMSS(endTime)}
+                </span>
               </div>
             </div>
             <RangeSlider
@@ -226,7 +247,9 @@ export default function ClipTrimmer({
 
           {/* Clip Duration Display */}
           <div className="flex items-center justify-between p-3 bg-primary/10 backdrop-blur-sm rounded-lg border border-primary/30 shadow-sm transition-[background-color,border-color,shadow] duration-500">
-            <span className="text-sm font-medium text-foreground">Clip Duration:</span>
+            <span className="text-sm font-medium text-foreground">
+              Clip Duration:
+            </span>
             <span className="text-sm font-mono text-primary font-semibold">
               {formatSecondsToMMSS(clipDuration)}
             </span>
@@ -242,7 +265,8 @@ export default function ClipTrimmer({
             {isPreviewPlaying ? (
               <>
                 <Pause className="mr-2 h-4 w-4" />
-                Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)} remaining)
+                Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)}{" "}
+                remaining)
               </>
             ) : (
               <>
@@ -260,21 +284,20 @@ export default function ClipTrimmer({
             <Scissors className="mr-2 h-4 w-4" />
             {disabled
               ? "Create Custom Clip"
-              : `Create Focused Clip (${formatSecondsToMMSS(clipDuration)})`
-            }
+              : `Create Focused Clip (${formatSecondsToMMSS(clipDuration)})`}
           </Button>
 
           {!isValidClip && !disabled && (
             <p className="text-sm text-muted-foreground text-center">
               {clipDuration < 1
                 ? "Clip must be at least 1 second long"
-                : "Clip must be no longer than 5 minutes"
-              }
+                : "Clip must be no longer than 5 minutes"}
             </p>
           )}
           {disabled && (
             <p className="text-sm text-muted-foreground text-center">
-              Please wait for any ongoing AI operations to complete before creating a new clip.
+              Please wait for any ongoing AI operations to complete before
+              creating a new clip.
             </p>
           )}
         </CardContent>
