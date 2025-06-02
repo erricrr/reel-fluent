@@ -1463,10 +1463,7 @@ export default function TranscriptionWorkspace({
                       }
                      }}
                      disabled={disableTextarea}
-                     {...isTranscriptionSaved
-                       ? { variant: "default" }
-                       : { variant: "secondary", className: "bg-accent text-accent-foreground hover:bg-accent/90" }
-                     }
+                     variant="default"
                    >
                      {isTranscriptionSaved ? <Unlock className="mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
                      {isTranscriptionSaved ? "Access AI Tools" : "Save & Unlock AI Tools"}
