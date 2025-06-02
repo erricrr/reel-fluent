@@ -13,7 +13,7 @@ import { FileVideo, X as XIcon, FileAudio, Save, List } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateClips, createFocusedClip, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
-import { transcribeAudio } from "@/ai/flows/transcribe-audio";
+import { transcribeAudio } from "@/ai/flows/transcribe-audio-resilient";
 import { translateTranscription } from "@/ai/flows/translate-transcription-flow"; // New import
 import { compareTranscriptions, type CorrectionToken } from "@/ai/flows/compare-transcriptions-flow";
 import { useAuth } from '@/contexts/AuthContext';
