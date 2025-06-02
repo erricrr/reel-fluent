@@ -27,8 +27,8 @@ body {
     --muted: 45 15% 92%; /* Slightly lighter beige/gray for muted */
     --muted-foreground: 40 10% 35%; /* Darker warm gray-brown for better contrast */
 
-    --accent: 160 70% 45%; /* Brighter, vibrant teal-green */
-    --accent-foreground: 40 10% 15%; /* MODIFIED: Darker for better contrast on accent bg */
+    --accent: 182 64% 61%; /* Custom accent color #5dd6db */
+    --accent-foreground: 182 10% 15%; /* Dark text for contrast on accent background */
 
     --destructive: 0 84.2% 60.2%; /* Default red */
     --destructive-foreground: 0 0% 98%;
@@ -51,7 +51,7 @@ body {
     --sidebar-foreground: 40 10% 20%; /* Slightly darker warm gray-brown */
     --sidebar-primary: 150 45% 35%; /* Slightly darker/more saturated primary for sidebar */
     --sidebar-primary-foreground: 150 20% 95%;
-    --sidebar-accent: 160 70% 40%; /* Slightly darker/more saturated accent for sidebar */
+    --sidebar-accent: 182 64% 55%; /* Slightly darker variant of custom accent for sidebar */
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 45 15% 80%;
     --sidebar-ring: 150 45% 40%;
@@ -79,8 +79,8 @@ body {
     --muted: 150 8% 28%; /* Slightly distinct muted dark green-gray */
     --muted-foreground: 45 15% 65%; /* Medium-light beige/gray */
 
-    --accent: 160 60% 60%; /* Lighter vibrant teal-green */
-    --accent-foreground: 160 10% 10%; /* Very dark for contrast on accent */
+    --accent: 182 64% 65%; /* Lighter variant of custom accent for dark mode */
+    --accent-foreground: 182 10% 10%; /* Very dark for contrast on accent */
 
     --destructive: 0 85% 65%; /* Brighter, lighter red for dark mode text/borders */
     --destructive-foreground: 0 0% 10%; /* Very dark text for on-destructive background */
@@ -101,8 +101,8 @@ body {
     --sidebar-foreground: 45 15% 90%; /* Slightly lighter beige/gray */
     --sidebar-primary: 150 40% 60%; /* Slightly lighter primary for dark sidebar */
     --sidebar-primary-foreground: 150 10% 5%;
-    --sidebar-accent: 160 60% 65%; /* Slightly lighter accent for dark sidebar */
-    --sidebar-accent-foreground: 160 10% 10%;
+    --sidebar-accent: 182 64% 70%; /* Lighter variant of custom accent for dark sidebar */
+    --sidebar-accent-foreground: 182 10% 10%;
     --sidebar-border: 150 8% 25%;
     --sidebar-ring: 150 40% 55%;
     /* New hover colors for sidebar icons */
