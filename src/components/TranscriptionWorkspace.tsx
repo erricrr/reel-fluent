@@ -339,7 +339,7 @@ export default function TranscriptionWorkspace({
   const [previewClip, setPreviewClip] = useState<{ startTime: number; endTime: number } | null>(null);
 
   // Add a new state to track if current transcription is saved
-  const [isTranscriptionSaved, setIsTranscriptionSaved] = useState(true);
+  const [isTranscriptionSaved, setIsTranscriptionSaved] = useState(false);
 
   // Ref for left pane to reset width on small screens
   const leftPaneRef = useRef<HTMLDivElement>(null);
@@ -728,7 +728,7 @@ export default function TranscriptionWorkspace({
 
   // Reset saved state when clip changes
   useEffect(() => {
-    setIsTranscriptionSaved(true);
+    setIsTranscriptionSaved(false);
   }, [currentClip.id]);
 
   // Add refs for clip navigation
@@ -1066,10 +1066,43 @@ export default function TranscriptionWorkspace({
                  <CardFooter className="flex-col items-stretch gap-2">
                    <Button
                      onClick={() => {
-                       handleSaveOrUpdate();
-                       if (isTranscriptionSaved) {
-                         handleTabChange("ai");
-                       }
+                      if (!isTranscriptionSaved) {
+                        // Save the transcription
+                        if (!currentClip || !onSaveToSession) return;
+                         
+                        // Check if there's any transcription to save
+                        const hasTranscription = userTranscriptionInput.trim().length > 0;
+                         
+                        if (!hasTranscription) {
+                          toast({
+                            title: "Nothing to Save",
+                            description: "Please write a transcription before saving."
+                          });
+                          return;
+                        }
+                         
+                        // Update clip with user's transcription
+                        onUserTranscriptionChange(currentClip.id, userTranscriptionInput);
+                        // Save or update session clip, passing newest transcription
+                        onSaveToSession(userTranscriptionInput);
+                        setIsTranscriptionSaved(true);
+                         
+                        // Show notification for new clips being added to session
+                        if (canSaveToSession) {
+                          toast({
+                            title: "Transcription Attempt Saved",
+                            description: "Your transcription attempt is saved! Use the Saved Attempts button to the left of the AI Tools to review or make changes anytime."
+                          });
+                        }
+                         
+                        // Switch to AI tab after saving
+                        setActiveTab("ai");
+                        setHasUserManuallyChangedTab(true);
+                        setLastUserSelectedTab("ai");
+                      } else {
+                        // Already saved, just switch to AI tab
+                        handleTabChange("ai");
+                      }
                      }}
                      disabled={disableTextarea}
                      variant="secondary"
