@@ -7,7 +7,7 @@
  * - TranslateTranscriptionOutput - The return type for the function.
  */
 
-import {ai} from '@/ai/genkit';
+import {ai, GEMINI_MODEL, CLAUDE_MODEL} from '@/ai/genkit';
 import {z} from 'genkit';
 import { PROVIDER_CONFIGS, circuitBreakers, retryWithBackoff, getProvidersInPriorityOrder } from '@/ai/providers/config';
 
@@ -40,7 +40,7 @@ const googleTranslationPrompt = ai.definePrompt({
   name: 'googleTranslationPrompt',
   input: {schema: TranslateTranscriptionInputSchema},
   output: {schema: TranslateTranscriptionOutputSchema},
-  model: 'googleai/gemini-2.0-flash',
+  model: GEMINI_MODEL,
   prompt: `Translate the following text into {{targetLanguage}}.
 If a source language is provided, use it as a hint.
 
@@ -58,7 +58,7 @@ const anthropicTranslationPrompt = ai.definePrompt({
   name: 'anthropicTranslationPrompt',
   input: {schema: TranslateTranscriptionInputSchema},
   output: {schema: TranslateTranscriptionOutputSchema},
-  model: 'claude-3-7-sonnet-latest',
+  model: CLAUDE_MODEL,
   prompt: `Translate the following text into {{targetLanguage}}.
 If a source language is provided, use it as a hint.
 

@@ -744,15 +744,10 @@ export default function TranscriptionWorkspace({
     setPreviewClip({ startTime, endTime });
     setIsInPreviewMode(true);
 
-    // Small delay to ensure VideoPlayer has updated with new effectiveClip
-    setTimeout(() => {
-      if (videoPlayerRef.current) {
-        // Completely disable boundary enforcement for preview
-        videoPlayerRef.current.disableBoundaryEnforcement();
-        videoPlayerRef.current.seek(startTime);
-        videoPlayerRef.current.play();
-      }
-    }, 100);
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.seek(startTime);
+      videoPlayerRef.current.play();
+    }
   }, []);
 
   // Handle preview clip stop
@@ -761,15 +756,8 @@ export default function TranscriptionWorkspace({
     setIsInPreviewMode(false);
     if (videoPlayerRef.current) {
       videoPlayerRef.current.pause();
-      // Re-enable boundary enforcement and reset to appropriate clip
-      setTimeout(() => {
-        if (videoPlayerRef.current) {
-          videoPlayerRef.current.enableBoundaryEnforcement();
-          // Reset to focused clip if available, otherwise current clip
-          const resetClip = focusedClip || currentClip;
-          videoPlayerRef.current.seek(resetClip.startTime);
-        }
-      }, 100);
+      const resetClip = focusedClip || currentClip;
+      videoPlayerRef.current.seek(resetClip.startTime);
     }
   }, [currentClip, focusedClip]);
 
@@ -1167,7 +1155,8 @@ export default function TranscriptionWorkspace({
             isAudioSource={isAudioSource}
             currentClipIndex={currentClipIndex}
             onPlayStateChange={setIsCurrentClipPlaying}
-            isLooping={isLooping}
+            isLooping={previewClip ? false : isLooping}
+            onEnded={previewClip ? handleStopPreview : undefined}
           />
 
           {/* Clip Controls - Show different UI based on focused clip mode */}

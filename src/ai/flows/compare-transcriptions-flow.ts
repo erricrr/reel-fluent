@@ -8,7 +8,7 @@
  * - CorrectionToken - Represents a single token in the comparison with its status.
  */
 
-import {ai} from '@/ai/genkit';
+import {ai, GEMINI_MODEL, CLAUDE_MODEL} from '@/ai/genkit';
 import {z} from 'genkit';
 import { PROVIDER_CONFIGS, circuitBreakers, retryWithBackoff, getProvidersInPriorityOrder } from '@/ai/providers/config';
 
@@ -227,7 +227,7 @@ const googleComparisonPrompt = ai.definePrompt({
   name: 'googleComparisonPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
-  model: 'googleai/gemini-2.0-flash',
+  model: GEMINI_MODEL,
   prompt: `Compare user input to automated transcription word by word. The automated transcription is ALWAYS 100% correct. The user input has errors.
 
 User transcription: {{{userTranscription}}}
@@ -258,7 +258,7 @@ const anthropicComparisonPrompt = ai.definePrompt({
   name: 'anthropicComparisonPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
-  model: 'claude-3-7-sonnet-latest',
+  model: CLAUDE_MODEL,
   prompt: `Compare user input to automated transcription word by word. The automated transcription is ALWAYS 100% correct. The user input has errors.
 
 User transcription: {{{userTranscription}}}

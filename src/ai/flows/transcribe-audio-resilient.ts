@@ -4,7 +4,7 @@
  * Supports Google AI (Gemini), OpenAI Whisper, and Anthropic as fallbacks.
  */
 
-import { ai } from "@/ai/genkit";
+import { ai, GEMINI_MODEL, CLAUDE_MODEL } from "@/ai/genkit";
 import { z } from "genkit";
 import { PROVIDER_CONFIGS, circuitBreakers, retryWithBackoff, type ProviderConfig, getProvidersInPriorityOrder } from "@/ai/providers/config";
 
@@ -33,7 +33,7 @@ const transcribeWithGooglePrompt = ai.definePrompt({
   name: "transcribeWithGooglePrompt",
   input: { schema: TranscribeAudioInputSchema },
   output: { schema: TranscribeAudioOutputSchema },
-  model: "googleai/gemini-2.0-flash",
+  model: GEMINI_MODEL,
   prompt: `Transcribe the following audio to text. {{#if language}}The language of the audio is {{language}}.{{/if}}
 
 Instructions:
@@ -52,7 +52,7 @@ const transcribeWithAnthropicPrompt = ai.definePrompt({
   name: "transcribeWithAnthropicPrompt",
   input: { schema: TranscribeAudioInputSchema },
   output: { schema: TranscribeAudioOutputSchema },
-  model: "claude-3-7-sonnet-latest",
+  model: CLAUDE_MODEL,
   prompt: `Transcribe the following audio to text. {{#if language}}The language of the audio is {{language}}.{{/if}}
 
 Instructions:
