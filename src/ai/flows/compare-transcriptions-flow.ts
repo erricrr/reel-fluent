@@ -10,6 +10,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { PROVIDER_CONFIGS, circuitBreakers, retryWithBackoff, getProvidersInPriorityOrder } from '@/ai/providers/config';
 
 const CorrectionTokenSchema = z.object({
   token: z.string().describe(
@@ -221,118 +222,111 @@ function postProcessComparisonResult(result: CorrectionToken[]): CorrectionToken
   }).filter((token): token is CorrectionToken => token !== null); // Remove any null tokens
 }
 
-export async function compareTranscriptions(
-  input: CompareTranscriptionsInput
-): Promise<CompareTranscriptionsOutput> {
-  return compareTranscriptionsFlow(input);
-}
-
-// [Previous code remains unchanged until the prompt definition]
-
-const prompt = ai.definePrompt({
-  name: 'compareTranscriptionsPrompt',
+// Google AI comparison prompt
+const googleComparisonPrompt = ai.definePrompt({
+  name: 'googleComparisonPrompt',
   input: {schema: CompareTranscriptionsInputSchema},
   output: {schema: CompareTranscriptionsOutputSchema},
   model: 'googleai/gemini-2.0-flash',
-  prompt: `SIMPLE RULE: Compare USER input to AUTOMATED transcription. AUTOMATED is always correct. USER has errors.
+  prompt: `Compare user input to automated transcription word by word. The automated transcription is ALWAYS 100% correct. The user input has errors.
 
-🔴 AUTOMATED TRANSCRIPTION = 100% CORRECT (NEVER WRONG)
-🔴 USER INPUT = HAS ERRORS TO FIND
-🔴 IF THEY DON'T MATCH EXACTLY = USER IS WRONG
+User transcription: {{{userTranscription}}}
+Automated transcription: {{{automatedTranscription}}}
+Language: {{{language}}}
 
-LANGUAGE-SPECIFIC ERRORS TO CATCH:
+RULES:
+1. If user word EXACTLY matches automated word → "correct"
+2. If user word differs in ANY way (spelling, accents, diacritics, punctuation, case) → "incorrect" with suggestion
+3. If user missed an automated word → "missing"
+4. If user added extra word → "extra"
 
-VIETNAMESE - Pay close attention to base letters (ă, â, ê, ô, ơ, ư, đ) and their tone mark combinations (à, á, ả, ã, ạ).
-USER: "an" vs AUTOMATED: "ăn"         → STATUS: "incorrect", SUGGESTION: "ăn"   (a vs ă)
-USER: "an" vs AUTOMATED: "ắn"         → STATUS: "incorrect", SUGGESTION: "ắn"   (a vs ắ which is ă + tone)
-USER: "can" vs AUTOMATED: "cần"        → STATUS: "incorrect", SUGGESTION: "cần"  (a vs â + tone)
-USER: "em" vs AUTOMATED: "êm"          → STATUS: "incorrect", SUGGESTION: "êm"   (e vs ê)
-USER: "em" vs AUTOMATED: "yên"         → STATUS: "incorrect", SUGGESTION: "yên"  (e vs yê - vowel group)
-USER: "den" vs AUTOMATED: "đến"        → STATUS: "incorrect", SUGGESTION: "đến"  (d vs đ, e vs ê + tone)
-USER: "ho" vs AUTOMATED: "họ"          → STATUS: "incorrect", SUGGESTION: "họ"   (o vs ọ - simple tone)
-USER: "moi" vs AUTOMATED: "mới"        → STATUS: "incorrect", SUGGESTION: "mới"  (o vs ơ + tone)
-USER: "tu" vs AUTOMATED: "tư"          → STATUS: "incorrect", SUGGESTION: "tư"   (u vs ư)
-USER: "chuc" vs AUTOMATED: "chúc"       → STATUS: "incorrect", SUGGESTION: "chúc" (u vs ú - simple tone)
-USER: "thu" vs AUTOMATED: "thử"        → STATUS: "incorrect", SUGGESTION: "thử"  (u vs ư + tone)
-USER: "da" vs AUTOMATED: "đã"          → STATUS: "incorrect", SUGGESTION: "đã"   (d vs đ, a vs ã - a + tone)
-USER: "dien" vs AUTOMATED: "điện"       → STATUS: "incorrect", SUGGESTION: "điện" (d vs đ, i vs i+tone, e vs ê+tone - complex word)
-USER: "Hoi An" vs AUTOMATED: "Hội An"   → STATUS: "incorrect", SUGGESTION: "Hội An" (o vs ộ in a multi-word phrase)
-USER: "nhat" vs AUTOMATED: "nhất"       → STATUS: "incorrect", SUGGESTION: "nhất" (a vs â + tone, example of stacked diacritic like ấ)
-USER: "Hôm" vs AUTOMATED: "Hôm"       → STATUS: "correct" (Example of already correct with diacritic)
-USER: "co gang" vs AUTOMATED: "cố gắng" → STATUS: "incorrect", SUGGESTION: "cố gắng" (o vs ô+tone, a vs ă+tone)
+PAY ATTENTION TO:
+- Vietnamese: diacritics and tone marks (ă vs a, ê vs e, ữ vs u, etc.)
+- Spanish/French: accents (café vs cafe, niño vs nino)
+- All languages: punctuation and capitalization
 
-SPANISH - Missing accents:
-USER: "nino" vs AUTOMATED: "niño" → STATUS: "incorrect", SUGGESTION: "niño"
-USER: "como" vs AUTOMATED: "cómo" → STATUS: "incorrect", SUGGESTION: "cómo"
-USER: "mas" vs AUTOMATED: "más" → STATUS: "incorrect", SUGGESTION: "más"
+Examples:
+- User "Hom" vs Auto "Hôm" → incorrect, suggest "Hôm"
+- User "nay" vs Auto "nay," → incorrect, suggest "nay,"
+- User "cafe" vs Auto "café" → incorrect, suggest "café"
 
-FRENCH - Missing accents:
-USER: "cafe" vs AUTOMATED: "café" → STATUS: "incorrect", SUGGESTION: "café"
-USER: "etre" vs AUTOMATED: "être" → STATUS: "incorrect", SUGGESTION: "être"
-USER: "francais" vs AUTOMATED: "français" → STATUS: "incorrect", SUGGESTION: "français"
-
-GERMAN - Missing umlauts:
-USER: "uber" vs AUTOMATED: "über" → STATUS: "incorrect", SUGGESTION: "über"
-USER: "Madchen" vs AUTOMATED: "Mädchen" → STATUS: "incorrect", SUGGESTION: "Mädchen"
-
-ITALIAN - Missing accents:
-USER: "citta" vs AUTOMATED: "città" → STATUS: "incorrect", SUGGESTION: "città"
-USER: "perche" vs AUTOMATED: "perché" → STATUS: "incorrect", SUGGESTION: "perché"
-
-PORTUGUESE - Missing accents:
-USER: "nao" vs AUTOMATED: "não" → STATUS: "incorrect", SUGGESTION: "não"
-USER: "voce" vs AUTOMATED: "você" → STATUS: "incorrect", SUGGESTION: "você"
-
-JAPANESE - Wrong script/spacing:
-USER: "がくせい" vs AUTOMATED: "学生" → STATUS: "incorrect", SUGGESTION: "学生"
-
-KOREAN - Wrong syllables/spacing:
-USER: "안영하세요" vs AUTOMATED: "안녕하세요" → STATUS: "incorrect", SUGGESTION: "안녕하세요"
-
-SIMPLE COMPARISON RULES:
-1. Split both texts into words
-2. Compare each AUTOMATED word to the USER word
-3. If the AUTOMATED word and the USER word are EXACTLY the same → "correct"
-4. If the USER word is different from the AUTOMATED word in ANY way → "incorrect"
-5. If USER is missing a word that appears in the AUTOMATED transcription → "missing"
-6. If USER has an extra word that DOES NOT APPEAR in the AUTOMATED transcription → "extra" (no suggestion)
-
-EXAMPLE - EXACTLY WHAT TO DO:
-AUTOMATED: "Hôm nay, có và các em sẽ cùng tìm hiểu về bảng chữ cái tiếng Việt. Trước tiền..."
-USER: "Hom nay co va cac em se cung tim hieu ve bang chu cai tieng Viet"
-
-CORRECT OUTPUT:
-[
-  {"token": "Hom", "status": "incorrect", "suggestion": "Hôm"},
-  {"token": "nay", "status": "incorrect", "suggestion": "nay,"},
-  {"token": "co", "status": "incorrect", "suggestion": "có"},
-  {"token": "va", "status": "incorrect", "suggestion": "và"},
-  {"token": "cac", "status": "incorrect", "suggestion": "các"},
-  {"token": "em", "status": "correct"},
-  {"token": "se", "status": "incorrect", "suggestion": "sẽ"},
-  {"token": "cung", "status": "incorrect", "suggestion": "cùng"},
-  {"token": "tim", "status": "incorrect", "suggestion": "tìm"},
-  {"token": "hieu", "status": "incorrect", "suggestion": "hiểu"},
-  {"token": "ve", "status": "incorrect", "suggestion": "về"},
-  {"token": "bang", "status": "incorrect", "suggestion": "bảng"},
-  {"token": "chu", "status": "incorrect", "suggestion": "chữ"},
-  {"token": "cai", "status": "incorrect", "suggestion": "cái"},
-  {"token": "tieng", "status": "incorrect", "suggestion": "tiếng"},
-  {"token": "Viet", "status": "incorrect", "suggestion": "Việt."},
-  {"token": "Trước", "status": "missing", "suggestion": "Trước"},
-  {"token": "tiền...", "status": "missing", "suggestion": "tiền..."}
-]
-
-NOW COMPARE THESE INPUTS:
-USER: {{{userTranscription}}}
-AUTOMATED: {{{automatedTranscription}}}
-LANGUAGE: {{{language}}}
-
-USE THE EXAMPLE ABOVE AS A GUIDE. KNOW THAT AUTOMATED IS ALWAYS RIGHT.
-
-RETURN THE COMPLETE COMPARISON RESULT FOLLOWING THE EXACT SCHEMA WITH ZERO TOLERANCE FOR ANY LANGUAGE-SPECIFIC ERRORS.`
+Return complete token-by-token comparison as JSON array.`,
 });
 
+// Anthropic comparison prompt
+const anthropicComparisonPrompt = ai.definePrompt({
+  name: 'anthropicComparisonPrompt',
+  input: {schema: CompareTranscriptionsInputSchema},
+  output: {schema: CompareTranscriptionsOutputSchema},
+  model: 'claude-3-7-sonnet-latest',
+  prompt: `Compare user input to automated transcription word by word. The automated transcription is ALWAYS 100% correct. The user input has errors.
+
+User transcription: {{{userTranscription}}}
+Automated transcription: {{{automatedTranscription}}}
+Language: {{{language}}}
+
+RULES:
+1. If user word EXACTLY matches automated word → "correct"
+2. If user word differs in ANY way (spelling, accents, diacritics, punctuation, case) → "incorrect" with suggestion
+3. If user missed an automated word → "missing"
+4. If user added extra word → "extra"
+
+PAY ATTENTION TO:
+- Vietnamese: diacritics and tone marks (ă vs a, ê vs e, ữ vs u, etc.)
+- Spanish/French: accents (café vs cafe, niño vs nino)
+- All languages: punctuation and capitalization
+
+Examples:
+- User "Hom" vs Auto "Hôm" → incorrect, suggest "Hôm"
+- User "nay" vs Auto "nay," → incorrect, suggest "nay,"
+- User "cafe" vs Auto "café" → incorrect, suggest "café"
+
+Return complete token-by-token comparison as JSON array.`,
+});
+
+// Function to compare using a specific provider
+async function compareWithProvider(
+  provider: 'google' | 'anthropic',
+  input: CompareTranscriptionsInput
+): Promise<CompareTranscriptionsOutput> {
+  const config = PROVIDER_CONFIGS[provider];
+  const breaker = circuitBreakers[provider];
+
+  if (!config.enabled) {
+    throw new Error(`Provider ${provider} is not enabled or configured`);
+  }
+
+  if (!breaker.canExecute()) {
+    throw new Error(`Provider ${provider} is temporarily disabled due to repeated failures`);
+  }
+
+  try {
+    let result: CompareTranscriptionsOutput;
+
+    switch (provider) {
+      case 'google':
+        const {output: googleOutput} = await googleComparisonPrompt(input);
+        result = googleOutput!;
+        break;
+      case 'anthropic':
+        if (!process.env.ANTHROPIC_API_KEY) {
+          throw new Error('Anthropic API key not configured');
+        }
+        const {output: anthropicOutput} = await anthropicComparisonPrompt(input);
+        result = anthropicOutput!;
+        break;
+      default:
+        throw new Error(`Unknown provider: ${provider}`);
+    }
+
+    breaker.onSuccess();
+    return result;
+
+  } catch (error) {
+    breaker.onFailure();
+    throw error;
+  }
+}
 
 const compareTranscriptionsFlow = ai.defineFlow(
   {
@@ -341,158 +335,127 @@ const compareTranscriptionsFlow = ai.defineFlow(
     outputSchema: CompareTranscriptionsOutputSchema,
   },
   async input => {
-    console.log('CompareTranscriptionsFlow: Starting comparison with input:', {
-      userLength: input.userTranscription.length,
-      automatedLength: input.automatedTranscription.length,
-      language: input.language || 'unknown'
-    });
-
-    // Validate inputs
+    // Validate inputs first
     if (!input.userTranscription?.trim()) {
-      console.error('CompareTranscriptionsFlow: Empty user transcription');
       return {
         comparisonResult: [{
-          token: "Error: User transcription is empty.",
-          status: "incorrect" as const,
-          suggestion: "Please enter your transcription"
+          token: "Error: User transcription is empty",
+          status: "correct" as const
         }]
-      } satisfies CompareTranscriptionsOutput;
+      };
     }
 
     if (!input.automatedTranscription?.trim()) {
-      console.error('CompareTranscriptionsFlow: Empty automated transcription');
       return {
         comparisonResult: [{
-          token: "Error: Automated transcription is empty.",
-          status: "incorrect" as const,
-          suggestion: "Please generate automated transcription first"
+          token: "Error: Automated transcription is empty",
+          status: "correct" as const
         }]
-      } satisfies CompareTranscriptionsOutput;
+      };
     }
 
-    // Preprocess inputs for consistency
-    const { user: processedUser, automated: processedAutomated } = preprocessTranscriptions(
+    // Preprocess inputs
+    const { user, automated } = preprocessTranscriptions(
       input.userTranscription,
       input.automatedTranscription
     );
 
     const processedInput = {
       ...input,
-      userTranscription: processedUser,
-      automatedTranscription: processedAutomated
+      userTranscription: user,
+      automatedTranscription: automated
     };
 
-    // Attempt the comparison with retry logic
-    const maxRetries = 3;
-    let lastError: any = null;
+    // Use providers in priority order - EXACT SAME as translation
+    const allProviders = getProvidersInPriorityOrder() as ('google' | 'anthropic')[];
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    // Filter to only include Google and Anthropic (OpenAI is temporarily disabled)
+    const availableProviders = ['google', 'anthropic'];
+    const providers = allProviders.filter(p => availableProviders.includes(p));
+
+    const enabledProviders = providers.filter(p => PROVIDER_CONFIGS[p]?.enabled);
+
+    console.log('Available comparison providers in priority order:', enabledProviders);
+
+    if (enabledProviders.length === 0) {
+      throw new Error("All comparison services are currently unavailable. Please try again later.");
+    }
+
+    let lastError: any;
+    const failedProviders: string[] = [];
+
+    for (const provider of enabledProviders) {
       try {
-        console.log(`CompareTranscriptionsFlow: Attempt ${attempt}/${maxRetries}`);
-
-        const {output} = await prompt(processedInput);
-
-        if (!output) {
-          throw new Error('AI returned null or undefined response');
-        }
-
-        if (!output.comparisonResult) {
-          throw new Error('AI response missing comparisonResult field');
-        }
-
-        if (!Array.isArray(output.comparisonResult)) {
-          throw new Error(`AI response comparisonResult is not an array (got: ${typeof output.comparisonResult})`);
-        }
-
-        if (output.comparisonResult.length === 0) {
-          throw new Error('AI returned empty comparisonResult array');
-        }
-
-        // Post-process the result FIRST to fix common schema violations
-        const postProcessedResult = postProcessComparisonResult(output.comparisonResult);
-
-        if (postProcessedResult.length === 0) {
-          throw new Error('Post-processing resulted in empty array');
-        }
-
-        // Then validate the post-processed result
-        const validation = validateComparisonResult(
-          postProcessedResult,
-          processedUser,
-          processedAutomated
+        console.log(`Attempting comparison with ${PROVIDER_CONFIGS[provider].name}...`);
+        const result = await retryWithBackoff(
+          () => compareWithProvider(provider, processedInput),
+          PROVIDER_CONFIGS[provider],
+          provider
         );
 
-        if (!validation.isValid) {
-          console.warn(`CompareTranscriptionsFlow: Validation failed on attempt ${attempt}:`, validation.errors);
-          if (attempt === maxRetries) {
-            // On final attempt, return the result even if validation fails, but log the issues
-            console.error('CompareTranscriptionsFlow: Final attempt validation failed, returning result anyway:', validation.errors);
-            // Return the post-processed result even if validation fails
-            return {
-              comparisonResult: postProcessedResult
-            } satisfies CompareTranscriptionsOutput;
-          } else {
-            // Retry if not the final attempt
-            throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
-          }
+        if (failedProviders.length > 0) {
+          console.log(`Successfully compared with ${PROVIDER_CONFIGS[provider].name} after ${failedProviders.join(', ')} failed`);
         }
 
-        console.log(`CompareTranscriptionsFlow: Success on attempt ${attempt}, returning ${postProcessedResult.length} tokens`);
+        // Post-process to fix any issues
+        const postProcessedResult = postProcessComparisonResult(result.comparisonResult);
+
         return {
           comparisonResult: postProcessedResult
-        } satisfies CompareTranscriptionsOutput;
+        };
 
-      } catch (error) {
+      } catch (error: any) {
         lastError = error;
-        console.warn(`CompareTranscriptionsFlow: Attempt ${attempt} failed:`, error);
+        failedProviders.push(provider);
 
-        // Check if this is a retryable error (similar to transcription/translation flows)
-        const isRetryable = error instanceof Error && (
-          error.message.includes('503') ||
-          error.message.includes('Service Unavailable') ||
-          error.message.includes('overloaded') ||
-          error.message.includes('429') ||
-          error.message.includes('Too Many Requests') ||
-          error.message.includes('temporarily unavailable') ||
-          error.message.includes('rate limit') ||
-          error.message.includes('Validation failed') // Also retry validation failures
-        );
+        console.warn(`${PROVIDER_CONFIGS[provider].name} comparison failed:`, error.message);
 
-        if (!isRetryable || attempt === maxRetries) {
-          // Don't retry for non-retryable errors or on final attempt
+        if (provider === enabledProviders[enabledProviders.length - 1]) {
           break;
         }
 
-        // Wait before retrying (exponential backoff)
-        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        console.log(`CompareTranscriptionsFlow: Retrying in ${delayMs}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // If all attempts failed, return a helpful error with better messaging
-    let errorMessage = "Comparison failed after multiple attempts.";
+    // All providers failed
+    console.error(`All comparison providers failed: ${failedProviders.join(', ')}`);
 
-    if (lastError instanceof Error) {
-      if (lastError.message.includes('503') || lastError.message.includes('overloaded')) {
-        errorMessage = "AI comparison service is temporarily busy. Please wait a moment and try again.";
-      } else if (lastError.message.includes('429') || lastError.message.includes('Too Many Requests')) {
-        errorMessage = "Too many comparison requests. Please wait a moment and try again.";
-      } else if (lastError.message.includes('400') || lastError.message.includes('Bad Request')) {
-        errorMessage = "Comparison request format error. Please try again or contact support.";
-      } else if (lastError.message.includes('401') || lastError.message.includes('403')) {
-        errorMessage = "Authentication error with AI service. Please contact support.";
-      } else {
-        errorMessage = `Comparison failed: ${lastError.message}`;
-      }
+    // Provide user-friendly error messages - EXACT SAME as translation
+    if (failedProviders.includes('google') && lastError?.message?.includes('overloaded')) {
+      throw new Error(
+        'Comparison services are currently experiencing issues. Please try again in a few minutes.'
+      );
+    } else if (lastError?.message?.includes('429') || lastError?.message?.includes('Too Many Requests')) {
+      throw new Error(
+        'Too many comparison requests. Please wait a moment before trying again.'
+      );
+    } else if (lastError?.message?.includes('network') || lastError?.message?.includes('timeout')) {
+      throw new Error(
+        'Network connection issue. Please check your internet connection and try again.'
+      );
     }
 
-    return {
-      comparisonResult: [{
-        token: "Error generating comparison.",
-        status: "incorrect" as const,
-        suggestion: errorMessage
-      }]
-    } satisfies CompareTranscriptionsOutput;
+    throw new Error(
+      `Comparison failed with all available providers. Please try again later or contact support.`
+    );
   }
 );
+
+export async function compareTranscriptions(
+  input: CompareTranscriptionsInput
+): Promise<CompareTranscriptionsOutput> {
+  try {
+    return await compareTranscriptionsFlow(input);
+  } catch (error: any) {
+    console.error("compareTranscriptions: Error in flow:", error.message);
+
+    // Provide a valid fallback response
+    return {
+      comparisonResult: [{
+        token: `Error: ${error.message || "Could not complete comparison. Please try again later."}`,
+        status: "correct" as const
+      }]
+    };
+  }
+}

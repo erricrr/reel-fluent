@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { generateClips, createFocusedClip, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { transcribeAudio } from "@/ai/flows/transcribe-audio-resilient";
-import { translateTranscription } from "@/ai/flows/translate-transcription-flow"; // New import
+import { translateTranscriptionFlow } from '@/ai/flows/translate-transcription-flow';
 import { compareTranscriptions, type CorrectionToken } from "@/ai/flows/compare-transcriptions-flow";
 import { useAuth } from '@/contexts/AuthContext';
 import { saveMediaItemAction } from '@/app/actions';
@@ -198,8 +198,8 @@ export default function ReelFluentApp() {
       // Preserve current AI tool states like "Translating...", "Transcribing...", etc.
       // This prevents breaking the "Already Translated" duplicate detection logic
       const mergeField = (baseValue: any, savedValue: any) => {
-        // If base value exists and is not empty, use it (preserves current states)
-        if (baseValue !== null && baseValue !== undefined && baseValue !== "") {
+        // If base value is defined (including null), use it to allow explicit clearing
+        if (baseValue !== undefined) {
           return baseValue;
         }
         // Otherwise use saved value
@@ -718,6 +718,7 @@ export default function ReelFluentApp() {
         const result = await transcribeAudio({
           audioDataUri,
           language: transcriptionLanguage,
+          preferredProvider: 'auto'
         });
 
         // Update with transcription result - this is the final success state
@@ -845,54 +846,107 @@ export default function ReelFluentApp() {
       updateClipData(clipId, { translation: "Translating...", translationTargetLanguage: targetLanguage });
     }
 
-    try {
-      const result = await translateTranscription({
-        originalTranscription: transcription,
-        sourceLanguage: (currentClipForTranslation.language || languageRef.current).trim(),
-        targetLanguage: targetLanguage,
-      });
+    const maxRetries = 2; // Maximum number of retries for the entire translation process
+    let lastError: any;
 
-      // Update the appropriate field based on target language
-      const updateData = targetLanguage === 'english'
-        ? { englishTranslation: result.translatedText }
-        : { translation: result.translatedText, translationTargetLanguage: targetLanguage };
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await translateTranscriptionFlow({
+          originalTranscription: transcription,
+          sourceLanguage: (currentClipForTranslation.language || languageRef.current).trim(),
+          targetLanguage: targetLanguage,
+        });
 
-      // Update clip data
-      updateClipData(clipId, updateData);
+        // Update the appropriate field based on target language
+        const updateData = targetLanguage === 'english'
+          ? { englishTranslation: result.translatedText }
+          : { translation: result.translatedText, translationTargetLanguage: targetLanguage };
 
-      // Also update session clips if this clip exists there
-      setSessionClips(prevClips => {
-        const clipIndex = prevClips.findIndex(c =>
-          c.startTime === currentClipForTranslation.startTime &&
-          c.endTime === currentClipForTranslation.endTime &&
-          c.mediaSourceId === activeMediaSourceIdRef.current
-        );
-        if (clipIndex >= 0) {
-          const newClips = [...prevClips];
-          newClips[clipIndex] = { ...newClips[clipIndex], ...updateData };
-          return newClips;
+        // Update clip data
+        updateClipData(clipId, updateData);
+
+        // Also update session clips if this clip exists there
+        setSessionClips(prevClips => {
+          const clipIndex = prevClips.findIndex(c =>
+            c.startTime === currentClipForTranslation.startTime &&
+            c.endTime === currentClipForTranslation.endTime &&
+            c.mediaSourceId === activeMediaSourceIdRef.current
+          );
+          if (clipIndex >= 0) {
+            const newClips = [...prevClips];
+            newClips[clipIndex] = { ...newClips[clipIndex], ...updateData };
+            return newClips;
+          }
+          return prevClips;
+        });
+
+        // Also update work in progress state
+        setWorkInProgressClips(prev => ({
+          ...prev,
+          [clipId]: { ...(prev[clipId] || currentClipForTranslation), ...updateData }
+        }));
+
+        toast({ title: `Translation to ${getLanguageLabel(targetLanguage)} Complete` });
+        return;
+
+      } catch (error: any) {
+        console.warn(`Translation attempt ${attempt + 1} failed:`, error);
+        lastError = error;
+
+        // Check if this is a retryable error
+        const isRetryable = error?.message?.includes('temporarily') ||
+                           error?.message?.includes('busy') ||
+                           error?.message?.includes('overloaded') ||
+                           error?.message?.includes('network') ||
+                           error?.message?.includes('timeout');
+
+        if (!isRetryable || attempt === maxRetries) {
+          break;
         }
-        return prevClips;
-      });
 
-      // Also update work in progress state
-      setWorkInProgressClips(prev => ({
-        ...prev,
-        [clipId]: { ...(prev[clipId] || currentClipForTranslation), ...updateData }
-      }));
-
-      toast({ title: `Translation to ${getLanguageLabel(targetLanguage)} Complete` });
-    } catch (error) {
-      console.warn("LinguaClipApp: AI Translation error:", error);
-      toast({ variant: "destructive", title: "AI Error", description: "Failed to translate transcription." });
-
-      // Set error state based on target language
-      const errorState = targetLanguage === 'english'
-        ? { englishTranslation: "Error: Could not translate." }
-        : { translation: "Error: Could not translate.", translationTargetLanguage: targetLanguage };
-
-      updateClipData(clipId, errorState);
+        // Wait before retrying
+        const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
+
+    // Handle final error state
+    console.error("All translation attempts failed:", lastError);
+
+    let errorMessage = "Failed to translate. Please try again later.";
+    let errorTitle = "Translation Failed";
+
+    if (lastError?.message) {
+      if (lastError.message.includes('busy') || lastError.message.includes('overloaded')) {
+        errorTitle = "Service Busy";
+        errorMessage = "Translation service is currently busy. Please wait a moment and try again.";
+      } else if (lastError.message.includes('Too many requests')) {
+        errorTitle = "Rate Limited";
+        errorMessage = "Too many translation requests. Please wait a moment before trying again.";
+      } else if (lastError.message.includes('network') || lastError.message.includes('timeout')) {
+        errorTitle = "Connection Error";
+        errorMessage = "Network connection issue. Please check your internet connection and try again.";
+      } else if (lastError.message.includes('providers')) {
+        errorTitle = "Service Unavailable";
+        errorMessage = "All translation services are currently unavailable. Please try again later.";
+      } else {
+        // Use the error message if it's user-friendly, otherwise use generic message
+        errorMessage = lastError.message.length < 100 ? lastError.message : errorMessage;
+      }
+    }
+
+    // Set error state based on target language
+    const errorState = targetLanguage === 'english'
+      ? { englishTranslation: `Error: ${errorMessage}` }
+      : { translation: `Error: ${errorMessage}`, translationTargetLanguage: targetLanguage };
+
+    updateClipData(clipId, errorState);
+
+    toast({
+      variant: "destructive",
+      title: errorTitle,
+      description: errorMessage
+    });
   }, [focusedClip, updateClipData, toast, getEnhancedClip, clips, sessionClips, activeMediaSourceId]);
 
   const handleGetCorrections = useCallback(async (clipId: string): Promise<void> => {
@@ -1235,7 +1289,7 @@ export default function ReelFluentApp() {
   }
 
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
-  
+
   // Create enhanced clips array that merges saved session data
   const enhancedClips = useMemo(() => {
     return clips.map((clip, index) => getEnhancedClip(index));
