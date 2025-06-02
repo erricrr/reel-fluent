@@ -1585,14 +1585,14 @@ export default function ReelFluentApp() {
                         setFocusedClip(null);
                         setShowClipTrimmer(false);
 
-                        // Then update the source
+                        // Batch all state updates together to prevent race conditions
+                        const generatedClips = generateClips(source.duration, clipSegmentationDuration, language);
+
+                        // Update all states in a single batch
                         setActiveMediaSourceId(sourceId);
                         setMediaSrc(source.src);
                         setMediaDisplayName(source.displayName);
                         setCurrentSourceType(source.type);
-
-                        // Generate new auto clips for the selected source
-                        const generatedClips = generateClips(source.duration, clipSegmentationDuration, language);
                         setClips(generatedClips);
                         setCurrentClipIndex(0);
                       }
@@ -1647,6 +1647,7 @@ export default function ReelFluentApp() {
               }
               sessionClips={sessionClips}
               activeMediaSourceId={activeMediaSourceId}
+              onUpdateClipData={updateClipData}
             />
           </div>
         )}

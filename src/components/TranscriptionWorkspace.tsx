@@ -72,6 +72,7 @@ interface TranscriptionWorkspaceProps {
   // Session clips for showing saved indicators
   sessionClips?: SessionClip[];
   activeMediaSourceId?: string | null;
+  onUpdateClipData?: (clipId: string, aiContent: any) => void;
 }
 
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -127,6 +128,7 @@ const MediaControls = ({
   mediaSrc,
   currentClipIndex,
   focusedClip,
+  clipDisplayName,
 }: {
   effectiveClip: Clip;
   currentPlaybackTime: number;
@@ -143,12 +145,13 @@ const MediaControls = ({
   mediaSrc?: string;
   currentClipIndex: number;
   focusedClip?: Clip | null;
+  clipDisplayName: string;
 }) => (
   <div className="space-y-3 p-3 bg-muted/30 rounded-lg border">
     {/* Timeline Controls Header */}
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0">
       <span className="text-sm font-medium text-foreground">
-        {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {focusedClip ? (focusedClip.displayName || 'Custom Clip') : `Clip ${currentClipIndex + 1}`}
+        {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {clipDisplayName}
       </span>
       <span className="text-sm font-mono text-primary">
         {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
@@ -311,6 +314,7 @@ export default function TranscriptionWorkspace({
   // Session clips for showing saved indicators
   sessionClips = [],
   activeMediaSourceId,
+  onUpdateClipData,
 }: TranscriptionWorkspaceProps) {
   // DRY: Extracted Saved Attempts button
   const reviewPracticeButton = (
@@ -819,48 +823,124 @@ export default function TranscriptionWorkspace({
   // FIXED: Auto-load saved transcription data when clip or media source changes
   // This ensures that saved transcriptions appear immediately when switching media files or clips
   useEffect(() => {
-    if (currentClip && sessionClips && activeMediaSourceId) {
-      const savedClip = sessionClips.find(sessionClip =>
-        sessionClip.mediaSourceId === activeMediaSourceId &&
-        sessionClip.startTime === currentClip.startTime &&
-        sessionClip.endTime === currentClip.endTime
-      );
+    // Add a small delay to ensure all state updates have settled when switching media sources
+    const timeoutId = setTimeout(() => {
+      if (currentClip && sessionClips && activeMediaSourceId) {
+        const savedClip = sessionClips.find(sessionClip =>
+          sessionClip.mediaSourceId === activeMediaSourceId &&
+          sessionClip.startTime === currentClip.startTime &&
+          sessionClip.endTime === currentClip.endTime
+        );
 
-      // Always load the correct data for the current clip and media source
-      if (savedClip && savedClip.userTranscription) {
-        // Load saved transcription
-        setUserTranscriptionInput(savedClip.userTranscription);
-        setIsTranscriptionSaved(true);
+        // Always load the correct data for the current clip and media source
+        if (savedClip) {
+          let notificationMessages: string[] = [];
+          let shouldShowNotification = false;
 
-        // Only update the clip if we haven't already loaded this exact state
-        const currentState = {
-          clipId: currentClip.id,
-          mediaSourceId: activeMediaSourceId,
-          userTranscription: savedClip.userTranscription
-        };
+          // Restore user transcription
+          if (savedClip.userTranscription && savedClip.userTranscription !== currentClip.userTranscription) {
+            setUserTranscriptionInput(savedClip.userTranscription);
+            setIsTranscriptionSaved(true);
 
-        if (!lastLoadedStateRef.current ||
-            lastLoadedStateRef.current.clipId !== currentState.clipId ||
-            lastLoadedStateRef.current.mediaSourceId !== currentState.mediaSourceId ||
-            lastLoadedStateRef.current.userTranscription !== currentState.userTranscription) {
+            const currentState = {
+              clipId: currentClip.id,
+              mediaSourceId: activeMediaSourceId,
+              userTranscription: savedClip.userTranscription
+            };
 
-          lastLoadedStateRef.current = currentState;
+            if (!lastLoadedStateRef.current ||
+                lastLoadedStateRef.current.clipId !== currentState.clipId ||
+                lastLoadedStateRef.current.mediaSourceId !== currentState.mediaSourceId) {
 
-          if (currentClip.userTranscription !== savedClip.userTranscription) {
-            onUserTranscriptionChange(currentClip.id, savedClip.userTranscription);
+              lastLoadedStateRef.current = currentState;
+              onUserTranscriptionChange(currentClip.id, savedClip.userTranscription);
+              shouldShowNotification = true;
+            }
           }
-        }
-      } else {
-        // No saved data, use clip's existing data or clear
-        const fallbackValue = currentClip.userTranscription || "";
-        setUserTranscriptionInput(fallbackValue);
-        setIsTranscriptionSaved(false);
 
-        // Reset the ref for non-saved clips
-        lastLoadedStateRef.current = null;
+          // CRITICAL: Actually restore the AI content by calling onUpdateClipData
+          // This is what was missing - the data needs to be actively pushed to the current clip
+          const aiContentToRestore: any = {};
+          let hasAIContent = false;
+
+          // Check for AI-generated content that should be restored
+          if (savedClip.automatedTranscription &&
+              savedClip.automatedTranscription !== currentClip.automatedTranscription &&
+              !savedClip.automatedTranscription.startsWith("Error:") &&
+              savedClip.automatedTranscription !== "Transcribing...") {
+            aiContentToRestore.automatedTranscription = savedClip.automatedTranscription;
+            aiContentToRestore.language = savedClip.language;
+            hasAIContent = true;
+            const langLabel = (savedClip.language || language).charAt(0).toUpperCase() + (savedClip.language || language).slice(1);
+            notificationMessages.push(`Already Transcribed in ${langLabel}`);
+          }
+
+          if (savedClip.translation &&
+              savedClip.translation !== currentClip.translation &&
+              !savedClip.translation.startsWith("Error:") &&
+              savedClip.translation !== "Translating...") {
+            aiContentToRestore.translation = savedClip.translation;
+            aiContentToRestore.translationTargetLanguage = savedClip.translationTargetLanguage;
+            hasAIContent = true;
+            const targetLang = savedClip.translationTargetLanguage || "target language";
+            notificationMessages.push(`Already Translated to ${targetLang.charAt(0).toUpperCase() + targetLang.slice(1)}`);
+          }
+
+          if (savedClip.englishTranslation &&
+              savedClip.englishTranslation !== currentClip.englishTranslation &&
+              !savedClip.englishTranslation.startsWith("Error:") &&
+              savedClip.englishTranslation !== "Translating...") {
+            aiContentToRestore.englishTranslation = savedClip.englishTranslation;
+            hasAIContent = true;
+            notificationMessages.push(`Already Translated to English`);
+          }
+
+          if (savedClip.comparisonResult &&
+              Array.isArray(savedClip.comparisonResult) &&
+              savedClip.comparisonResult.length > 0 &&
+              savedClip.comparisonResult[0].token !== "Comparing..." &&
+              !savedClip.comparisonResult[0].token.startsWith("Error:")) {
+            aiContentToRestore.comparisonResult = savedClip.comparisonResult;
+            hasAIContent = true;
+            notificationMessages.push(`Already Compared`);
+          }
+
+          // Actually restore the AI content to the current clip
+          if (hasAIContent && onUpdateClipData) {
+            onUpdateClipData(currentClip.id, aiContentToRestore);
+          }
+
+          // Show "Clip Loaded" notification only once when switching to a saved clip
+          if (shouldShowNotification && notificationMessages.length > 0) {
+            toast({
+              title: "Clip Loaded",
+              description: `Loaded "${savedClip.displayName || `Clip ${currentClipIndex + 1}`}" • ${notificationMessages.join(" • ")}`,
+            });
+          }
+
+          // Update translation target language from saved clip
+          if (savedClip.translationTargetLanguage && savedClip.translationTargetLanguage !== translationTargetLanguage) {
+            setTranslationTargetLanguage(savedClip.translationTargetLanguage);
+          }
+        } else {
+          // No saved data, use clip's existing data or clear
+          const fallbackValue = currentClip.userTranscription || "";
+          setUserTranscriptionInput(fallbackValue);
+          setIsTranscriptionSaved(false);
+
+          // Reset the ref for non-saved clips
+          lastLoadedStateRef.current = null;
+        }
       }
-    }
-  }, [currentClip.id, currentClip.startTime, currentClip.endTime, activeMediaSourceId, sessionClips?.length, onUserTranscriptionChange]);
+    }, 50); // 50ms delay to ensure state updates have settled
+
+    return () => clearTimeout(timeoutId);
+  }, [currentClip.id, activeMediaSourceId]); // Minimal dependencies to prevent infinite loops
+
+  // Reset lastLoadedStateRef when media source changes to ensure proper loading
+  useEffect(() => {
+    lastLoadedStateRef.current = null;
+  }, [activeMediaSourceId]);
 
   // Add refs for clip navigation
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -938,6 +1018,21 @@ export default function TranscriptionWorkspace({
     const defaultName = `Clip ${index + 1}`;
     return { displayName: defaultName, fullName: defaultName, isTruncated: false };
   }, [sessionClips, activeMediaSourceId]);
+
+  // Helper function to get current clip's saved display name for use in MediaControls
+  const getCurrentClipDisplayName = useCallback((): string => {
+    if (!sessionClips || !activeMediaSourceId || !currentClip) {
+      return `Clip ${currentClipIndex + 1}`;
+    }
+
+    const savedClip = sessionClips.find(sessionClip =>
+      sessionClip.mediaSourceId === activeMediaSourceId &&
+      sessionClip.startTime === currentClip.startTime &&
+      sessionClip.endTime === currentClip.endTime
+    );
+
+    return savedClip?.displayName || `Clip ${currentClipIndex + 1}`;
+  }, [sessionClips, activeMediaSourceId, currentClip, currentClipIndex]);
 
   if (!currentClip) {
     return (
@@ -1231,7 +1326,7 @@ export default function TranscriptionWorkspace({
                 <CardHeader>
                   <CardTitle>Type What You Hear</CardTitle>
                   <CardDescription>
-                    Listen to {focusedClip ? (focusedClip.displayName || 'Custom Clip') : `Clip ${currentClipIndex + 1}`} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)}) and type the dialogue.
+                    Listen to {focusedClip ? (focusedClip.displayName || 'Custom Clip') : getCurrentClipDisplayName()} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)}) and type the dialogue.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1251,6 +1346,7 @@ export default function TranscriptionWorkspace({
                     mediaSrc={mediaSrc}
                     currentClipIndex={currentClipIndex}
                     focusedClip={focusedClip}
+                    clipDisplayName={focusedClip ? (focusedClip.displayName || 'Custom Clip') : getCurrentClipDisplayName()}
                   />
 
                   <Textarea
@@ -1330,6 +1426,7 @@ export default function TranscriptionWorkspace({
                     mediaSrc={mediaSrc}
                     currentClipIndex={currentClipIndex}
                     focusedClip={focusedClip}
+                    clipDisplayName={focusedClip ? (focusedClip.displayName || 'Custom Clip') : getCurrentClipDisplayName()}
                   />
 
                   <div className="space-y-2">
