@@ -35,22 +35,27 @@ interface SessionClip extends Clip {
   sourceType?: 'video' | 'audio' | 'url' | 'unknown';
 }
 
+// Client-side event handler types
+type ClientEventHandler<T extends any[] = []> = (...args: T) => void;
+type ClientAsyncEventHandler<T extends any[] = []> = (...args: T) => Promise<void>;
+
 interface TranscriptionWorkspaceProps {
   currentClip: Clip;
   clips: Clip[];
   mediaSrc?: string;
   currentClipIndex: number;
-  onSelectClip: (index: number) => void;
-  onTranscribeAudio: (clipId: string) => Promise<void>;
-  onGetCorrections: (clipId: string) => Promise<void>;
-  onTranslate: (clipId: string, targetLanguage: string) => Promise<void>;
-  onRemoveClip: (clipId: string) => void;
-  onUserTranscriptionChange: (clipId: string, newUserTranscription: string) => void;
+  // Client-side event handlers (not Server Actions)
+  onSelectClip: ClientEventHandler<[index: number]>;
+  onTranscribeAudio: ClientAsyncEventHandler<[clipId: string]>;
+  onGetCorrections: ClientAsyncEventHandler<[clipId: string]>;
+  onTranslate: ClientAsyncEventHandler<[clipId: string, targetLanguage: string]>;
+  onRemoveClip: ClientEventHandler<[clipId: string]>;
+  onUserTranscriptionChange: ClientEventHandler<[clipId: string, newUserTranscription: string]>;
   isYouTubeVideo: boolean;
   language: string;
   isAudioSource?: boolean;
   clipSegmentationDuration: number;
-  onClipDurationChange: (duration: string) => void;
+  onClipDurationChange: ClientEventHandler<[duration: string]>;
   isLoadingMedia: boolean;
   isSavingMedia: boolean;
   isAnyClipTranscribing: boolean;
@@ -58,11 +63,11 @@ interface TranscriptionWorkspaceProps {
   mediaDuration?: number;
   focusedClip?: Clip | null;
   showClipTrimmer?: boolean;
-  onCreateFocusedClip?: (startTime: number, endTime: number) => void;
-  onToggleClipTrimmer?: () => void;
-  onBackToAutoClips?: () => void;
-  onSaveToSession: (userTranscriptionInput: string) => void;
-  onOpenSessionDrawer?: () => void;
+  onCreateFocusedClip?: ClientEventHandler<[startTime: number, endTime: number]>;
+  onToggleClipTrimmer?: ClientEventHandler<[]>;
+  onBackToAutoClips?: ClientEventHandler<[]>;
+  onSaveToSession: ClientEventHandler<[userTranscriptionInput: string]>;
+  onOpenSessionDrawer?: ClientEventHandler<[]>;
   canSaveToSession: boolean;
   // Session clips for showing saved indicators
   sessionClips?: SessionClip[];
@@ -263,14 +268,15 @@ const MediaControls = ({
 );
 
 // Helper function to determine if AI tools should be enabled
-const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null): boolean => {
+const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null, userActivelyUsingAITools: boolean = false): boolean => {
   const hasTranscription = userInput.trim().length > 0;
   const hasExistingTranscription = Boolean(
     automatedTranscription &&
     !automatedTranscription.startsWith("Error:")
   );
 
-  return hasTranscription || hasExistingTranscription;
+  // Allow access if user is actively using AI tools (e.g., clicking TRANSCRIBE)
+  return hasTranscription || hasExistingTranscription || userActivelyUsingAITools;
 };
 
 export default function TranscriptionWorkspace({
@@ -330,6 +336,7 @@ export default function TranscriptionWorkspace({
   const [localTranscribingState, setLocalTranscribingState] = useState<string | null>(null);
   // Flag to track when user is actively using AI tools to prevent unwanted tab switching
   const [userActivelyUsingAITools, setUserActivelyUsingAITools] = useState(false);
+  const [aiToolsButtonClicked, setAiToolsButtonClicked] = useState(false);
   const { toast } = useToast();
 
   /**
@@ -442,13 +449,16 @@ export default function TranscriptionWorkspace({
     setIsPracticeMode(false);
     setPracticeText("");
 
-    // Only reset tab if there's no transcription data
-    if (!currentClip.automatedTranscription || currentClip.automatedTranscription === "Transcribing...") {
+    // Only reset tab if there's no transcription data AND user is not actively using AI tools
+    const shouldResetTab = (!currentClip.automatedTranscription || currentClip.automatedTranscription === "Transcribing...") && 
+        !userActivelyUsingAITools && !aiToolsButtonClicked;
+
+    if (shouldResetTab) {
       setActiveTab("manual");
       setHasUserManuallyChangedTab(false);
       setLastUserSelectedTab("manual");
     }
-  }, [currentClip]);
+  }, [currentClip, userActivelyUsingAITools, aiToolsButtonClicked]);
 
   // Watch for transcription state changes
   useEffect(() => {
@@ -499,12 +509,16 @@ export default function TranscriptionWorkspace({
    * This prevents users from being kicked out of AI Tools tab when they're actively using it
    */
   useEffect(() => {
+    // NEVER switch tabs if user clicked an AI tools button or is actively using them
+    if (aiToolsButtonClicked || userActivelyUsingAITools) {
+      return;
+    }
+
     // Only switch tabs in specific cases:
     // 1. When user hasn't manually changed tabs AND
-    // 2. When AI tools should be locked (not enough user input and no transcription) AND
-    // 3. User is NOT actively using AI tools (to prevent kicking them out during actions)
-    if (!hasUserManuallyChangedTab && !userActivelyUsingAITools) {
-      const aiToolsEnabled = shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
+    // 2. When AI tools should be locked (not enough user input and no transcription)
+    if (!hasUserManuallyChangedTab) {
+      const aiToolsEnabled = shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription, false);
       if (!aiToolsEnabled && activeTab === "ai") {
         setActiveTab("manual");
       }
@@ -514,7 +528,7 @@ export default function TranscriptionWorkspace({
         setActiveTab("ai");
       }
     }
-  }, [hasUserManuallyChangedTab, userTranscriptionInput, activeTab, isTranscriptionComplete, isTranscriptionInProgress, lastUserSelectedTab, currentClip.automatedTranscription, userActivelyUsingAITools]);
+  }, [hasUserManuallyChangedTab, userTranscriptionInput, activeTab, isTranscriptionComplete, isTranscriptionInProgress, lastUserSelectedTab, currentClip.automatedTranscription, userActivelyUsingAITools, aiToolsButtonClicked]);
 
   // Separate useEffect for resetting playback time only when clip changes
   useEffect(() => {
@@ -564,8 +578,10 @@ export default function TranscriptionWorkspace({
       return;
     }
 
-    // Set AI tools protection flag IMMEDIATELY to prevent tab switching
+    // BLOCK ALL TAB SWITCHING - User clicked AI tools button
+    setAiToolsButtonClicked(true);
     setUserActivelyUsingAITools(true);
+    setHasUserManuallyChangedTab(true);
 
     // Set loading state immediately
     const clipId = currentClip.id;
@@ -589,6 +605,8 @@ export default function TranscriptionWorkspace({
       } finally {
         setLocalTranscribingState(null);
         setIsTranscriptionInProgress(false);
+        // Clear button click flag after completion
+        setTimeout(() => setAiToolsButtonClicked(false), 2000);
       }
     });
   };
@@ -602,6 +620,9 @@ export default function TranscriptionWorkspace({
       return;
     }
 
+    // BLOCK ALL TAB SWITCHING - User clicked AI tools button
+    setAiToolsButtonClicked(true);
+
     await withAIToolsProtection(async () => {
       try {
         await onTranslate(currentClip.id, translationTargetLanguage);
@@ -611,6 +632,9 @@ export default function TranscriptionWorkspace({
         }
       } catch (error) {
         console.warn("Translation error in workspace:", error);
+      } finally {
+        // Clear button click flag after completion
+        setTimeout(() => setAiToolsButtonClicked(false), 2000);
       }
     });
   };
@@ -635,6 +659,9 @@ export default function TranscriptionWorkspace({
       return;
     }
     
+    // BLOCK ALL TAB SWITCHING - User clicked AI tools button
+    setAiToolsButtonClicked(true);
+    
     await withAIToolsProtection(async () => {
       try {
         await onGetCorrections(currentClip.id);
@@ -644,6 +671,9 @@ export default function TranscriptionWorkspace({
         }
       } catch (error) {
         console.warn("Corrections error in workspace:", error);
+      } finally {
+        // Clear button click flag after completion
+        setTimeout(() => setAiToolsButtonClicked(false), 2000);
       }
     });
   }, [currentClip, userTranscriptionInput, onGetCorrections, onSaveToSession, canSaveToSession, isTranscriptionSaved, withAIToolsProtection]);
@@ -769,6 +799,7 @@ export default function TranscriptionWorkspace({
   useEffect(() => {
     setIsTranscriptionSaved(false);
     setUserActivelyUsingAITools(false);
+    setAiToolsButtonClicked(false);
   }, [currentClip.id]);
 
   // Add refs for clip navigation
@@ -839,7 +870,9 @@ export default function TranscriptionWorkspace({
   const canTranslate = currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isAutomatedTranscriptionLoading;
 
   // AI tools enabled check depends on saved state, basic validation, or active usage
-  const aiToolsEnabled = (isTranscriptionSaved || userActivelyUsingAITools) && shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription);
+  const aiToolsEnabled = (isTranscriptionSaved || userActivelyUsingAITools) && shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription, userActivelyUsingAITools);
+  
+
 
   const renderCorrectionToken = (token: CorrectionToken, index: number) => {
     let userTokenStyle = "";
