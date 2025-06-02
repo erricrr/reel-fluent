@@ -981,8 +981,36 @@ export default function TranscriptionWorkspace({
 
   // Add handleClipClick function
   const handleClipClick = useCallback((index: number) => {
-    // Select the clip first - this will trigger the auto-load useEffect
+    // Select the clip first
     onSelectClip(index);
+    // Immediately restore AI outputs if this clip was saved
+    const clip = clips[index];
+    if (clip && sessionClips && activeMediaSourceId && onUpdateClipData) {
+      const savedClip = sessionClips.find(sc =>
+        sc.mediaSourceId === activeMediaSourceId &&
+        sc.startTime === clip.startTime &&
+        sc.endTime === clip.endTime
+      );
+      if (savedClip) {
+        // Build AI content to restore
+        const aiContent: any = {};
+        if (savedClip.automatedTranscription) {
+          aiContent.automatedTranscription = savedClip.automatedTranscription;
+          aiContent.language = savedClip.language;
+        }
+        if (savedClip.translation) {
+          aiContent.translation = savedClip.translation;
+          aiContent.translationTargetLanguage = savedClip.translationTargetLanguage;
+        }
+        if (savedClip.englishTranslation) {
+          aiContent.englishTranslation = savedClip.englishTranslation;
+        }
+        if (Array.isArray(savedClip.comparisonResult)) {
+          aiContent.comparisonResult = savedClip.comparisonResult;
+        }
+        onUpdateClipData(clip.id, aiContent);
+      }
+    }
 
     // Ensure clip is visible after selection
     setTimeout(() => {
