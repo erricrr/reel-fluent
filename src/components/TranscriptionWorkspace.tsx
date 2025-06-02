@@ -850,6 +850,33 @@ export default function TranscriptionWorkspace({
     );
   }, [sessionClips, activeMediaSourceId]);
 
+  // Helper function to get saved clip name and full name
+  // This ensures that clips marked as "saved" in the Clip Segmentation Duration box
+  // display the actual saved clip name (instead of just "Clip X") and stay synchronized
+  // with any name changes made in the "Saved Attempts" footer drawer
+  const getSavedClipInfo = useCallback((clip: Clip, index: number): { displayName: string; fullName: string; isTruncated: boolean } => {
+    if (!sessionClips || !activeMediaSourceId) {
+      const defaultName = `Clip ${index + 1}`;
+      return { displayName: defaultName, fullName: defaultName, isTruncated: false };
+    }
+
+    const savedClip = sessionClips.find(sessionClip =>
+      sessionClip.mediaSourceId === activeMediaSourceId &&
+      sessionClip.startTime === clip.startTime &&
+      sessionClip.endTime === clip.endTime
+    );
+
+    if (savedClip && savedClip.displayName) {
+      const fullName = savedClip.displayName;
+      const isTruncated = fullName.length > 12;
+      const displayName = isTruncated ? `${fullName.substring(0, 12)}...` : fullName;
+      return { displayName, fullName, isTruncated };
+    }
+
+    const defaultName = `Clip ${index + 1}`;
+    return { displayName: defaultName, fullName: defaultName, isTruncated: false };
+  }, [sessionClips, activeMediaSourceId]);
+
   if (!currentClip) {
     return (
       <div className="text-center py-10 text-muted-foreground">
@@ -992,41 +1019,58 @@ export default function TranscriptionWorkspace({
 
                 <ScrollArea className="w-full whitespace-nowrap rounded-md">
                   <div ref={scrollContainerRef} className="flex space-x-3 px-1 pt-1 pb-3.5">
-                    {clips.map((clip, index) => (
-                      <Button
-                        key={clip.id}
-                        ref={index === currentClipIndex ? activeClipRef : null}
-                        variant={index === currentClipIndex ? "default" : "outline"}
-                        className={cn(
-                          "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group relative",
-                          index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
-                        )}
-                        onClick={() => handleClipClick(index)}
-                      >
-                        {/* Saved indicator */}
-                        {isClipSaved(clip) && (
-                          <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
-                            <BookmarkPlus className="h-3 w-3" />
-                          </div>
-                        )}
-                        <div className="flex flex-col items-start text-left">
-                          <div className="flex items-center gap-1.5">
-                            <Film className="h-4 w-4 text-inherit" />
-                            <span className="font-semibold text-xs">
-                              Clip {index + 1}
+                    {clips.map((clip, index) => {
+                      const clipInfo = getSavedClipInfo(clip, index);
+                      const clipButton = (
+                        <Button
+                          key={clip.id}
+                          ref={index === currentClipIndex ? activeClipRef : null}
+                          variant={index === currentClipIndex ? "default" : "outline"}
+                          className={cn(
+                            "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group relative",
+                            index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
+                          )}
+                          onClick={() => handleClipClick(index)}
+                        >
+                          {/* Saved indicator */}
+                          {isClipSaved(clip) && (
+                            <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
+                              <BookmarkPlus className="h-3 w-3" />
+                            </div>
+                          )}
+                          <div className="flex flex-col items-start text-left">
+                            <div className="flex items-center gap-1.5">
+                              <Film className="h-4 w-4 text-inherit" />
+                              <span className="font-semibold text-xs">
+                                {clipInfo.displayName}
+                              </span>
+                            </div>
+                            <span className={cn(
+                              "text-xs",
+                              index === currentClipIndex
+                                ? "text-primary-foreground/80"
+                                : "text-muted-foreground group-hover:text-accent-foreground"
+                            )}>
+                              {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
                             </span>
                           </div>
-                          <span className={cn(
-                            "text-xs",
-                            index === currentClipIndex
-                              ? "text-primary-foreground/80"
-                              : "text-muted-foreground group-hover:text-accent-foreground"
-                          )}>
-                            {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
-                          </span>
-                        </div>
-                      </Button>
-                    ))}
+                        </Button>
+                      );
+
+                      // Wrap with tooltip if name is truncated
+                      return clipInfo.isTruncated ? (
+                        <TooltipProvider key={clip.id}>
+                          <Tooltip delayDuration={300}>
+                            <TooltipTrigger asChild>
+                              {clipButton}
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{clipInfo.fullName}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : clipButton;
+                    })}
                   </div>
                   <ScrollBar orientation="horizontal" />
                 </ScrollArea>

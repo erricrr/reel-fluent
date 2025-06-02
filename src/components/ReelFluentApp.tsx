@@ -1,7 +1,7 @@
 "use client";
 
 import type * as React from 'react';
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
@@ -1160,7 +1160,47 @@ export default function ReelFluentApp() {
   }
 
   const LoadedMediaIcon = currentSourceType === 'audio' ? FileAudio : FileVideo;
-  const currentClip = focusedClip || clips[currentClipIndex];
+  
+  // DRY SOLUTION: Create enhanced clip that merges auto clip with saved session data
+  // This ensures that when users click on saved clips in Auto Clip mode, they see all
+  // their transcription data and AI tools results instead of empty clips. When clips
+  // are renamed in "Saved Attempts", the names are reflected in "Clip Segmentation Duration".
+  // All data stays synchronized between both UI areas - true single source of truth.
+  const getEnhancedClip = useCallback((clipIndex: number): Clip => {
+    const baseClip = clips[clipIndex];
+    if (!baseClip || !activeMediaSourceId) return baseClip;
+
+    // Find matching saved session clip
+    const savedClip = sessionClips.find(sessionClip =>
+      sessionClip.mediaSourceId === activeMediaSourceId &&
+      sessionClip.startTime === baseClip.startTime &&
+      sessionClip.endTime === baseClip.endTime
+    );
+
+    if (savedClip) {
+      // Merge saved data into the base clip
+      return {
+        ...baseClip,
+        userTranscription: savedClip.userTranscription || baseClip.userTranscription,
+        automatedTranscription: savedClip.automatedTranscription || baseClip.automatedTranscription,
+        translation: savedClip.translation || baseClip.translation,
+        englishTranslation: savedClip.englishTranslation || baseClip.englishTranslation,
+        translationTargetLanguage: savedClip.translationTargetLanguage || baseClip.translationTargetLanguage,
+        comparisonResult: savedClip.comparisonResult || baseClip.comparisonResult,
+        displayName: savedClip.displayName || baseClip.displayName,
+        language: savedClip.language || baseClip.language
+      };
+    }
+
+    return baseClip;
+  }, [clips, sessionClips, activeMediaSourceId]);
+
+  // Create enhanced clips array that merges saved session data
+  const enhancedClips = useMemo(() => {
+    return clips.map((clip, index) => getEnhancedClip(index));
+  }, [clips, getEnhancedClip]);
+
+  const currentClip = focusedClip || getEnhancedClip(currentClipIndex);
   const globalAppBusyState = isLoading || isSaving;
 
   // Add this helper function at the top level, before the component
@@ -1475,7 +1515,7 @@ export default function ReelFluentApp() {
           <div className="space-y-4">
             <TranscriptionWorkspace
               currentClip={currentClip}
-              clips={clips}
+              clips={enhancedClips}
               mediaSrc={mediaSrc}
               currentClipIndex={currentClipIndex}
               onSelectClip={handleSelectClip}
