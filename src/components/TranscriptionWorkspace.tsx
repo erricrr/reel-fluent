@@ -367,6 +367,7 @@ export default function TranscriptionWorkspace({
 
   // Preview clip state
   const [previewClip, setPreviewClip] = useState<{ startTime: number; endTime: number } | null>(null);
+  const [isInPreviewMode, setIsInPreviewMode] = useState(false);
 
   // Add a new state to track if current transcription is saved
   const [isTranscriptionSaved, setIsTranscriptionSaved] = useState(false);
@@ -741,31 +742,75 @@ export default function TranscriptionWorkspace({
   // Handle preview clip start
   const handlePreviewClip = useCallback((startTime: number, endTime: number) => {
     setPreviewClip({ startTime, endTime });
-    // Start playing the preview after a small delay to ensure state is set
+    setIsInPreviewMode(true);
+
+    // Small delay to ensure VideoPlayer has updated with new effectiveClip
     setTimeout(() => {
       if (videoPlayerRef.current) {
+        // Completely disable boundary enforcement for preview
+        videoPlayerRef.current.disableBoundaryEnforcement();
         videoPlayerRef.current.seek(startTime);
-        videoPlayerRef.current.play(); // VideoPlayerRef.play() handles errors internally
+        videoPlayerRef.current.play();
       }
-    }, 50);
+    }, 100);
   }, []);
 
   // Handle preview clip stop
   const handleStopPreview = useCallback(() => {
     setPreviewClip(null);
+    setIsInPreviewMode(false);
     if (videoPlayerRef.current) {
       videoPlayerRef.current.pause();
-      // Reset to the original clip's start time
+      // Re-enable boundary enforcement and reset to appropriate clip
       setTimeout(() => {
-        if (videoPlayerRef.current && currentClip) {
-          videoPlayerRef.current.seek(currentClip.startTime);
+        if (videoPlayerRef.current) {
+          videoPlayerRef.current.enableBoundaryEnforcement();
+          // Reset to focused clip if available, otherwise current clip
+          const resetClip = focusedClip || currentClip;
+          videoPlayerRef.current.seek(resetClip.startTime);
         }
-      }, 50);
+      }, 100);
     }
-  }, [currentClip]);
+  }, [currentClip, focusedClip]);
+
+  // Monitor video time during preview to ensure it doesn't get stuck
+  useEffect(() => {
+    if (!isInPreviewMode || !previewClip) return;
+
+    const monitorInterval = setInterval(() => {
+      if (videoPlayerRef.current) {
+        const currentTime = videoPlayerRef.current.getCurrentTime();
+        // If we've reached or passed the preview end time, the preview should continue
+        // The ClipTrimmer's countdown will handle stopping it
+        if (currentTime >= previewClip.endTime) {
+          // Just ensure the player keeps playing - the ClipTrimmer will stop it
+          if (!videoPlayerRef.current.getIsPlaying()) {
+            try {
+              videoPlayerRef.current.play();
+            } catch (err) {
+              console.warn("Preview continuation error:", err);
+            }
+          }
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(monitorInterval);
+  }, [isInPreviewMode, previewClip]);
 
   // Determine which clip times to use for the VideoPlayer
-  const effectiveClip = previewClip ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime } : currentClip;
+  // Priority: previewClip > focusedClip > currentClip (for main VideoPlayer)
+  const effectiveClip = previewClip
+    ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime }
+    : focusedClip
+      ? focusedClip
+      : currentClip;
+
+  // For MediaControls in tabs, only use focusedClip when actually in focused mode (when focused UI is showing)
+  // This prevents the tabs from using focused clip boundaries when user has gone back to auto clips
+  const tabsEffectiveClip = previewClip
+    ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime }
+    : currentClip; // Always use currentClip in tabs unless previewing
 
   // Consolidated save function: saves clip and transcription or updates transcription
   const handleSaveOrUpdate = useCallback(() => {
@@ -1034,6 +1079,16 @@ export default function TranscriptionWorkspace({
     return savedClip?.displayName || `Clip ${currentClipIndex + 1}`;
   }, [sessionClips, activeMediaSourceId, currentClip, currentClipIndex]);
 
+  // Ensure boundary enforcement is properly managed for different clip modes
+  useEffect(() => {
+    if (!videoPlayerRef.current) return;
+
+    // When not in preview mode, ensure boundary enforcement is enabled
+    if (!isInPreviewMode) {
+      videoPlayerRef.current.enableBoundaryEnforcement();
+    }
+  }, [isInPreviewMode, focusedClip, currentClip.id]);
+
   if (!currentClip) {
     return (
       <div className="text-center py-10 text-muted-foreground">
@@ -1053,8 +1108,8 @@ export default function TranscriptionWorkspace({
   const canGetCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError;
   const canTranslate = currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isAutomatedTranscriptionLoading;
 
-  // AI tools enabled check depends on saved state, basic validation, or active usage
-  const aiToolsEnabled = (isTranscriptionSaved || userActivelyUsingAITools) && shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription, userActivelyUsingAITools);
+  // AI tools enabled check - allow transcription as entry point, but require saving for other tools
+  const aiToolsEnabled = shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription, userActivelyUsingAITools);
 
 
 
@@ -1331,7 +1386,7 @@ export default function TranscriptionWorkspace({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <MediaControls
-                    effectiveClip={effectiveClip}
+                    effectiveClip={tabsEffectiveClip}
                     currentPlaybackTime={currentPlaybackTime}
                     isCurrentClipPlaying={isCurrentClipPlaying}
                     isLooping={isLooping}
@@ -1411,7 +1466,7 @@ export default function TranscriptionWorkspace({
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <MediaControls
-                    effectiveClip={effectiveClip}
+                    effectiveClip={tabsEffectiveClip}
                     currentPlaybackTime={currentPlaybackTime}
                     isCurrentClipPlaying={isCurrentClipPlaying}
                     isLooping={isLooping}
