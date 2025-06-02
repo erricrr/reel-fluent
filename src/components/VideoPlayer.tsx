@@ -88,7 +88,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const getEffectiveSrc = useCallback(() => src, [src]);
 
   const effectiveSrc = getEffectiveSrc();
-  const mediaKey = `${effectiveSrc}-${startTime}-${endTime}-${isAudioSource}`;
+  // Only key the element on the source URL so boundary changes don't remount the media element
+  const mediaKey = effectiveSrc;
 
   const isYouTube = effectiveSrc?.includes("youtube.com/") || effectiveSrc?.includes("youtu.be/");
 
@@ -326,12 +327,11 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     return (
       <Card className={rootCardClasses}>
         <CardContent className={cn(contentClasses, isAudioSource ? "" : "aspect-video")}>
-                    <audio
-            key={mediaKey}
-            ref={mediaRef as React.RefObject<HTMLAudioElement>}
-            controls
-            className="w-full"
-          >
+                    <audio key={mediaKey}
+           ref={mediaRef as React.RefObject<HTMLAudioElement>}
+           controls
+           className="w-full"
+         >
             Your browser does not support the audio tag.
           </audio>
         </CardContent>
