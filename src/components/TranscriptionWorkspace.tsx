@@ -1314,7 +1314,7 @@ export default function TranscriptionWorkspace({
                     "w-full transition-all duration-300",
                     showClipTrimmer
                       ? "border-primary/30 text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40"
-                      : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground border border-border hover:border-primary/20"
+                      : "bg-muted hover:bg-primary hover:text-primary-foreground hover:border-primary/40 text-muted-foreground border border-border"
                   )}
                 >
                   <Scissors className="mr-2 h-4 w-4" />

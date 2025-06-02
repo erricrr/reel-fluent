@@ -175,7 +175,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             />
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading}
