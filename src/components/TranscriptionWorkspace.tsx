@@ -1247,7 +1247,9 @@ export default function TranscriptionWorkspace({
                           variant={index === currentClipIndex ? "default" : "outline"}
                           className={cn(
                             "h-auto py-2 px-3 flex-shrink-0 shadow-sm hover:shadow-md transition-all duration-150 ease-in-out group relative",
-                            index === currentClipIndex ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "border-border"
+                            index === currentClipIndex
+                              ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                              : "border-border hover:bg-muted hover:text-foreground"
                           )}
                           onClick={() => handleClipClick(index)}
                         >
@@ -1268,7 +1270,7 @@ export default function TranscriptionWorkspace({
                               "text-xs",
                               index === currentClipIndex
                                 ? "text-primary-foreground/80"
-                                : "text-muted-foreground group-hover:text-accent-foreground"
+                                : "text-muted-foreground group-hover:text-foreground"
                             )}>
                               {formatSecondsToMMSS(clip.startTime)} - {formatSecondsToMMSS(clip.endTime)}
                             </span>
