@@ -1709,7 +1709,7 @@ export default function ReelFluentApp() {
               <h3 className="text-lg font-semibold">Saved Attempts</h3>
               <span className="text-sm text-muted-foreground">({sessionClips.length})</span>
             </div>
-            <Button variant="ghost" size="sm" className="rounded-full" onClick={() => setSessionDrawerOpen(false)}>
+            <Button variant="ghost" size="icon" onClick={() => setSessionDrawerOpen(false)}>
               <XIcon className="h-5 w-5" />
             </Button>
           </div>

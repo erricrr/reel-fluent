@@ -187,8 +187,8 @@ export default function SessionClipsManager({
                       className={cn(
                         "transition-all duration-200",
                         focusedClipId === clip.id
-                          ? "bg-primary hover:bg-primary/90 text-primary-foreground hover:text-primary-foreground"
-                          : "hover:bg-muted hover:text-foreground"
+                          ? "bg-accent text-card-foreground dark:text-card"
+                          : "hover:bg-accent/30 hover:text-foreground"
                       )}
                     >
                       <Eye className="h-4 w-4" />
