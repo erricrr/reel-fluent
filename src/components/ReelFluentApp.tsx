@@ -319,10 +319,10 @@ export default function ReelFluentApp() {
       generateClipsFromDuration(source.duration, clipSegmentationDuration);
     }
 
-    toast({
-      title: "Media Source Selected",
-      description: `Switched to "${source.displayName}"`,
-    });
+    // toast({
+    //   title: "Media Source Selected",
+    //   description: `Switched to "${source.displayName}"`,
+    // });
   }, [mediaSources, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, sourceUrl, setFocusedClip, setShowClipTrimmer, toast, isYouTubeVideo, selectClip]);
 
   const handleRemoveMediaSource = useCallback((sourceId: string) => {
