@@ -153,7 +153,7 @@ const MediaControls = ({
       <span className="text-sm font-medium text-foreground">
         {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {clipDisplayName}
       </span>
-      <span className="text-sm font-mono text-primary">
+      <span className="text-sm font-mono text-muted-foreground">
         {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
       </span>
     </div>
@@ -219,6 +219,7 @@ const MediaControls = ({
           onClick={skipBackward}
           disabled={disableTextarea || !mediaSrc}
           aria-label="Skip back 5 seconds"
+          className="hover:bg-muted hover:text-muted-foreground"
         >
           <SkipBack className="h-4 w-4" />
         </Button>
@@ -228,7 +229,7 @@ const MediaControls = ({
           onClick={togglePlayPause}
           disabled={disableTextarea || !mediaSrc}
           aria-label={isCurrentClipPlaying ? "Pause clip" : "Play clip"}
-          className="px-4"
+          className="px-4 hover:bg-muted hover:text-muted-foreground"
         >
           {isCurrentClipPlaying ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
         </Button>
@@ -238,6 +239,7 @@ const MediaControls = ({
           onClick={skipForward}
           disabled={disableTextarea || !mediaSrc}
           aria-label="Skip forward 5 seconds"
+          className="hover:bg-muted hover:text-muted-foreground"
         >
           <SkipForward className="h-4 w-4" />
         </Button>
