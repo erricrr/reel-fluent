@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, XIcon, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon, Edit3, AlertTriangle, Focus } from "lucide-react";
+import { Sparkles, FileDiff, Languages, PlayIcon, PauseIcon, Mic, Lock, Unlock, SkipBack, SkipForward, Scissors, Eye, Save, List, BookmarkPlus, CircleCheckBig, GripVertical, MoreHorizontal, Film, Trash2 as Trash2Icon, Edit3, AlertTriangle, Focus } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -1256,7 +1256,7 @@ export default function TranscriptionWorkspace({
                           {/* Saved indicator */}
                           {isClipSaved(clip) && (
                             <div className="absolute -top-1 -right-1 bg-accent text-accent-foreground rounded-full p-0.5 shadow-sm">
-                              <List className="h-3 w-3" />
+                              <CircleCheckBig className="h-3 w-3" />
                             </div>
                           )}
                           <div className="flex flex-col items-start gap-1">
@@ -1379,7 +1379,7 @@ export default function TranscriptionWorkspace({
                   "data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 )}
               >
-                <List className="hidden sm:inline-block h-3 w-3" />
+                <CircleCheckBig className="hidden sm:inline-block h-3 w-3" />
                 Saved Attempts
               </Button>
             </TabsList>
