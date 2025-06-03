@@ -316,19 +316,7 @@ export default function TranscriptionWorkspace({
   activeMediaSourceId,
   onUpdateClipData,
 }: TranscriptionWorkspaceProps) {
-  // DRY: Extracted Saved Attempts button
-  const reviewPracticeButton = (
-    <div className="flex gap-2">
-      <Button
-        variant="outline"
-        className="w-full flex items-center justify-center gap-2 h-auto py-3 transition-all duration-200 hover:bg-accent hover:text-accent-foreground"
-        onClick={onOpenSessionDrawer}
-      >
-        <List className="h-4 w-4" />
-        Saved Attempts
-      </Button>
-    </div>
-  );
+
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [hasUserManuallyChangedTab, setHasUserManuallyChangedTab] = useState(false);
@@ -1381,9 +1369,9 @@ export default function TranscriptionWorkspace({
                 variant="ghost"
                 onClick={onOpenSessionDrawer}
                 className={cn(
-                  "flex-1 h-9 flex items-center justify-center gap-2 text-xs sm:text-sm rounded-none",
+                  "flex-1 h-[29px] flex items-center justify-center gap-2 text-xs sm:text-sm rounded-none",
                   "transition-all duration-200",
-                  "hover:bg-accent hover:text-accent-foreground",
+                  "hover:bg-accent hover:rounded-sm hover:text-accent-foreground",
                   "data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 )}
               >

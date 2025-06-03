@@ -29,14 +29,15 @@ export default function Header() {
   return (
     <header className="py-4 px-4 md:px-8 border-b">
       <div className="container mx-auto flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Image 
+        <div className="flex items-center gap-2">
+        <Image
             src={theme === 'light' ? '/logo-light.png' : '/logo-dark.png'}
             alt="ReelFluent Logo"
-            width={32}
-            height={32}
-            className="h-8 w-8"
+            width={48}
+            height={48}
+            className="h-12 w-12"
           />
+
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">ReelFluent</h1>
         </div>
         <div className="flex items-center gap-2 md:gap-4">

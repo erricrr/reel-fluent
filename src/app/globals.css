@@ -9,107 +9,112 @@ body {
 
 @layer base {
   :root {
-    --background: 45 20% 96%; /* Very light warm off-white/beige */
-    --foreground: 40 10% 25%; /* Dark warm gray-brown */
+    /* Light mode */
+    --background: 40 30% 97%;        /* Very light sandy beige */
+    --foreground: 210 15% 20%;       /* Dark navy blue for text */
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 40 10% 25%;
+    --card: 40 40% 100%;             /* White with slight warm tint */
+    --card-foreground: 210 15% 20%;
 
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 40 10% 25%;
+    --popover: 40 40% 100%;          /* Same as card */
+    --popover-foreground: 210 15% 20%;
 
-    --primary: 150 45% 32%; /* Even darker deep forest green for better contrast */
-    --primary-foreground: 150 20% 95%; /* Very light green/off-white for contrast */
+    --primary: 207 36% 32%;          /* Your specified deep blue #2A4958 */
+    --primary-foreground: 207 36% 90%; /* Very light blue for contrast */
 
-    --secondary: 45 15% 90%; /* Light beige/gray */
-    --secondary-foreground: 40 10% 15%; /* MODIFIED: Darker for better contrast on hover */
+    --secondary: 40 30% 85%;         /* Sandy beige */
+    --secondary-foreground: 210 15% 15%; /* Darker navy for contrast */
 
-    --muted: 45 15% 92%; /* Slightly lighter beige/gray for muted */
-    --muted-foreground: 40 10% 35%; /* Darker warm gray-brown for better contrast */
+    --muted: 40 25% 90%;             /* Lighter sandy beige */
+    --muted-foreground: 210 15% 35%; /* Medium dark navy */
 
-    --accent: 182 64% 61%; /* Custom accent color #5dd6db */
-    --accent-foreground: 182 10% 15%; /* Dark text for contrast on accent background */
+    --accent: 48 90% 60%;            /* Warm bright yellow (#F7E24B) */
+    --accent-foreground: 48 90% 15%; /* Dark brownish yellow (#7B6B0B) */
 
-    --destructive: 0 84.2% 60.2%; /* Default red */
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 85% 60%;        /* Bright red for destructive */
+    --destructive-foreground: 0 0% 98%; /* White text */
 
-    --border: 45 15% 85%; /* Slightly darker beige/gray for borders */
-    --input: 45 15% 85%;
-    --ring: 150 45% 40%; /* Deep forest green, same as primary */
+    --border: 40 30% 80%;            /* Sandy beige border */
+    --input: 40 30% 80%;
+    --ring: 207 36% 37%;             /* Slightly lighter than primary */
 
     --radius: 0.5rem;
 
-    /* Chart colors (can be adjusted if charts are used) */
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    /* Chart colors */
+    --chart-1: 210 80% 50%;          /* Ocean blue */
+    --chart-2: 195 70% 45%;          /* Teal blue */
+    --chart-3: 40 80% 60%;           /* Sandy yellow */
+    --chart-4: 15 90% 65%;           /* Coral */
+    --chart-5: 330 80% 60%;          /* Soft magenta */
 
-    /* Sidebar specific theme */
-    --sidebar-background: 45 25% 97%; /* Slightly distinct very light warm off-white */
-    --sidebar-foreground: 40 10% 20%; /* Slightly darker warm gray-brown */
-    --sidebar-primary: 150 45% 35%; /* Slightly darker/more saturated primary for sidebar */
-    --sidebar-primary-foreground: 150 20% 95%;
-    --sidebar-accent: 182 64% 55%; /* Slightly darker variant of custom accent for sidebar */
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 45 15% 80%;
-    --sidebar-ring: 150 45% 40%;
-    /* New hover colors for sidebar icons */
-    --sidebar-hover-background: 45 10% 90%; /* light warm gray */
-    --sidebar-hover-foreground: 40 10% 30%;   /* dark warm gray for text */
+    /* Sidebar */
+    --sidebar-background: 40 35% 95%;
+    --sidebar-foreground: 210 15% 25%;
+    --sidebar-primary: 207 36% 37%;  /* Slightly lighter than primary */
+    --sidebar-primary-foreground: 207 36% 90%;
+    --sidebar-accent: 15 90% 60%;
+    --sidebar-accent-foreground: 15 70% 20%;
+    --sidebar-border: 40 30% 75%;
+    --sidebar-ring: 207 36% 37%;
+    --sidebar-hover-background: 40 30% 90%;
+    --sidebar-hover-foreground: 210 15% 35%;
   }
 
   .dark {
-    --background: 150 10% 15%; /* Very dark, desaturated green-gray */
-    --foreground: 45 15% 85%; /* Light beige/gray */
+    /* Warmed-up dark mode */
 
-    --card: 150 8% 20%; /* Slightly lighter dark green-gray */
-    --card-foreground: 45 15% 85%;
+    --background: 210 30% 12%;       /* Very dark navy blue - keep as is */
+    --foreground: 40 30% 90%;        /* Light sandy beige */
 
-    --popover: 150 8% 20%;
-    --popover-foreground: 45 15% 85%;
+    --card: 210 30% 18%;             /* Dark navy card */
+    --card-foreground: 40 30% 90%;
 
-    --primary: 150 40% 55%; /* Lighter forest green for dark mode */
-    --primary-foreground: 150 10% 10%; /* Very dark for contrast */
+    --popover: 210 30% 18%;
+    --popover-foreground: 40 30% 90%;
 
-    --secondary: 150 8% 25%; /* Darker green-gray */
-    --secondary-foreground: 45 15% 75%; /* Lighter beige/gray */
+    --primary: 207 45% 40%;          /* Warmer, deeper primary blue (#24475A) */
+    --primary-foreground: 40 30% 90%; /* Light sandy for contrast */
 
-    --muted: 150 8% 28%; /* Slightly distinct muted dark green-gray */
-    --muted-foreground: 45 15% 65%; /* Medium-light beige/gray */
+    --secondary: 210 30% 25%;        /* Dark navy */
+    --secondary-foreground: 40 30% 80%; /* Light sandy */
 
-    --accent: 182 64% 65%; /* Lighter variant of custom accent for dark mode */
-    --accent-foreground: 182 10% 10%; /* Very dark for contrast on accent */
+    --muted: 210 30% 28%;            /* Slightly lighter navy */
+    --muted-foreground: 40 30% 70%;  /* Medium sandy */
 
-    --destructive: 0 85% 65%; /* Brighter, lighter red for dark mode text/borders */
-    --destructive-foreground: 0 0% 10%; /* Very dark text for on-destructive background */
+    --accent: 48 90% 50%;            /* Deeper warm yellow (#D4C42F) */
+    --accent-foreground: 48 90% 15%; /* Dark brownish yellow (#7B6B0B) */
 
-    --border: 150 8% 30%; /* Darker green-gray border */
-    --input: 150 10% 50%; /* MODIFIED: Lighter gray-green for input borders */
-    --ring: 150 40% 55%; /* Lighter forest green (same as dark primary) */
+    --destructive: 0 85% 65%;        /* Bright red */
+    --destructive-foreground: 0 0% 10%; /* Very dark text */
 
-    /* Chart colors for dark mode */
+    --border: 210 30% 25%;           /* Dark navy border */
+    --input: 210 40% 50%;            /* Medium blue-gray input */
+    --ring: 207 45% 45%;             /* Slightly lighter, warmer primary */
+
+    /* Chart colors */
     --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --chart-2: 195 70% 45%;
+    --chart-3: 40 80% 55%;
+    --chart-4: 15 90% 65%;
+    --chart-5: 330 80% 55%;
 
-    /* Dark Sidebar specific theme */
-    --sidebar-background: 150 10% 12%; /* Slightly darker than main dark bg */
-    --sidebar-foreground: 45 15% 90%; /* Slightly lighter beige/gray */
-    --sidebar-primary: 150 40% 60%; /* Slightly lighter primary for dark sidebar */
-    --sidebar-primary-foreground: 150 10% 5%;
-    --sidebar-accent: 182 64% 70%; /* Lighter variant of custom accent for dark sidebar */
-    --sidebar-accent-foreground: 182 10% 10%;
-    --sidebar-border: 150 8% 25%;
-    --sidebar-ring: 150 40% 55%;
-    /* New hover colors for sidebar icons */
-    --sidebar-hover-background: 150 5% 25%; /* medium-dark, desaturated green-gray */
-    --sidebar-hover-foreground: 45 10% 80%;   /* light warm gray for text */
+    /* Sidebar */
+    --sidebar-background: 210 30% 10%;
+    --sidebar-foreground: 40 30% 85%;
+    --sidebar-primary: 207 45% 50%;  /* Warmer, lighter primary for sidebar */
+    --sidebar-primary-foreground: 40 30% 90%;
+    --sidebar-accent: 15 90% 75%;
+    --sidebar-accent-foreground: 15 70% 15%;
+    --sidebar-border: 210 30% 20%;
+    --sidebar-ring: 207 45% 45%;
+    --sidebar-hover-background: 210 30% 25%;
+    --sidebar-hover-foreground: 40 30% 80%;
   }
+
 }
+
+
+
 
 @layer base {
   * {

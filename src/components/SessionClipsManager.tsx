@@ -80,9 +80,9 @@ export default function SessionClipsManager({
 
   return (
     <Card className="shadow-sm border-primary/20 w-full">
-      <CardHeader className="pb-3 bg-primary/5">
+      <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
+          <div className="flex items-center gap-2 text-foreground">
             <Clock className="h-4 w-4" />
             Total Clip Time
             <TooltipProvider>
