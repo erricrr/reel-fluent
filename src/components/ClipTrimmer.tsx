@@ -200,10 +200,10 @@ export default function ClipTrimmer({
       <div className="absolute inset-0 animate-pulse"></div>
       <div className="relative">
         <CardHeader className="pb-3 border-b border-primary/30">
-          <CardTitle className="text-lg flex items-center gap-2 text-primary font-semibold">
+          <CardTitle className="text-lg flex items-center gap-2 text-foreground font-semibold">
             <Scissors className="h-5 w-5 animate-pulse" />
             Clip Trimmer
-            <span className="ml-auto text-xs bg-primary/20 text-primary px-2 py-1 rounded-full font-normal">
+            <span className="ml-auto text-xs bg-primary/20 text-foreground px-2 py-1 rounded-full font-normal">
               Active
             </span>
           </CardTitle>
