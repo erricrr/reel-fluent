@@ -1,18 +1,29 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import type * as React from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
 import ClipDurationSelector from "./ClipDurationSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
-import MediaSourceList from "./MediaSourceList";
-import { MediaProcessingLoader, YouTubeProcessingLoader } from "./ProcessingLoader";
-import SessionClipsManager from './SessionClipsManager';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { CircleCheckBig, X as XIcon } from "lucide-react";
+import { FileVideo, X as XIcon, FileAudio, CircleCheckBig, List } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { generateClips, createFocusedClip, type Clip, extractAudioFromVideoSegment } from "@/lib/videoUtils";
+import { formatSecondsToMMSS } from '@/lib/timeUtils';
+import { transcribeAudio } from "@/ai/flows/transcribe-audio-resilient";
+import { translateTranscriptionFlow } from '@/ai/flows/translate-transcription-flow';
+import { compareTranscriptions, type CorrectionToken } from "@/ai/flows/compare-transcriptions-flow";
+import { useAuth } from '@/contexts/AuthContext';
+import { saveMediaItemAction } from '@/app/actions';
+import { isYouTubeUrl, processYouTubeUrl, type YouTubeVideoInfo, type ProgressCallback } from '@/lib/youtubeUtils';
+import { Progress } from "@/components/ui/progress";
+import SessionClipsManager from './SessionClipsManager';
+import { cn } from "@/lib/utils";
+import { getLanguageLabel } from "@/lib/languageOptions";
+import { ToastAction } from "@/components/ui/toast";
 import {
   Dialog,
   DialogContent,
@@ -21,27 +32,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useToast } from "@/hooks/use-toast";
-import { formatSecondsToMMSS } from '@/lib/timeUtils';
-import { useAuth } from '@/contexts/AuthContext';
-import { saveMediaItemAction } from '@/app/actions';
-import { isYouTubeUrl } from '@/lib/youtubeUtils';
-import { cn } from "@/lib/utils";
-import { ToastAction } from "@/components/ui/toast";
+import { Input } from "@/components/ui/input";
 
-// Import our custom hooks
-import { useMediaSources, type MediaSource, type SessionClip } from "@/hooks/useMediaSources";
-import { useClipManagement } from "@/hooks/useClipManagement";
-import { useMediaProcessing } from "@/hooks/useMediaProcessing";
-import { useAIOperations } from "@/hooks/useAIOperations";
-import type { Clip } from '@/lib/videoUtils';
+const MAX_MEDIA_DURATION_MINUTES = 30;
+
+interface MediaSource {
+  id: string;
+  src: string;
+  displayName: string;
+  type: 'video' | 'audio' | 'url' | 'unknown';
+  duration: number;
+}
+
+interface SessionClip extends Clip {
+  displayName?: string;
+  mediaSourceId?: string;  // Make optional for backward compatibility
+  originalClipNumber?: number; // Add this to preserve the original auto clip number
+  // Legacy fields for backward compatibility
+  originalMediaName?: string;
+  mediaSrc?: string;
+  sourceType?: 'video' | 'audio' | 'url' | 'unknown';
+}
 
 export default function ReelFluentApp() {
-  // Basic UI state
-  const [language, setLanguage] = useState<string>("vietnamese");
-  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(15);
-
-  // Current media state
+  // Media and UI state
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [sourceUrl, setSourceUrl] = useState<string | undefined>(undefined);
   const [mediaSrc, setMediaSrc] = useState<string | undefined>(undefined);
@@ -49,11 +63,19 @@ export default function ReelFluentApp() {
   const [mediaDuration, setMediaDuration] = useState<number>(0);
   const [currentSourceType, setCurrentSourceType] = useState<'video' | 'audio' | 'url' | 'unknown' | null>(null);
 
-  // Dialog states
+  // App settings
+  const [language, setLanguage] = useState<string>("vietnamese");
+  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(15);
+
+  // Custom clip naming state
   const [showCustomClipNaming, setShowCustomClipNaming] = useState<boolean>(false);
   const [pendingCustomClip, setPendingCustomClip] = useState<{ startTime: number; endTime: number } | null>(null);
   const [customClipName, setCustomClipName] = useState<string>("");
+
+  // Session drawer state
   const [isSessionDrawerOpen, setSessionDrawerOpen] = useState<boolean>(false);
+
+  // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [pendingDeleteSourceId, setPendingDeleteSourceId] = useState<string | null>(null);
 
@@ -61,88 +83,7 @@ export default function ReelFluentApp() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Custom hooks
-  const mediaSourcesHook = useMediaSources();
-  const clipManagementHook = useClipManagement(language);
-  const mediaProcessingHook = useMediaProcessing();
-  const aiOperationsHook = useAIOperations();
-
-  // Destructure hook values
-  const {
-    mediaSources,
-    activeMediaSourceId,
-    sessionClips,
-    addMediaSource,
-    removeMediaSource,
-    selectMediaSource,
-    updateMediaSource,
-    addSessionClip,
-    removeSessionClip,
-    updateSessionClip
-  } = mediaSourcesHook;
-
-  const {
-    clips,
-    currentClipIndex,
-    focusedClip,
-    showClipTrimmer,
-    isAnyClipTranscribing,
-    generateClipsFromDuration,
-    selectClip,
-    createCustomClip,
-    backToAutoClips,
-    updateClip,
-    removeClip,
-    updateUserTranscription,
-    createEnhancedClips,
-    setShowClipTrimmer,
-    setFocusedClip,
-    setIsAnyClipTranscribing
-  } = clipManagementHook;
-
-  const {
-    isLoading,
-    isSaving,
-    isYouTubeProcessing,
-    processingProgress,
-    processingStatus,
-    youtubeVideoInfo,
-    processFile,
-    processYouTubeUrl,
-    resetProcessingState,
-    cleanupObjectUrl,
-    cleanupBlobUrl,
-    setIsSaving,
-    globalAppBusyState
-  } = mediaProcessingHook;
-
-  const {
-    transcribeClip,
-    translateClip,
-    getCorrections,
-    isAnyOperationInProgress
-  } = aiOperationsHook;
-
-  // Sync AI operations with clip management
-  useEffect(() => {
-    setIsAnyClipTranscribing(isAnyOperationInProgress());
-  }, [isAnyOperationInProgress, setIsAnyClipTranscribing]);
-
-  // Enhanced clips with session data
-  const enhancedClips = useMemo(() => {
-    return createEnhancedClips(sessionClips, activeMediaSourceId);
-  }, [createEnhancedClips, sessionClips, activeMediaSourceId]);
-
-  // Current clip
-  const currentClip = enhancedClips[currentClipIndex] || null;
-  const isYouTubeVideo = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
-
-  // Utility functions
-  const generateUniqueId = () => {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  };
-
-  // Media upload handlers
+  // Media handling
   const handleFileUpload = useCallback(async (file: File) => {
     await processFile(file, (src, displayName, duration, type) => {
       const mediaSource: MediaSource = {
@@ -150,8 +91,7 @@ export default function ReelFluentApp() {
         src,
         displayName,
         type,
-        duration,
-        language
+        duration
       };
 
       if (addMediaSource(mediaSource)) {
@@ -161,180 +101,65 @@ export default function ReelFluentApp() {
         setMediaDuration(duration);
         setCurrentSourceType(type);
         setSourceFile(file);
-    setSourceUrl(undefined);
+        setSourceUrl(undefined);
+
+        // Generate initial clips
         generateClipsFromDuration(duration, clipSegmentationDuration);
       }
     });
-  }, [processFile, addMediaSource, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, language]);
+  }, [processFile, addMediaSource, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration]);
 
   const handleUrlSubmit = useCallback(async (url: string) => {
     setSourceUrl(url);
+    await processYouTubeUrl(url, (src, displayName, duration, videoInfo) => {
+      const mediaSource: MediaSource = {
+        id: generateUniqueId(),
+        src,
+        displayName,
+        type: 'url',
+        duration
+      };
 
-    if (isYouTubeUrl(url)) {
-      // Handle YouTube URLs
-      await processYouTubeUrl(url, (src, displayName, duration, videoInfo) => {
-        const mediaSource: MediaSource = {
-          id: generateUniqueId(),
-          src,
-          displayName,
-          type: 'audio', // YouTube videos are processed as audio files
-          duration,
-          language // Add the selected language
-        };
+      if (addMediaSource(mediaSource)) {
+        selectMediaSource(mediaSource.id);
+        setMediaSrc(src);
+        setMediaDisplayName(displayName);
+        setMediaDuration(duration);
+        setCurrentSourceType('url');
+        setSourceFile(null);
 
-        if (addMediaSource(mediaSource)) {
-          selectMediaSource(mediaSource.id);
-          setMediaSrc(src);
-          setMediaDisplayName(displayName);
-          setMediaDuration(duration);
-          setCurrentSourceType('audio'); // Set as audio since we extract audio from YouTube
-          setSourceFile(null);
-          generateClipsFromDuration(duration, clipSegmentationDuration);
-        }
-      });
-      } else {
-      // Handle direct media URLs (MP3, WAV, MP4, WebM, etc.)
-      try {
-        // Extract filename from URL for display name
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        const filename = pathname.split('/').pop() || 'Media File';
-        const displayName = decodeURIComponent(filename);
-
-        // Determine media type from URL extension
-        const extension = pathname.toLowerCase().split('.').pop() || '';
-        const isVideoExtension = ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension);
-        const isAudioExtension = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(extension);
-
-        let mediaType: 'video' | 'audio' | 'url' = 'url';
-        if (isVideoExtension) {
-          mediaType = 'video';
-        } else if (isAudioExtension) {
-          mediaType = 'audio';
-        }
-
-        // Load the media to get its actual duration
-        const getDuration = (): Promise<number> => {
-          return new Promise((resolve, reject) => {
-            const media = mediaType === 'video' ? document.createElement('video') : document.createElement('audio');
-            media.crossOrigin = 'anonymous';
-            media.preload = 'metadata';
-
-            const timeout = setTimeout(() => {
-              media.src = '';
-              reject(new Error('Timeout loading media metadata'));
-            }, 10000); // 10 second timeout
-
-            media.onloadedmetadata = () => {
-              clearTimeout(timeout);
-              const duration = media.duration;
-              media.src = ''; // Clean up
-              if (isNaN(duration) || duration <= 0) {
-                reject(new Error('Invalid media duration'));
-              } else {
-                resolve(duration);
-              }
-            };
-
-            media.onerror = () => {
-              clearTimeout(timeout);
-              media.src = ''; // Clean up
-              reject(new Error('Failed to load media from URL. The server may not allow cross-origin requests.'));
-            };
-
-            media.src = url;
-          });
-        };
-
-        const duration = await getDuration();
-
-        const mediaSource: MediaSource = {
-      id: generateUniqueId(),
-          src: url, // Use the URL directly
-          displayName,
-          type: mediaType,
-          duration: duration, // Use the actual duration we just got
-          language // Add the selected language
-        };
-
-        if (addMediaSource(mediaSource)) {
-          selectMediaSource(mediaSource.id);
-          setMediaSrc(url);
-    setMediaDisplayName(displayName);
-          setMediaDuration(duration); // Set the actual duration
-          setCurrentSourceType(mediaType);
-          setSourceFile(null);
-          generateClipsFromDuration(duration, clipSegmentationDuration); // Generate clips immediately since we have duration
-        }
-
-      toast({
-          title: "Direct Media URL Added",
-          description: `Added "${displayName}" (${formatSecondsToMMSS(duration)}) from direct URL.`,
-        });
-      } catch (error) {
-        console.error('Direct URL processing error:', error);
-        toast({
-          variant: "destructive",
-          title: "Invalid URL",
-          description: error instanceof Error ? error.message : "Please enter a valid YouTube URL or direct media file URL.",
-        });
+        // Generate initial clips
+        generateClipsFromDuration(duration, clipSegmentationDuration);
       }
-    }
-  }, [processYouTubeUrl, addMediaSource, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, toast, language]);
+    });
+  }, [processYouTubeUrl, addMediaSource, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration]);
 
   // Media source management
   const handleSelectMediaSource = useCallback((sourceId: string) => {
     const source = mediaSources.find(s => s.id === sourceId);
     if (!source) return;
 
-    // Clear current state first
-    setFocusedClip(null);
-    setShowClipTrimmer(false);
-
-    // Update to new source
     selectMediaSource(sourceId);
     setMediaSrc(source.src);
     setMediaDisplayName(source.displayName);
     setMediaDuration(source.duration);
     setCurrentSourceType(source.type);
 
-    // Reset clip selection to first clip
-    selectClip(0);
-
-    // Update source file/url appropriately
-    setSourceFile(null); // Always clear the file since we don't store original files
-
-    // Set sourceUrl based on whether this was originally from a URL
-    if (source.type === 'url' || (source.type === 'audio' && source.src.startsWith('blob:'))) {
-      // This is either a direct URL or YouTube (which creates blob URLs)
-      // For YouTube, we'll lose the original URL but that's okay
-      setSourceUrl(source.type === 'url' ? source.src : undefined);
-    } else {
-      // This was a file upload
-      setSourceUrl(undefined);
-    }
-
     // Generate clips for this source
-    if (source.duration > 0) {
-      generateClipsFromDuration(source.duration, clipSegmentationDuration);
-    }
-
-    toast({
-      title: "Media Source Selected",
-      description: `Switched to "${source.displayName}"`,
-    });
-  }, [mediaSources, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, sourceUrl, setFocusedClip, setShowClipTrimmer, toast, isYouTubeVideo, selectClip]);
+    generateClipsFromDuration(source.duration, clipSegmentationDuration);
+  }, [mediaSources, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration]);
 
   const handleRemoveMediaSource = useCallback((sourceId: string) => {
     if (isAnyClipTranscribing) {
-    toast({
-      variant: "destructive",
+      toast({
+        variant: "destructive",
         title: "Action Disabled",
         description: "Cannot remove media while transcription is in progress.",
       });
       return;
     }
 
+    // Check if any session clips use this media source
     const hasClipsUsingSource = sessionClips.some(clip => clip.mediaSourceId === sourceId);
     const result = removeMediaSource(sourceId, () => hasClipsUsingSource);
 
@@ -344,23 +169,22 @@ export default function ReelFluentApp() {
       return;
     }
 
-    // Clean up if we removed the active source
+    // If we removed the active source, clear current state
     if (sourceId === activeMediaSourceId) {
-      const sourceToRemove = mediaSources.find(s => s.id === sourceId);
-      if (sourceToRemove) {
-        cleanupBlobUrl(sourceToRemove.src); // Clean up the specific blob URL
-      }
+      setActiveMediaSourceId(null);
       setMediaSrc(undefined);
       setMediaDisplayName(null);
       setCurrentSourceType(null);
-      setMediaDuration(0);
-      setSourceFile(null);
-      setSourceUrl(undefined);
-      resetProcessingState();
+      setClips([]);
+      setCurrentClipIndex(0);
     }
-  }, [isAnyClipTranscribing, sessionClips, removeMediaSource, activeMediaSourceId, toast, cleanupBlobUrl, resetProcessingState]);
+  }, [isAnyClipTranscribing, sessionClips, removeMediaSource, activeMediaSourceId, toast]);
 
-  // Settings handlers
+  // Clip management
+  const handleSelectClip = useCallback((index: number) => {
+    selectClip(index);
+  }, [selectClip]);
+
   const handleLanguageChange = useCallback((newLanguage: string) => {
     setLanguage(newLanguage);
   }, []);
@@ -373,37 +197,35 @@ export default function ReelFluentApp() {
     }
   }, [mediaDuration, generateClipsFromDuration]);
 
-  // Clip operations
-  const handleSelectClip = useCallback((index: number) => {
-    selectClip(index);
-  }, [selectClip]);
-
   const handleUserTranscriptionChange = useCallback((clipId: string, newUserTranscription: string) => {
     updateUserTranscription(clipId, newUserTranscription);
   }, [updateUserTranscription]);
-
-  const handleRemoveClip = useCallback((clipIdToRemove: string) => {
-    removeClip(clipIdToRemove);
-  }, [removeClip]);
 
   // AI operations
   const handleTranscribeAudio = useCallback(async (clipId: string) => {
     const clip = clips.find(c => c.id === clipId);
     if (!clip || !mediaSrc || !currentSourceType) return;
+
     await transcribeClip(clip, mediaSrc, currentSourceType, language, updateClip);
   }, [clips, mediaSrc, currentSourceType, language, transcribeClip, updateClip]);
 
   const handleTranslate = useCallback(async (clipId: string, targetLanguage: string) => {
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+
     await translateClip(clip, targetLanguage, updateClip);
   }, [clips, translateClip, updateClip]);
 
   const handleGetCorrections = useCallback(async (clipId: string) => {
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+
     await getCorrections(clip, updateClip);
   }, [clips, getCorrections, updateClip]);
+
+  const handleRemoveClip = useCallback((clipIdToRemove: string) => {
+    removeClip(clipIdToRemove);
+  }, [removeClip]);
 
   // Custom clip creation
   const handleCreateFocusedClip = useCallback((startTime: number, endTime: number) => {
@@ -413,8 +235,11 @@ export default function ReelFluentApp() {
 
   const handleConfirmCustomClipName = useCallback(() => {
     if (!pendingCustomClip) return;
+
     const clipName = customClipName.trim() || `Custom Clip ${Date.now()}`;
     createCustomClip(pendingCustomClip.startTime, pendingCustomClip.endTime, clipName);
+
+    // Reset state
     setShowCustomClipNaming(false);
     setPendingCustomClip(null);
     setCustomClipName("");
@@ -440,9 +265,13 @@ export default function ReelFluentApp() {
   const handleSaveToSession = useCallback((overrideUserTranscription?: string) => {
     if (!currentClip || !activeMediaSourceId) return;
 
-    const totalDuration = sessionClips.reduce((acc, clip) => acc + (clip.endTime - clip.startTime), 0);
+    // Calculate total duration including the new clip
+    const totalDuration = sessionClips.reduce((acc, clip) =>
+      acc + (clip.endTime - clip.startTime), 0
+    );
     const newClipDuration = currentClip.endTime - currentClip.startTime;
 
+    // Check if adding this clip would exceed 30 minutes
     if (totalDuration + newClipDuration > 30 * 60) {
       toast({
         variant: "destructive",
@@ -452,16 +281,19 @@ export default function ReelFluentApp() {
       return;
     }
 
+    // Check if we're updating an existing session clip
     const existingClipIndex = sessionClips.findIndex(clip =>
       clip.startTime === currentClip.startTime &&
       clip.endTime === currentClip.endTime &&
       clip.mediaSourceId === activeMediaSourceId
     );
 
+    // Determine user transcription to save
     const userTrans = overrideUserTranscription !== undefined
       ? overrideUserTranscription
       : (currentClip.userTranscription || "");
 
+    // Determine original clip number - for auto clips, use currentClipIndex + 1, for focused clips use existing or undefined
     const originalClipNumber = existingClipIndex >= 0
       ? sessionClips[existingClipIndex].originalClipNumber
       : (focusedClip ? undefined : currentClipIndex + 1);
@@ -476,6 +308,7 @@ export default function ReelFluentApp() {
         : (currentClip.displayName || (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`)),
       mediaSourceId: activeMediaSourceId,
       originalClipNumber: originalClipNumber,
+      // Ensure all transcription data is properly formatted
       userTranscription: userTrans,
       automatedTranscription: currentClip.automatedTranscription || null,
       translation: currentClip.translation || null,
@@ -484,12 +317,14 @@ export default function ReelFluentApp() {
       comparisonResult: currentClip.comparisonResult || null,
     };
 
-      if (existingClipIndex >= 0) {
+    // Update or add the clip
+    if (existingClipIndex >= 0) {
       updateSessionClip(sessionClip.id, sessionClip);
-      } else {
+    } else {
       addSessionClip(sessionClip);
     }
 
+    // Only show toast for new clips or AI output updates
     const isAIOutputUpdate = existingClipIndex >= 0 && (
       currentClip.automatedTranscription !== sessionClips[existingClipIndex].automatedTranscription ||
       currentClip.translation !== sessionClips[existingClipIndex].translation ||
@@ -521,6 +356,7 @@ export default function ReelFluentApp() {
       return;
     }
 
+    // Find the media source for this clip
     const mediaSource = mediaSources.find(source => source.id === clipToLoad.mediaSourceId);
     if (!mediaSource) {
       toast({
@@ -531,26 +367,31 @@ export default function ReelFluentApp() {
       return;
     }
 
+    // Switch to the correct media source if needed
     if (mediaSource.id !== activeMediaSourceId) {
       handleSelectMediaSource(mediaSource.id);
     }
 
+    // Create a new focused clip with all necessary data
     const loadedClip: Clip = {
       ...clipToLoad,
-      id: clipToLoad.id || generateUniqueId(),
+      id: clipToLoad.id || generateUniqueId(), // Ensure we have a valid ID
       startTime: clipToLoad.startTime,
       endTime: clipToLoad.endTime,
       language: clipToLoad.language || language,
+      // Ensure all transcription data is properly initialized
       userTranscription: clipToLoad.userTranscription || "",
       automatedTranscription: clipToLoad.automatedTranscription || null,
       translation: clipToLoad.translation || null,
       translationTargetLanguage: clipToLoad.translationTargetLanguage || null,
       englishTranslation: clipToLoad.englishTranslation || null,
       comparisonResult: clipToLoad.comparisonResult || null,
-      isFocusedClip: true,
+      isFocusedClip: true, // Mark this as a focused clip
     };
 
+    // Set this as the only clip and focus on it
     setFocusedClip(loadedClip);
+    // Note: We'll need to update the clips in the clip management hook
 
     toast({
       title: "Clip Loaded",
@@ -562,35 +403,31 @@ export default function ReelFluentApp() {
     removeSessionClip(clipId);
   }, [removeSessionClip]);
 
-  // Delete confirmation
+  // Delete confirmation handlers
   const handleConfirmDelete = useCallback(() => {
     if (!pendingDeleteSourceId) return;
 
+    // Delete associated clips from Saved Attempts
     sessionClips
       .filter(clip => clip.mediaSourceId === pendingDeleteSourceId)
       .forEach(clip => removeSessionClip(clip.id));
 
+    // Remove the media source (this will handle clearing current state if needed)
     removeMediaSource(pendingDeleteSourceId);
 
+    // Clear current state if we removed the active source
     if (pendingDeleteSourceId === activeMediaSourceId) {
-      const sourceToRemove = mediaSources.find(s => s.id === pendingDeleteSourceId);
-      if (sourceToRemove) {
-        cleanupBlobUrl(sourceToRemove.src); // Clean up the specific blob URL
-      }
       setMediaSrc(undefined);
       setMediaDisplayName(null);
       setCurrentSourceType(null);
-      setMediaDuration(0);
-      setSourceFile(null);
-      setSourceUrl(undefined);
-      resetProcessingState();
     }
 
+    // Close dialog and clear pending delete
     setDeleteDialogOpen(false);
     setPendingDeleteSourceId(null);
-  }, [pendingDeleteSourceId, sessionClips, removeSessionClip, removeMediaSource, activeMediaSourceId, cleanupBlobUrl, resetProcessingState]);
+  }, [pendingDeleteSourceId, sessionClips, removeSessionClip, removeMediaSource, activeMediaSourceId]);
 
-  // Save media
+  // Save media functionality
   const handleSaveMedia = useCallback(async () => {
     if (!user) {
       toast({
@@ -623,23 +460,12 @@ export default function ReelFluentApp() {
       setIsSaving(true);
 
       const mediaData = {
-        userId: user.uid,
-        mediaUrl: sourceUrl || '',
-        mediaDisplayName: mediaDisplayName,
-        mediaDuration: mediaDuration,
-        mediaType: currentSourceType || 'unknown',
+        displayName: mediaDisplayName,
+        duration: mediaDuration,
+        sourceType: currentSourceType || 'unknown',
         language: language,
-        clipSegmentationDuration: clipSegmentationDuration,
-        clips: sessionClips.map(clip => ({
-          id: clip.id,
-          startTime: clip.startTime,
-          endTime: clip.endTime,
-          userTranscription: clip.userTranscription || null,
-          automatedTranscription: clip.automatedTranscription || null,
-          feedback: null,
-          englishTranslation: clip.englishTranslation || null,
-          comparisonResult: clip.comparisonResult || null,
-        })),
+        youtubeVideoInfo: youtubeVideoInfo || undefined,
+        sourceUrl: isYouTubeVideo ? sourceUrl : undefined,
       };
 
       const result = await saveMediaItemAction(mediaData);
@@ -650,7 +476,7 @@ export default function ReelFluentApp() {
           description: `"${mediaDisplayName}" has been saved to your library.`,
         });
       } else {
-        throw new Error(result.message || "Failed to save media");
+        throw new Error(result.error || "Failed to save media");
       }
     } catch (error) {
       console.error('Save media error:', error);
@@ -662,30 +488,37 @@ export default function ReelFluentApp() {
     } finally {
       setIsSaving(false);
     }
-  }, [user, sourceFile, sourceUrl, mediaDisplayName, mediaDuration, currentSourceType, language, clipSegmentationDuration, sessionClips, setIsSaving, toast]);
+  }, [user, sourceFile, sourceUrl, mediaDisplayName, mediaDuration, currentSourceType, language, youtubeVideoInfo, isYouTubeVideo, setIsSaving, toast]);
 
-  // Update clip data for TranscriptionWorkspace
+  // Reset app functionality
+  const handleResetAppWithCheck = () => {
+    if (isAnyClipTranscribing) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Reset",
+        description: "Please wait for any ongoing transcriptions to complete before resetting.",
+      });
+      return;
+    }
+
+    // Reset all state
+    setSourceFile(null);
+    setSourceUrl(undefined);
+    setMediaSrc(undefined);
+    setMediaDisplayName(null);
+    setMediaDuration(0);
+    setCurrentSourceType(null);
+    resetProcessingState();
+    cleanupObjectUrl();
+
+    // Clear session drawer state
+    setSessionDrawerOpen(false);
+  };
+
+  // Update clip data function for TranscriptionWorkspace
   const updateClipData = useCallback((clipId: string, aiContent: any) => {
     updateClip(clipId, aiContent);
   }, [updateClip]);
-
-  // Handle duration updates for direct URLs (when duration becomes available)
-  useEffect(() => {
-    if (mediaDuration > 0 && clips.length === 0 && mediaSrc) {
-      // Generate clips when duration becomes available (e.g., for direct URLs)
-      generateClipsFromDuration(mediaDuration, clipSegmentationDuration);
-    }
-  }, [mediaDuration, clips.length, mediaSrc, generateClipsFromDuration, clipSegmentationDuration]);
-
-  // Separate effect to update MediaSource duration when it becomes available
-  useEffect(() => {
-    if (mediaDuration > 0 && activeMediaSourceId) {
-      const activeSource = mediaSources.find(source => source.id === activeMediaSourceId);
-      if (activeSource && activeSource.duration === 0) {
-        updateMediaSource(activeMediaSourceId, { duration: mediaDuration });
-      }
-    }
-  }, [mediaDuration, activeMediaSourceId, mediaSources, updateMediaSource]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -701,30 +534,36 @@ export default function ReelFluentApp() {
               {mediaSources.length < 3 && (
                 <div className={cn(
                   "w-full grid gap-4 sm:gap-6 transition-all duration-300 ease-in-out",
-                  "grid-cols-1 sm:grid-cols-[1fr_2fr] lg:grid-cols-[1fr_2fr]"
+                  mediaSources.length > 0
+                    ? "grid-cols-1 sm:grid-cols-[1.2fr_2fr] lg:grid-cols-3 lg:w-2/3"
+                    : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
                 )}>
                   <div className="space-y-4">
                     <LanguageSelector
-                      selectedLanguage={language}
+                      language={language}
                       onLanguageChange={handleLanguageChange}
                       disabled={globalAppBusyState || isAnyClipTranscribing}
                     />
                   </div>
                   <div className="space-y-4">
                     <VideoInputForm
-                      onSourceLoad={({ file, url }) => {
-                        if (file) {
-                          handleFileUpload(file);
-                        } else if (url) {
-                          handleUrlSubmit(url);
-                        }
-                      }}
-                      isLoading={globalAppBusyState || isAnyClipTranscribing}
+                      onFileUpload={handleFileUpload}
+                      onUrlSubmit={handleUrlSubmit}
+                      disabled={globalAppBusyState || isAnyClipTranscribing}
                     />
                     {isYouTubeProcessing && (
                       <YouTubeProcessingLoader status={processingStatus} />
                     )}
                   </div>
+                  {mediaSources.length > 0 && (
+                    <div className="lg:col-span-1">
+                      <ClipDurationSelector
+                        value={clipSegmentationDuration.toString()}
+                        onChange={handleClipDurationChange}
+                        disabled={globalAppBusyState || isAnyClipTranscribing}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
               {mediaSources.length > 0 && (
@@ -809,12 +648,13 @@ export default function ReelFluentApp() {
         </div>
       </footer>
 
-      {/* Session Drawer */}
+      {/* Session Drawer Overlay */}
       <div
         className={`fixed inset-0 bg-black/80 transition-opacity duration-300 ease-in-out ${isSessionDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         style={{ zIndex: 100 }}
         onClick={() => setSessionDrawerOpen(false)}
       />
+      {/* Session Drawer */}
       <div
         className={`fixed inset-x-0 bottom-0 bg-background transform transition-transform duration-300 ease-in-out ${isSessionDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`}
         style={{

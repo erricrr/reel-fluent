@@ -196,7 +196,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
               htmlFor="video-url-input"
               className="text-base sm:text-lg transition-all duration-300"
             >
-              YouTube or direct video file URL
+              YouTube or direct media file URL
             </Label>
             <Input
               id="video-url-input"
@@ -216,7 +216,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             {isLoading ? "Loading..." : "Load Media from URL"}
           </Button>
           <p className="text-xs sm:text-sm text-muted-foreground transition-all duration-300">
-            Supports YouTube and direct media links (MP3, WAV, MP4, WebM). Format support may vary by browser. YouTube audio is extracted only for language learning.
+            Supports YouTube videos and direct media links (MP3, WAV, MP4, WebM). Some servers may block cross-origin requests.
           </p>
         </form>
       </TabsContent>
