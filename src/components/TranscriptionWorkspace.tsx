@@ -1252,7 +1252,7 @@ export default function TranscriptionWorkspace({
                           {/* Saved indicator */}
                           {isClipSaved(clip) && (
                             <div className="absolute -top-1 -right-1 bg-accent text-accent-foreground rounded-full p-0.5 shadow-sm">
-                              <BookmarkPlus className="h-3 w-3" />
+                              <List className="h-3 w-3" />
                             </div>
                           )}
                           <div className="flex flex-col items-start gap-1">
