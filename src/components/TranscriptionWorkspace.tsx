@@ -1183,7 +1183,7 @@ export default function TranscriptionWorkspace({
               {/* Focused Clip Info */}
               <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-primary flex items-center gap-2 -ml-1">
+                  <span className="text-sm font-medium flex items-center gap-2 -ml-1">
                     <Eye className="h-4 w-4" />
                     {focusedClip.displayName || 'Custom Clip'} (Focused)
                   </span>
