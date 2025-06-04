@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, FileDiff, Languages, Edit3, AlertTriangle, Captions, Info } from "lucide-react";
+import { Sparkles, FileDiff, Languages, Edit3, AlertTriangle, Captions, Save } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import MediaControls from './MediaControls';
@@ -345,7 +345,7 @@ export default function AIToolsTab({
       <CardContent className="space-y-4 md:space-y-6">
         {!aiToolsState.canAccessAITools && (
           <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-md text-sm text-blue-700 dark:text-blue-300">
-            <Info className="h-5 w-5 flex-shrink-0" />
+            <Save className="h-5 w-5 flex-shrink-0" />
             <span>Please save your work in the "Your Transcription" tab first to enable AI tools.</span>
           </div>
         )}
