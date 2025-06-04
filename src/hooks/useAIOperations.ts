@@ -103,11 +103,11 @@ export function useAIOperations() {
     targetLanguage: string,
     onUpdate: (clipId: string, updates: Partial<Clip>) => void
   ) => {
-    if (!clip.userTranscription?.trim()) {
+    if (!clip.automatedTranscription?.trim()) {
       toast({
         variant: "destructive",
         title: "No Text to Translate",
-        description: "Please enter some text to translate.",
+        description: "Please ensure automated transcription is complete first.",
       });
       return;
     }
@@ -133,7 +133,7 @@ export function useAIOperations() {
 
       // Translate - use the correct input format
       const result = await translateTranscriptionFlow({
-        originalTranscription: clip.userTranscription,
+        originalTranscription: clip.automatedTranscription,
         sourceLanguage: clip.language || 'unknown',
         targetLanguage: targetLanguage
       });
