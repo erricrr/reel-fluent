@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CircleCheckBig, GripVertical, Eye, Scissors, Focus, Lock, Unlock, Sparkles } from "lucide-react";
+import { CircleCheckBig, GripVertical, Eye, Scissors, Focus, Keyboard, Sparkles } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -231,6 +231,7 @@ export default function TranscriptionWorkspace({
       setCurrentPlaybackTime(displayClip.startTime || 0);
       setPlaybackRate(1.0);
       setPreviewClip(null);
+      setHasUserManuallyChangedTab(false);
     }
   }, [displayClip?.id, displayClip?.startTime, displayClip?.endTime]); // Only run when the clip truly changes
 
@@ -246,56 +247,51 @@ export default function TranscriptionWorkspace({
     setIsTranscriptionSaved(isClipSaved);
   }, [activeMediaSourceId, sessionClips, displayClip?.startTime, displayClip?.endTime]);
 
-  // Enhanced tab management - preserve AI tab state for focused clips with AI data
+  // Consolidated Tab Management Logic
   useEffect(() => {
-    const isFocusedClipWithAIData = displayClip?.isFocusedClip && (
-      displayClip.automatedTranscription ||
-      displayClip.translation ||
-      displayClip.englishTranslation ||
-      displayClip.comparisonResult
-    );
+    // If a manual tab choice has been made for the current clip session, respect it.
+    if (hasUserManuallyChangedTab) {
+      return;
+    }
 
-    // For focused clips with AI data, switch to AI tab
-    // ONLY if the user hasn't manually changed tabs OR if the current tab is not 'ai' already
-    if (isFocusedClipWithAIData && aiToolsState.canAccessAITools && !hasUserManuallyChangedTab && activeTab !== 'ai') {
-      setActiveTab("ai");
-    } else if (!isFocusedClipWithAIData && activeTab === "ai" && !aiToolsState.canAccessAITools && !hasUserManuallyChangedTab) {
-      // Normal reset logic for other clips if AI tools become inaccessible and user hasn't picked a tab
-      setActiveTab("manual");
+    // Condition 1: AI tools are NOT accessible (e.g. transcription not saved)
+    // This is the strongest condition to force "manual" tab.
+    if (!aiToolsState.canAccessAITools) {
+      if (activeTab !== "manual") {
+        setActiveTab("manual");
+      }
+      return; // Stop further automatic tab changes
+    }
+
+    // At this point, AI tools ARE accessible.
+
+    // Condition 2: An AI operation is actively processing.
+    // If AI is processing, we generally don't want to auto-switch tabs.
+    // This prevents flickering if the user started an operation on the AI Tools tab.
+    if (aiToolsState.isProcessing) {
+      return; // Maintain current tab while processing
+    }
+
+    // Condition 3: No AI operation is processing, and AI tools are accessible.
+    // Decide tab based on AI content.
+    if (aiToolsState.hasValidAIContent) {
+      if (activeTab !== "ai") {
+        setActiveTab("ai");
+      }
+    } else {
+      // No valid AI content, not processing, AI tools accessible -> default to manual.
+      if (activeTab !== "manual") {
+        setActiveTab("manual");
+      }
     }
   }, [
     activeTab,
     aiToolsState.canAccessAITools,
-    displayClip?.id,
-    displayClip?.startTime,
-    displayClip?.endTime,
-    displayClip?.isFocusedClip,
-    displayClip?.automatedTranscription,
-    displayClip?.translation,
-    displayClip?.englishTranslation,
-    displayClip?.comparisonResult,
-    activeMediaSourceId,
-    hasUserManuallyChangedTab
+    aiToolsState.hasValidAIContent,
+    aiToolsState.isProcessing,
+    hasUserManuallyChangedTab,
+    displayClip?.id // Re-evaluate when the fundamental clip context changes
   ]);
-
-  // Force immediate tab reset to manual when clip fundamentally changes (e.g., not just content update)
-  // This effect primarily handles resetting to 'manual' when moving away from a focused clip
-  // or when a new non-focused clip is selected and no manual tab choice has been made.
-  useEffect(() => {
-    // If it's not a focused clip and the user hasn't manually chosen a tab, default to manual.
-    if (!displayClip?.isFocusedClip && !hasUserManuallyChangedTab) {
-      setActiveTab("manual");
-    }
-    // If it IS a focused clip, the above effect or user interaction handles the tab.
-    // This effect should not interfere if hasUserManuallyChangedTab is true.
-  }, [displayClip?.id, displayClip?.isFocusedClip, hasUserManuallyChangedTab]);
-
-  // Auto tab switching logic - switch to AI if content is there and user hasn't manually picked.
-  useEffect(() => {
-    if (!hasUserManuallyChangedTab && aiToolsState.hasValidAIContent && !aiToolsState.isProcessing && activeTab !== 'ai') {
-      setActiveTab("ai");
-    }
-  }, [hasUserManuallyChangedTab, aiToolsState.hasValidAIContent, aiToolsState.isProcessing, activeTab]);
 
   const handlePlayerTimeUpdate = useCallback((time: number) => {
     setCurrentPlaybackTime(time);
@@ -604,6 +600,7 @@ export default function TranscriptionWorkspace({
           <Tabs defaultValue="manual" value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="flex w-full gap-1 md:gap-2 whitespace-nowrap md:grid md:grid-cols-[1fr_1fr_auto] md:overflow-visible min-h-[2.25rem] overflow-x-hidden">
               <TabsTrigger value="manual" disabled={disableTextarea} className="flex-1 text-sm px-1 md:px-3 min-w-0">
+              <Keyboard className="h-4 w-4 md:h-5 md:w-5 pr-1 flex-shrink-0" />
                 <span className="truncate block">Your Transcription</span>
               </TabsTrigger>
               <TabsTrigger
