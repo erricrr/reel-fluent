@@ -239,11 +239,13 @@ const MediaControls = ({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="0.25">0.25x</SelectItem>
             <SelectItem value="0.5">0.5x</SelectItem>
             <SelectItem value="0.75">0.75x</SelectItem>
             <SelectItem value="1">1x</SelectItem>
             <SelectItem value="1.25">1.25x</SelectItem>
             <SelectItem value="1.5">1.5x</SelectItem>
+            <SelectItem value="1.75">1.75x</SelectItem>
             <SelectItem value="2">2x</SelectItem>
           </SelectContent>
         </Select>
