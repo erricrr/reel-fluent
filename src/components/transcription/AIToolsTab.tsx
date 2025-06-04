@@ -278,6 +278,27 @@ export default function AIToolsTab({
                       !isAutomatedTranscriptionError &&
                       !isAutomatedTranscriptionLoading;
 
+  // Check if AI operations have already been completed successfully
+  const hasValidAutomatedTranscription = currentClip.automatedTranscription &&
+    currentClip.automatedTranscription !== "Transcribing..." &&
+    !currentClip.automatedTranscription.startsWith("Error:");
+
+  const hasValidComparisonResult = currentClip.comparisonResult &&
+    Array.isArray(currentClip.comparisonResult) &&
+    currentClip.comparisonResult.length > 0 &&
+    currentClip.comparisonResult[0].token !== "Comparing..." &&
+    !currentClip.comparisonResult[0].token.startsWith("Error:");
+
+  const currentTranslation = getTranslationForCurrentTarget();
+  const hasValidTranslation = currentTranslation &&
+    currentTranslation !== "Translating..." &&
+    !currentTranslation.startsWith("Error:");
+
+  // Button states
+  const transcribeButtonDisabled = Boolean(isLoadingMedia || isSavingMedia || isAnyClipTranscribing || hasValidAutomatedTranscription);
+  const correctionsButtonDisabled = Boolean(!canGetCorrections || isCorrectionsLoading || isAnyClipTranscribing || hasValidComparisonResult);
+  const translateButtonDisabled = Boolean(!canTranslate || isTranslationLoading || isAnyClipTranscribing || hasValidTranslation);
+
   return (
     <Card>
       <CardHeader className="pb-3 md:pb-6">
@@ -307,13 +328,18 @@ export default function AIToolsTab({
           <Button
             onClick={handleTranscribeClip}
             className="w-full mb-2 text-sm"
-            disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
+            disabled={transcribeButtonDisabled}
           >
             <Sparkles className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
             <span className="hidden md:inline">
-              {isAnyClipTranscribing ? "Transcribing..." : focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
+              {hasValidAutomatedTranscription ? "Already Transcribed" :
+               isAnyClipTranscribing ? "Transcribing..." :
+               focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
             </span>
-            <span className="md:hidden">{isAnyClipTranscribing ? "Transcribing..." : "Transcribe"}</span>
+            <span className="md:hidden">
+              {hasValidAutomatedTranscription ? "Completed" :
+               isAnyClipTranscribing ? "Transcribing..." : "Transcribe"}
+            </span>
           </Button>
           <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50" resizable>
             {currentClip.automatedTranscription === "Transcribing..." && <ThreeDotsLoader className="mx-auto my-4" />}
@@ -379,12 +405,18 @@ export default function AIToolsTab({
           <h3 className="font-semibold text-foreground text-sm md:text-base">Transcription Comparison:</h3>
           <Button
             onClick={handleGetCorrections}
-            disabled={!canGetCorrections || isCorrectionsLoading || isAnyClipTranscribing}
+            disabled={correctionsButtonDisabled}
             className="w-full text-sm"
           >
             <FileDiff className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
-            <span className="hidden md:inline">{isCorrectionsLoading ? "Comparing..." : "Get Corrections"}</span>
-            <span className="md:hidden">{isCorrectionsLoading ? "Comparing..." : "Compare"}</span>
+            <span className="hidden md:inline">
+              {hasValidComparisonResult ? "Already Compared" :
+               isCorrectionsLoading ? "Comparing..." : "Get Corrections"}
+            </span>
+            <span className="md:hidden">
+              {hasValidComparisonResult ? "Completed" :
+               isCorrectionsLoading ? "Comparing..." : "Compare"}
+            </span>
           </Button>
           <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50" resizable>
             {isCurrentClipComparing ? (
@@ -410,35 +442,39 @@ export default function AIToolsTab({
             <TranslationLanguageSelector
               selectedLanguage={translationTargetLanguage}
               onLanguageChange={setTranslationTargetLanguage}
-              disabled={!canTranslate || isTranslationLoading || isAnyClipTranscribing}
+              disabled={translateButtonDisabled}
               label=""
               className="w-[100px] md:w-[140px]"
             />
           </div>
           <Button
             onClick={handleTranslate}
-            disabled={!canTranslate || isTranslationLoading || isAnyClipTranscribing}
+            disabled={translateButtonDisabled}
             className="w-full text-sm"
           >
             <Languages className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
             <span className="hidden md:inline">
-              {isTranslationLoading ? "Translating..." : `Translate to ${getLanguageLabel(translationTargetLanguage)}`}
+              {hasValidTranslation ? `Already Translated to ${getLanguageLabel(translationTargetLanguage)}` :
+               isTranslationLoading ? "Translating..." : `Translate to ${getLanguageLabel(translationTargetLanguage)}`}
             </span>
-            <span className="md:hidden">{isTranslationLoading ? "Translating..." : "Translate"}</span>
+            <span className="md:hidden">
+              {hasValidTranslation ? "Completed" :
+               isTranslationLoading ? "Translating..." : "Translate"}
+            </span>
           </Button>
           <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50" resizable>
             {isTranslationLoading ? (
               <ThreeDotsLoader className="mx-auto my-4" />
-            ) : !getTranslationForCurrentTarget() ? (
+            ) : !currentTranslation ? (
               <p className="text-sm text-muted-foreground">
                 Click "Translate to {getLanguageLabel(translationTargetLanguage)}" above after AI transcription is complete.
               </p>
-            ) : getTranslationForCurrentTarget() === "" ? (
+            ) : currentTranslation === "" ? (
               <p className="text-sm">Translation complete. No specific output or translation was empty.</p>
-            ) : getTranslationForCurrentTarget()?.startsWith("Error:") ? (
-              <p className="text-sm text-destructive">{getTranslationForCurrentTarget()}</p>
+            ) : currentTranslation?.startsWith("Error:") ? (
+              <p className="text-sm text-destructive">{currentTranslation}</p>
             ) : (
-              <p className="text-sm whitespace-pre-wrap">{getTranslationForCurrentTarget()}</p>
+              <p className="text-sm whitespace-pre-wrap">{currentTranslation}</p>
             )}
           </ScrollArea>
         </div>
