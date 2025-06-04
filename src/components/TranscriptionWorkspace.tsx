@@ -311,22 +311,19 @@ export default function TranscriptionWorkspace({
   };
 
   const handleTabChange = useCallback((newTab: string) => {
-    if (newTab === "ai" && !aiToolsState.canAccessAITools) {
-      toast({
-        variant: "destructive",
-        title: "Save Required",
-        description: "Please save your transcription before accessing AI tools."
-      });
-      return;
-    }
+    // The toast logic for "Save Required" that was here previously was for the old unlock system.
+    // The AI Tools tab's own `disabled` prop now handles preventing access if conditions aren't met.
+    // if (newTab === "ai" && !aiToolsState.canAccessAITools) { ... }
 
     setActiveTab(newTab);
     setHasUserManuallyChangedTab(true);
 
-    if (newTab === "ai") {
-      aiToolsState.setUserActivelyUsingAITools(true);
-    }
-  }, [aiToolsState.canAccessAITools, toast, aiToolsState]);
+    // DO NOT set userActivelyUsingAITools here. This flag is for active AI operations,
+    // not for merely viewing the tab.
+    // if (newTab === "ai") {
+    //   aiToolsState.setUserActivelyUsingAITools(true);
+    // }
+  }, [aiToolsState, setActiveTab, setHasUserManuallyChangedTab]); // Removed toast and aiToolsState.canAccessAITools from deps as direct check is gone
 
   const handleSaveOrUpdate = useCallback(() => {
     if (!displayClip || !onSaveToSession) return;
@@ -627,7 +624,7 @@ export default function TranscriptionWorkspace({
                   "data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 )}
               >
-                <CircleCheckBig className="hidden lg:inline-block h-3 w-3 flex-shrink-0" />
+                <CircleCheckBig className="lg:inline-block h-3 w-3 flex-shrink-0" />
                 <span className="truncate block">Saved Attempts</span>
               </Button>
             </TabsList>
