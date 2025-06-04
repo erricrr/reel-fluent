@@ -231,7 +231,6 @@ export default function TranscriptionWorkspace({
 
   // Enhanced tab management - preserve AI tab state for focused clips with AI data
   useEffect(() => {
-    // Check if this is a focused clip with AI data that should preserve its state
     const isFocusedClipWithAIData = currentClip?.isFocusedClip && (
       currentClip.automatedTranscription ||
       currentClip.translation ||
@@ -239,88 +238,47 @@ export default function TranscriptionWorkspace({
       currentClip.comparisonResult
     );
 
-    // For focused clips with AI data, switch to AI tab and mark as manually changed to preserve it
-    if (isFocusedClipWithAIData && aiToolsState.canAccessAITools) {
+    // For focused clips with AI data, switch to AI tab
+    // ONLY if the user hasn't manually changed tabs OR if the current tab is not 'ai' already
+    if (isFocusedClipWithAIData && aiToolsState.canAccessAITools && !hasUserManuallyChangedTab && activeTab !== 'ai') {
       setActiveTab("ai");
-      setHasUserManuallyChangedTab(true); // Prevent auto-switching away
-    } else {
-      // Normal reset logic for other clips
-      const shouldResetToManual = activeTab === "ai" && !aiToolsState.canAccessAITools;
-      if (shouldResetToManual) {
-        setActiveTab("manual");
-        setHasUserManuallyChangedTab(false);
-      }
+    } else if (!isFocusedClipWithAIData && activeTab === "ai" && !aiToolsState.canAccessAITools && !hasUserManuallyChangedTab) {
+      // Normal reset logic for other clips if AI tools become inaccessible and user hasn't picked a tab
+      setActiveTab("manual");
     }
   }, [
     activeTab,
     aiToolsState.canAccessAITools,
-    currentClip?.id || null,
-    currentClip?.startTime || 0,
-    currentClip?.endTime || 0,
-    currentClip?.isFocusedClip || false,
-    currentClip?.automatedTranscription || null,
-    currentClip?.translation || null,
-    currentClip?.englishTranslation || null,
-    currentClip?.comparisonResult || null,
-    activeMediaSourceId
+    currentClip?.id,
+    currentClip?.startTime,
+    currentClip?.endTime,
+    currentClip?.isFocusedClip,
+    currentClip?.automatedTranscription,
+    currentClip?.translation,
+    currentClip?.englishTranslation,
+    currentClip?.comparisonResult,
+    activeMediaSourceId,
+    hasUserManuallyChangedTab
   ]);
 
-  // Force immediate tab reset when clip changes (runs before AI state updates)
-  // BUT preserve state for focused clips with AI data
+  // Force immediate tab reset to manual when clip fundamentally changes (e.g., not just content update)
+  // This effect primarily handles resetting to 'manual' when moving away from a focused clip
+  // or when a new non-focused clip is selected and no manual tab choice has been made.
   useEffect(() => {
-    // Check if this is a focused clip with AI data
-    const isFocusedClipWithAIData = currentClip?.isFocusedClip && (
-      currentClip.automatedTranscription ||
-      currentClip.translation ||
-      currentClip.englishTranslation ||
-      currentClip.comparisonResult
-    );
-
-    // Only reset tab for clips that are NOT focused clips with AI data
-    if (!isFocusedClipWithAIData) {
+    // If it's not a focused clip and the user hasn't manually chosen a tab, default to manual.
+    if (!currentClip?.isFocusedClip && !hasUserManuallyChangedTab) {
       setActiveTab("manual");
-      setHasUserManuallyChangedTab(false);
     }
-  }, [currentClip?.id || null, currentClip?.startTime || 0, currentClip?.endTime || 0, currentClip?.isFocusedClip || false]);
+    // If it IS a focused clip, the above effect or user interaction handles the tab.
+    // This effect should not interfere if hasUserManuallyChangedTab is true.
+  }, [currentClip?.id, currentClip?.isFocusedClip, hasUserManuallyChangedTab]);
 
-  // Clear preview when trimmer is hidden
+  // Auto tab switching logic - switch to AI if content is there and user hasn't manually picked.
   useEffect(() => {
-    if (!showClipTrimmer) {
-      setPreviewClip(null);
-      if (videoPlayerRef.current) {
-        videoPlayerRef.current.pause();
-      }
-    }
-  }, [showClipTrimmer]);
-
-  // Monitor preview clip playback
-  useEffect(() => {
-    if (!isInPreviewMode || !previewClip) return;
-
-    const monitorInterval = setInterval(() => {
-      if (videoPlayerRef.current) {
-        const currentTime = videoPlayerRef.current.getCurrentTime();
-        if (currentTime >= previewClip.endTime) {
-          if (!videoPlayerRef.current.getIsPlaying()) {
-            try {
-              videoPlayerRef.current.play();
-            } catch (err) {
-              console.warn("Preview continuation error:", err);
-            }
-          }
-        }
-      }
-    }, 100);
-
-    return () => clearInterval(monitorInterval);
-  }, [isInPreviewMode, previewClip]);
-
-  // Auto tab switching logic
-  useEffect(() => {
-    if (!hasUserManuallyChangedTab && aiToolsState.hasValidAIContent && !aiToolsState.isProcessing) {
+    if (!hasUserManuallyChangedTab && aiToolsState.hasValidAIContent && !aiToolsState.isProcessing && activeTab !== 'ai') {
       setActiveTab("ai");
     }
-  }, [hasUserManuallyChangedTab, aiToolsState.hasValidAIContent, aiToolsState.isProcessing]);
+  }, [hasUserManuallyChangedTab, aiToolsState.hasValidAIContent, aiToolsState.isProcessing, activeTab]);
 
   const handlePlayerTimeUpdate = useCallback((time: number) => {
     setCurrentPlaybackTime(time);

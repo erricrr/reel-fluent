@@ -10,6 +10,10 @@ import { UploadCloud, Link as LinkIcon, FileVideo, FileAudio } from "lucide-reac
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
+if (typeof window !== 'undefined') {
+  console.log('[AI TOOLS] FILE LOADED');
+}
+
 interface VideoInputFormProps {
   onSourceLoad: (source: { file?: File; url?: string }) => void;
   isLoading: boolean;
@@ -158,7 +162,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             <Label
               htmlFor="media-file-upload"
               className={cn(
-                "text-base sm:text-lg font-medium transition-all duration-300",
+                "text-sm md:text-base font-medium transition-all duration-300",
                 isLoading ? "cursor-not-allowed": "cursor-pointer"
               )}
             >
@@ -194,7 +198,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
           <div className="space-y-2">
             <Label
               htmlFor="video-url-input"
-              className="text-base sm:text-lg transition-all duration-300"
+              className="text-sm md:text-base transition-all duration-300"
             >
               YouTube or direct media file URL
             </Label>

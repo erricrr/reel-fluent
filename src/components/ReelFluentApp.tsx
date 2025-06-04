@@ -392,22 +392,34 @@ export default function ReelFluentApp() {
 
   // AI operations
   const handleTranscribeAudio = useCallback(async (clipId: string) => {
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip || !mediaSrc || !currentSourceType) return;
-    await transcribeClip(clip, mediaSrc, currentSourceType, language, updateClip);
-  }, [clips, mediaSrc, currentSourceType, language, transcribeClip, updateClip]);
+    const targetClip = (focusedClip && focusedClip.id === clipId) ? focusedClip : clips.find(c => c.id === clipId);
+    if (!targetClip || !mediaSrc || !currentSourceType) {
+      console.warn("Transcribe: Target clip or media details not found", { clipId, targetClipId: targetClip?.id, mediaSrcExists: !!mediaSrc, currentSourceType });
+      toast({ variant: "destructive", title: "Cannot Transcribe", description: "Required media information is missing." });
+      return;
+    }
+    await transcribeClip(targetClip, mediaSrc, currentSourceType, language, updateClip);
+  }, [focusedClip, clips, mediaSrc, currentSourceType, language, transcribeClip, updateClip, toast]);
 
   const handleTranslate = useCallback(async (clipId: string, targetLanguage: string) => {
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return;
-    await translateClip(clip, targetLanguage, updateClip);
-  }, [clips, translateClip, updateClip]);
+    const targetClip = (focusedClip && focusedClip.id === clipId) ? focusedClip : clips.find(c => c.id === clipId);
+    if (!targetClip) {
+      console.warn("Translate: Target clip not found", { clipId });
+      toast({ variant: "destructive", title: "Cannot Translate", description: "Clip to translate not found." });
+      return;
+    }
+    await translateClip(targetClip, targetLanguage, updateClip);
+  }, [focusedClip, clips, translateClip, updateClip, toast]);
 
   const handleGetCorrections = useCallback(async (clipId: string) => {
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return;
-    await getCorrections(clip, updateClip);
-  }, [clips, getCorrections, updateClip]);
+    const targetClip = (focusedClip && focusedClip.id === clipId) ? focusedClip : clips.find(c => c.id === clipId);
+    if (!targetClip) {
+      console.warn("Get Corrections: Target clip not found", { clipId });
+      toast({ variant: "destructive", title: "Cannot Get Corrections", description: "Clip for corrections not found." });
+      return;
+    }
+    await getCorrections(targetClip, updateClip);
+  }, [focusedClip, clips, getCorrections, updateClip, toast]);
 
   // Custom clip creation
   const handleCreateFocusedClip = useCallback((startTime: number, endTime: number) => {
