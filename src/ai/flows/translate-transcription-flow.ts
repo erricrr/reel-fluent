@@ -114,7 +114,7 @@ async function translateWithProvider(
   }
 }
 
-const translateTranscriptionFlow = ai.defineFlow(
+const internalTranslateFlow = ai.defineFlow(
   {
     name: 'translateTranscriptionFlow',
     inputSchema: TranslateTranscriptionInputSchema,
@@ -192,4 +192,8 @@ const translateTranscriptionFlow = ai.defineFlow(
   }
 );
 
-export { translateTranscriptionFlow };
+export async function translateTranscriptionFlow(
+  input: TranslateTranscriptionInput
+): Promise<TranslateTranscriptionOutput> {
+  return await internalTranslateFlow(input);
+}

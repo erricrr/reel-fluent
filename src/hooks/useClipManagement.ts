@@ -155,10 +155,16 @@ export function useClipManagement(language: string) {
     if (savedClip) {
       // Merge field only if base value is empty/null but preserve active states
       const mergeField = (baseValue: any, savedValue: any) => {
-        if (baseValue === "Transcribing..." || baseValue === "Translating..." || baseValue === "Getting corrections...") {
-          return baseValue; // Preserve active AI tool states
+        // Always preserve active AI processing states
+        if (baseValue === "Transcribing..." || baseValue === "Translating..." || baseValue === "Comparing...") {
+          return baseValue;
         }
-        return baseValue || savedValue;
+        // For AI content, prefer saved value if it exists and is valid
+        if (savedValue && savedValue !== "Transcribing..." && savedValue !== "Translating..." && savedValue !== "Comparing..." && !savedValue.toString().startsWith("Error:")) {
+          return savedValue;
+        }
+        // Otherwise use base value
+        return baseValue;
       };
 
       return {
@@ -170,6 +176,7 @@ export function useClipManagement(language: string) {
         englishTranslation: mergeField(baseClip.englishTranslation, savedClip.englishTranslation),
         comparisonResult: mergeField(baseClip.comparisonResult, savedClip.comparisonResult),
         displayName: savedClip.displayName || baseClip.displayName,
+        language: savedClip.language || baseClip.language,
       };
     }
 

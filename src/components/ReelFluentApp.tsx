@@ -120,7 +120,10 @@ export default function ReelFluentApp() {
     transcribeClip,
     translateClip,
     getCorrections,
-    isAnyOperationInProgress
+    isAnyOperationInProgress,
+    isClipTranscribing,
+    isClipTranslating,
+    isClipGettingCorrections
   } = aiOperationsHook;
 
   // Sync AI operations with clip management
@@ -701,7 +704,7 @@ export default function ReelFluentApp() {
               {mediaSources.length < 3 && (
                 <div className={cn(
                   "w-full grid gap-4 sm:gap-6 transition-all duration-300 ease-in-out",
-                  "grid-cols-1 sm:grid-cols-[1fr_2fr] lg:grid-cols-[1fr_2fr]"
+                  "grid-cols-1 md:grid-cols-[1fr_2fr]"
                 )}>
                   <div className="space-y-4">
                     <LanguageSelector
@@ -759,13 +762,16 @@ export default function ReelFluentApp() {
               onRemoveClip={handleRemoveClip}
               onUserTranscriptionChange={handleUserTranscriptionChange}
               isYouTubeVideo={isYouTubeVideo}
-              language={currentClip.language || language}
+              language={language}
               isAudioSource={currentSourceType === 'audio'}
               clipSegmentationDuration={clipSegmentationDuration}
               onClipDurationChange={handleClipDurationChange}
               isLoadingMedia={isLoading}
               isSavingMedia={isSaving}
               isAnyClipTranscribing={isAnyClipTranscribing}
+              isCurrentClipTranscribing={currentClip ? isClipTranscribing(currentClip.id) : false}
+              isCurrentClipTranslating={currentClip ? isClipTranslating(currentClip.id) : false}
+              isCurrentClipComparing={currentClip ? isClipGettingCorrections(currentClip.id) : false}
               mediaDuration={mediaDuration}
               focusedClip={focusedClip}
               showClipTrimmer={showClipTrimmer}

@@ -59,7 +59,7 @@ const renderLanguageOptions = () =>
 
 // Mobile dropdown component
 const MobileLanguageSelector = ({ selectedLanguage, onLanguageChange, disabled }: LanguageSelectorProps) => (
-  <div className="sm:hidden">
+  <div className="md:hidden">
     <Select
       value={selectedLanguage}
       onValueChange={onLanguageChange}
@@ -85,7 +85,7 @@ const MobileLanguageSelector = ({ selectedLanguage, onLanguageChange, disabled }
 
 // Desktop language list component
 const DesktopLanguageSelector = ({ selectedLanguage, onLanguageChange, disabled, selectedRef }: LanguageSelectorProps & { selectedRef: React.RefObject<HTMLDivElement> }) => (
-  <div className="hidden sm:block">
+  <div className="hidden md:block">
     <ScrollArea className="h-[240px] w-full rounded-xl border bg-gradient-to-b from-background to-background/50">
       <div className="relative">
         <RadioGroup
