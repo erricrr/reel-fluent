@@ -35,6 +35,7 @@ import { useClipManagement } from "@/hooks/useClipManagement";
 import { useMediaProcessing } from "@/hooks/useMediaProcessing";
 import { useAIOperations } from "@/hooks/useAIOperations";
 import type { Clip } from '@/lib/videoUtils';
+import { hydrateClipWithAIData } from '@/lib/aiToolsHydration';
 
 export default function ReelFluentApp() {
   // Basic UI state
@@ -544,7 +545,8 @@ export default function ReelFluentApp() {
       handleSelectMediaSource(mediaSource.id);
     }
 
-    const loadedClip: Clip = {
+    // Hydrate the loaded clip with AI tools data from cache and session
+    let hydratedClip: Clip = {
       ...clipToLoad,
       id: clipToLoad.id || generateUniqueId(),
       startTime: clipToLoad.startTime,
@@ -558,31 +560,37 @@ export default function ReelFluentApp() {
       comparisonResult: clipToLoad.comparisonResult || null,
       isFocusedClip: true,
     };
+    try {
+      const aiToolsCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
+      hydratedClip = hydrateClipWithAIData(hydratedClip, clipToLoad.mediaSourceId, sessionClips, aiToolsCache);
+    } catch (e) {
+      // fallback: use the constructed hydratedClip as above
+    }
 
-    // Ensure AI tools cache is populated for this clip (DRY solution for session/navigation consistency)
-    if (clipToLoad.mediaSourceId && (clipToLoad.automatedTranscription || clipToLoad.translation || clipToLoad.englishTranslation || clipToLoad.comparisonResult)) {
+    // Ensure AI tools cache and unlock state are still updated for consistency
+    if (clipToLoad.mediaSourceId && (hydratedClip.automatedTranscription || hydratedClip.translation || hydratedClip.englishTranslation || hydratedClip.comparisonResult)) {
       const cacheKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
       const aiData: any = {};
 
-      if (clipToLoad.automatedTranscription) {
-        aiData.automatedTranscription = clipToLoad.automatedTranscription;
-        aiData.language = clipToLoad.language;
+      if (hydratedClip.automatedTranscription) {
+        aiData.automatedTranscription = hydratedClip.automatedTranscription;
+        aiData.language = hydratedClip.language;
       }
-      if (clipToLoad.translation) {
-        aiData.translation = clipToLoad.translation;
-        aiData.translationTargetLanguage = clipToLoad.translationTargetLanguage;
+      if (hydratedClip.translation) {
+        aiData.translation = hydratedClip.translation;
+        aiData.translationTargetLanguage = hydratedClip.translationTargetLanguage;
       }
-      if (clipToLoad.englishTranslation) {
-        aiData.englishTranslation = clipToLoad.englishTranslation;
+      if (hydratedClip.englishTranslation) {
+        aiData.englishTranslation = hydratedClip.englishTranslation;
         aiData.translationTargetLanguage = "english";
       }
-      if (clipToLoad.comparisonResult) {
-        aiData.comparisonResult = clipToLoad.comparisonResult;
+      if (hydratedClip.comparisonResult) {
+        aiData.comparisonResult = hydratedClip.comparisonResult;
       }
 
       // Update AI tools cache directly to ensure consistency
       try {
-        const currentCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
+        const currentCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}" );
         currentCache[cacheKey] = { ...currentCache[cacheKey], ...aiData };
         localStorage.setItem("reel-fluent-ai-tools-cache", JSON.stringify(currentCache));
       } catch (error) {
@@ -592,7 +600,7 @@ export default function ReelFluentApp() {
       // Also unlock the clip if it has AI data
       try {
         const unlockKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
-        const unlockState = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-unlock-state") || "{}");
+        const unlockState = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-unlock-state") || "{}" );
         unlockState[unlockKey] = true;
         localStorage.setItem("reel-fluent-ai-tools-unlock-state", JSON.stringify(unlockState));
       } catch (error) {
@@ -601,16 +609,16 @@ export default function ReelFluentApp() {
 
       // CRITICAL: Update the current clip data with AI tools results
       // This ensures the AI tools show up immediately when clip is loaded from saved attempts
-      updateClipData(loadedClip.id, aiData);
+      updateClipData(hydratedClip.id, aiData);
     }
 
-    setFocusedClip(loadedClip);
+    setFocusedClip(hydratedClip);
 
     toast({
       title: "Clip Loaded",
       description: `Loaded "${clipToLoad.displayName || 'Unnamed Clip'}" (${formatSecondsToMMSS(clipToLoad.startTime)} - ${formatSecondsToMMSS(clipToLoad.endTime)})`,
     });
-  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, language, toast, handleSelectMediaSource, setFocusedClip, updateClipData]);
+  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, language, toast, handleSelectMediaSource, setFocusedClip, updateClipData, sessionClips]);
 
   const handleRemoveFromSession = useCallback((clipId: string) => {
     removeSessionClip(clipId);

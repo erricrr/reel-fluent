@@ -15,6 +15,7 @@ import ClipOptionsDropdown from "./ClipOptionsDropdown";
 import type { Clip } from '@/lib/videoUtils';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { hydrateClipWithAIData } from '@/lib/aiToolsHydration';
 
 // Import the new extracted components
 import MediaControls from "./transcription/MediaControls";
@@ -200,13 +201,21 @@ export default function TranscriptionWorkspace({
 
   // Reset state when clip changes
   useEffect(() => {
-    setUserTranscriptionInput(currentClip.userTranscription || "");
-    setTranslationTargetLanguage(currentClip.translationTargetLanguage || "english");
+    // Hydrate the currentClip with AI tools data from cache/session
+    let hydratedClip = currentClip;
+    try {
+      const aiToolsCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
+      hydratedClip = hydrateClipWithAIData(currentClip, activeMediaSourceId, sessionClips, aiToolsCache);
+    } catch (e) {
+      // fallback: use currentClip as is
+    }
+    setUserTranscriptionInput(hydratedClip.userTranscription || "");
+    setTranslationTargetLanguage(hydratedClip.translationTargetLanguage || "english");
     // Only reset playback time when the actual clip changes, not when sessionClips update
-    setCurrentPlaybackTime(currentClip?.startTime || 0);
+    setCurrentPlaybackTime(hydratedClip?.startTime || 0);
     setPlaybackRate(1.0);
     setPreviewClip(null);
-  }, [currentClip?.id || null, currentClip?.startTime || 0, currentClip?.endTime || 0]); // Ensure consistent array size
+  }, [currentClip?.id, currentClip?.startTime, currentClip?.endTime, activeMediaSourceId, sessionClips.length]);
 
   // Separate effect for checking if clip is saved (doesn't reset playback)
   useEffect(() => {
