@@ -260,31 +260,36 @@ export default function ClipTrimmer({
             variant="outline"
             onClick={handlePreviewClip}
             disabled={disabled || !isValidClip}
-            className="w-full border-primary/30 text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40 shadow-sm hover:shadow-md transition-all duration-300"
+            className="w-full border-primary/30 text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/40 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
           >
-            {isPreviewPlaying ? (
-              <>
-                <Pause className="mr-2 h-4 w-4" />
-                Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)}{" "}
-                remaining)
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" />
-                Preview Clip
-              </>
-            )}
+            <div className="flex items-center w-full justify-center truncate">
+              {isPreviewPlaying ? (
+                <>
+                  <Pause className="mr-2 h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">
+                    Stop Preview ({formatSecondsToMMSS(previewTimeRemaining)} remaining)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-4 w-4 flex-shrink-0" />
+                  <span>Preview Clip</span>
+                </>
+              )}
+            </div>
           </Button>
 
           <Button
             onClick={handleCreateTrimmedClip}
             disabled={disabled || !isValidClip}
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/30 hover:ring-primary/50 transition-all duration-300"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl ring-2 ring-primary/30 hover:ring-primary/50 transition-all duration-300 overflow-hidden"
           >
-            <Scissors className="mr-2 h-4 w-4" />
-            {disabled
-              ? "Create Custom Clip"
-              : `Create Focused Clip (${formatSecondsToMMSS(clipDuration)})`}
+            <div className="flex items-center w-full justify-center truncate">
+              <Scissors className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="truncate">
+                {disabled ? "Create Custom Clip" : `Create Focused Clip (${formatSecondsToMMSS(clipDuration)})`}
+              </span>
+            </div>
           </Button>
 
           {!isValidClip && !disabled && (

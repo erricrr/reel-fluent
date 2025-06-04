@@ -254,7 +254,7 @@ const MediaControls = ({
   </div>
 );
 
-// Helper function to determine if  should be enabled
+// Helper function to determine if AI tools should be enabled
 const shouldEnableAITools = (userInput: string, automatedTranscription?: string | null, userActivelyUsingAITools: boolean = false): boolean => {
   const hasTranscription = userInput.trim().length > 0;
   const hasExistingTranscription = Boolean(
@@ -292,6 +292,79 @@ const updateAIToolsCache = (key: string, data: any): void => {
   } catch (e) {
     console.error("Error updating AI tools cache:", e);
   }
+};
+
+// Helper function to clear specific cached data
+const clearAIToolsCacheForClip = (key: string, fieldsToRemove: string[]): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    const cache = getAIToolsCache();
+    if (cache[key]) {
+      fieldsToRemove.forEach(field => {
+        delete cache[key][field];
+      });
+      localStorage.setItem(AI_TOOLS_CACHE_KEY, JSON.stringify(cache));
+    }
+  } catch (e) {
+    console.error("Error clearing AI tools cache:", e);
+  }
+};
+
+// Helper function to get comprehensive transcription data from all sources
+const getComprehensiveTranscriptionData = (
+  currentClip: Clip,
+  userTranscriptionInput: string,
+  sessionClips: SessionClip[],
+  activeMediaSourceId: string | null,
+  localCache: Record<string, any>
+): {
+  userTranscription: string;
+  automatedTranscription: string | null;
+  hasValidUserTranscription: boolean;
+  hasValidAutomatedTranscription: boolean;
+  isTranscriptionSaved: boolean;
+} => {
+  // Get user transcription from multiple sources
+  const localUserTranscription = userTranscriptionInput.trim();
+  const clipUserTranscription = currentClip.userTranscription?.trim() || "";
+
+  // Check session data
+  const savedClip = sessionClips?.find(sessionClip =>
+    activeMediaSourceId &&
+    sessionClip.mediaSourceId === activeMediaSourceId &&
+    sessionClip.startTime === currentClip.startTime &&
+    sessionClip.endTime === currentClip.endTime
+  );
+  const sessionUserTranscription = savedClip?.userTranscription?.trim() || "";
+
+  // Priority: local input > session data > clip data
+  const finalUserTranscription = localUserTranscription || sessionUserTranscription || clipUserTranscription;
+
+  // Get automated transcription from multiple sources
+  const clipAutomatedTranscription = currentClip.automatedTranscription;
+  const cacheKey = activeMediaSourceId ? `${activeMediaSourceId}-${currentClip.id}` : null;
+  const cachedAutomatedTranscription = cacheKey ? localCache[cacheKey]?.automatedTranscription : null;
+  const sessionAutomatedTranscription = savedClip?.automatedTranscription;
+
+  // Priority: current clip > session data > cache
+  const finalAutomatedTranscription = clipAutomatedTranscription || sessionAutomatedTranscription || cachedAutomatedTranscription || null;
+
+  const hasValidUserTranscription = finalUserTranscription.length > 0;
+  const hasValidAutomatedTranscription = Boolean(
+    finalAutomatedTranscription &&
+    finalAutomatedTranscription !== "Transcribing..." &&
+    !finalAutomatedTranscription.startsWith("Error:")
+  );
+
+  const isTranscriptionSaved = Boolean(savedClip) || Boolean(sessionUserTranscription);
+
+  return {
+    userTranscription: finalUserTranscription,
+    automatedTranscription: finalAutomatedTranscription,
+    hasValidUserTranscription,
+    hasValidAutomatedTranscription,
+    isTranscriptionSaved
+  };
 };
 
 export default function TranscriptionWorkspace({
@@ -341,6 +414,7 @@ export default function TranscriptionWorkspace({
   const [localTranscribingState, setLocalTranscribingState] = useState<string | null>(null);
   const [userActivelyUsingAITools, setUserActivelyUsingAITools] = useState(false);
   const [aiToolsButtonClicked, setAiToolsButtonClicked] = useState(false);
+  const [lastUserTranscriptionForComparison, setLastUserTranscriptionForComparison] = useState<string>("");
   const { toast } = useToast();
 
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
@@ -562,8 +636,27 @@ export default function TranscriptionWorkspace({
 
   const handleUserInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
+    const previousValue = userTranscriptionInput;
+
     setUserTranscriptionInput(newValue);
     setIsTranscriptionSaved(false); // Any change invalidates saved state for current edit
+
+    // CRITICAL: Clear comparison results when user transcription changes significantly
+    // This ensures stale comparison data doesn't persist
+    if (activeMediaSourceId && currentClip && previousValue.trim() !== newValue.trim()) {
+      const clipCacheKey = `${activeMediaSourceId}-${currentClip.id}`;
+
+      // Clear comparison results from cache
+      clearAIToolsCacheForClip(clipCacheKey, ['comparisonResult']);
+
+      // Clear comparison results from parent component
+      if (onUpdateClipData) {
+        onUpdateClipData(currentClip.id, { comparisonResult: null });
+      }
+
+      // Update the tracking variable
+      setLastUserTranscriptionForComparison(newValue.trim());
+    }
   };
 
   // Add autosave functionality for AI tools
@@ -649,13 +742,18 @@ export default function TranscriptionWorkspace({
     });
   };
 
-  // Modify the translate handler to include autosave
+  // Enhanced translate handler with comprehensive validation and auto-save
   const handleTranslate = async () => {
-    const currentAutomatedTranscription = currentClip.automatedTranscription;
+    // Get comprehensive data from all sources
+    const comprehensiveData = getComprehensiveTranscriptionData(
+      currentClip,
+      userTranscriptionInput,
+      sessionClips,
+      activeMediaSourceId ?? null,
+      localAIToolsCache.current
+    );
 
-    if (!currentAutomatedTranscription ||
-        currentAutomatedTranscription === "Transcribing..." ||
-        currentAutomatedTranscription.startsWith("Error:")) {
+    if (!comprehensiveData.hasValidAutomatedTranscription) {
       toast({
         variant: "destructive",
         title: "No Text to Translate",
@@ -706,32 +804,28 @@ export default function TranscriptionWorkspace({
     });
   };
 
-  // Modify the corrections handler to include autosave
+  // Enhanced corrections handler with comprehensive validation and auto-save
   const handleGetCorrections = useCallback(async () => {
-    if (!isTranscriptionSaved) {
-      toast({
-        variant: "destructive",
-        title: "Save Required",
-        description: "Please save your transcription before comparing with AI."
-      });
-      return;
-    }
+    // Get comprehensive data from all sources
+    const comprehensiveData = getComprehensiveTranscriptionData(
+      currentClip,
+      userTranscriptionInput,
+      sessionClips,
+      activeMediaSourceId ?? null,
+      localAIToolsCache.current
+    );
 
-    const currentUserTranscription = userTranscriptionInput.trim() || currentClip.userTranscription?.trim() || "";
-    const currentAutomatedTranscription = currentClip.automatedTranscription;
-
-    if (!currentUserTranscription) {
+    // Enhanced validation that checks all data sources
+    if (!comprehensiveData.hasValidUserTranscription) {
       toast({
         variant: "destructive",
         title: "Missing User Transcription",
-        description: "Please enter your transcription before comparing with AI."
+        description: "Please enter and save your transcription before comparing with AI."
       });
       return;
     }
 
-    if (!currentAutomatedTranscription ||
-        currentAutomatedTranscription.startsWith("Error:") ||
-        currentAutomatedTranscription === "Transcribing...") {
+    if (!comprehensiveData.hasValidAutomatedTranscription) {
       toast({
         variant: "destructive",
         title: "Missing AI Transcription",
@@ -740,6 +834,7 @@ export default function TranscriptionWorkspace({
       return;
     }
 
+    // Check if we already have valid comparison results
     if (currentClip.comparisonResult &&
         Array.isArray(currentClip.comparisonResult) &&
         currentClip.comparisonResult.length > 0 &&
@@ -767,6 +862,9 @@ export default function TranscriptionWorkspace({
           handleAutoSave(currentClip.id, {
             comparisonResult: currentClip.comparisonResult
           });
+
+          // Update the tracking variable
+          setLastUserTranscriptionForComparison(comprehensiveData.userTranscription);
         }
 
       } catch (error) {
@@ -775,7 +873,7 @@ export default function TranscriptionWorkspace({
         setTimeout(() => setAiToolsButtonClicked(false), 2000);
       }
     });
-  }, [currentClip, userTranscriptionInput, onGetCorrections, isTranscriptionSaved, withAIToolsProtection, toast, handleAutoSave]);
+  }, [currentClip, userTranscriptionInput, onGetCorrections, sessionClips, activeMediaSourceId, withAIToolsProtection, toast, handleAutoSave]);
 
   const togglePlayPause = () => {
     if (!videoPlayerRef.current) return;
@@ -1299,8 +1397,38 @@ export default function TranscriptionWorkspace({
 
   const disableTextarea = isLoadingMedia || isSavingMedia;
   const disableCurrentClipAIActions = isAutomatedTranscriptionLoading || isLoadingMedia || isSavingMedia;
-  const canGetCorrections = userTranscriptionInput.trim() && currentClip.automatedTranscription && !isAutomatedTranscriptionError;
-  const canTranslate = currentClip.automatedTranscription && !isAutomatedTranscriptionError && !isAutomatedTranscriptionLoading;
+
+  // CRITICAL FIX: Use comprehensive validation that checks ALL data sources
+  const comprehensiveValidationData = useMemo(() => {
+    const data = getComprehensiveTranscriptionData(
+      currentClip,
+      userTranscriptionInput,
+      sessionClips,
+      activeMediaSourceId ?? null,
+      localAIToolsCache.current
+    );
+
+    // Debug logging to help troubleshoot validation issues
+    console.log(`Comprehensive validation for clip ${currentClip.id}:`, {
+      hasValidUserTranscription: data.hasValidUserTranscription,
+      hasValidAutomatedTranscription: data.hasValidAutomatedTranscription,
+      isTranscriptionSaved: data.isTranscriptionSaved,
+      userTranscription: data.userTranscription.substring(0, 50) + (data.userTranscription.length > 50 ? '...' : ''),
+      automatedTranscription: data.automatedTranscription?.substring(0, 50) + (data.automatedTranscription && data.automatedTranscription.length > 50 ? '...' : ''),
+      activeMediaSourceId,
+      sessionClipsCount: sessionClips.length,
+      localCacheKeys: Object.keys(localAIToolsCache.current)
+    });
+
+    return data;
+  }, [currentClip, userTranscriptionInput, sessionClips, activeMediaSourceId]);
+
+  const canGetCorrections = comprehensiveValidationData.hasValidUserTranscription &&
+                           comprehensiveValidationData.hasValidAutomatedTranscription &&
+                           !isAutomatedTranscriptionError;
+  const canTranslate = comprehensiveValidationData.hasValidAutomatedTranscription &&
+                      !isAutomatedTranscriptionError &&
+                      !isAutomatedTranscriptionLoading;
 
   const aiToolsEnabled = shouldEnableAITools(userTranscriptionInput, currentClip.automatedTranscription, userActivelyUsingAITools);
 
