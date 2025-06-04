@@ -205,25 +205,34 @@ export default function AIToolsTab({
         await onTranslate(currentClip.id, translationTargetLanguage);
 
         // Auto-save the result if successful
-        if (currentClip.translation &&
-            !currentClip.translation.startsWith("Error:") &&
-            currentClip.translation !== "Translating...") {
-
-          performAutoSave({
-            translation: currentClip.translation,
-            translationTargetLanguage
-          }, "Translation");
-        } else if (currentClip.englishTranslation &&
-                  !currentClip.englishTranslation.startsWith("Error:") &&
-                  currentClip.englishTranslation !== "Translating...") {
-
-          performAutoSave({
-            englishTranslation: currentClip.englishTranslation,
-            translationTargetLanguage: "english"
-          }, "Translation");
+        if (translationTargetLanguage === 'english') {
+          if (currentClip.englishTranslation &&
+              !currentClip.englishTranslation.startsWith("Error:") &&
+              currentClip.englishTranslation !== "Translating...") {
+            performAutoSave({
+              englishTranslation: currentClip.englishTranslation,
+              translationTargetLanguage: "english" // Explicitly set for clarity
+            }, "Translation");
+          }
+        } else {
+          if (currentClip.translation &&
+              !currentClip.translation.startsWith("Error:") &&
+              currentClip.translation !== "Translating...") {
+            performAutoSave({
+              translation: currentClip.translation,
+              translationTargetLanguage // This will be the non-English target
+            }, "Translation");
+          }
         }
       } catch (error) {
         console.warn("Translation error:", error);
+        // Error handling for onTranslate itself is done within useAIOperations, toast shown there.
+        // This catch is for potential errors in the withAIToolsProtection wrapper or performAutoSave.
+        toast({
+          variant: "destructive",
+          title: "Operation Error",
+          description: "An unexpected error occurred during the AI tool operation.",
+        });
       } finally {
         setTimeout(() => aiToolsState.setAiToolsButtonClicked(false), 2000);
       }
@@ -231,15 +240,17 @@ export default function AIToolsTab({
   }, [currentClip, translationTargetLanguage, onTranslate, toast, aiToolsState, performAutoSave]);
 
   const getTranslationForCurrentTarget = (): string | null | undefined => {
-    if (currentClip.translation !== undefined && currentClip.translationTargetLanguage === translationTargetLanguage) {
-      return currentClip.translation;
-    }
-
-    if (translationTargetLanguage === 'english' && currentClip.englishTranslation !== undefined) {
+    if (translationTargetLanguage === 'english') {
+      // For English, primarily use englishTranslation.
+      // Check undefined because null means it was explicitly cleared or no translation.
+      // "Translating..." or "Error..." are valid intermediate states.
       return currentClip.englishTranslation;
     }
-
-    return null;
+    // For other languages, use the generic translation field if the target language matches.
+    if (currentClip.translationTargetLanguage === translationTargetLanguage) {
+      return currentClip.translation;
+    }
+    return undefined; // Return undefined if no relevant translation is found for the current target
   };
 
   const renderCorrectionToken = (token: CorrectionToken, index: number) => {
@@ -282,7 +293,11 @@ export default function AIToolsTab({
   // Derived state for UI
   const isAutomatedTranscriptionError = currentClip.automatedTranscription && currentClip.automatedTranscription.startsWith("Error:");
   const isAutomatedTranscriptionLoading = currentClip.automatedTranscription === "Transcribing...";
-  const isTranslationLoading = currentClip.englishTranslation === "Translating..." || currentClip.translation === "Translating...";
+
+  const isTranslationLoading =
+    (translationTargetLanguage === 'english' && currentClip.englishTranslation === "Translating...") ||
+    (translationTargetLanguage !== 'english' && currentClip.translation === "Translating..." && currentClip.translationTargetLanguage === translationTargetLanguage);
+
   const isCorrectionsLoading = Array.isArray(currentClip.comparisonResult) &&
     currentClip.comparisonResult.length === 1 &&
     currentClip.comparisonResult[0].token === "Comparing...";
@@ -375,12 +390,12 @@ export default function AIToolsTab({
             <Captions className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
             <span className="hidden md:inline">
               {hasValidAutomatedTranscription ? "Already Transcribed" :
-               isAnyClipTranscribing ? "Transcribing..." :
+               isCurrentClipTranscribing ? "Transcribing..." :
                focusedClip ? "Transcribe Focused Clip" : `Transcribe Clip ${currentClipIndex + 1}`}
             </span>
             <span className="md:hidden">
               {hasValidAutomatedTranscription ? "Completed" :
-               isAnyClipTranscribing ? "Transcribing..." : "Transcribe"}
+               isCurrentClipTranscribing ? "Transcribing..." : "Transcribe"}
             </span>
           </Button>
           <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50" resizable>

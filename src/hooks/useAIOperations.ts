@@ -39,6 +39,7 @@ export function useAIOperations() {
       return;
     }
 
+    let errorMessage = "Failed to transcribe audio"; // Default error message
     try {
       // Add to transcribing set
       setTranscribingClips(prev => new Set(prev).add(clip.id));
@@ -56,7 +57,8 @@ export function useAIOperations() {
       );
 
       if (!audioDataUri) {
-        throw new Error("Failed to extract audio from the media segment");
+        errorMessage = "Failed to extract audio from the media segment";
+        throw new Error(errorMessage);
       }
 
       // Transcribe - use the correct input format
@@ -79,14 +81,21 @@ export function useAIOperations() {
 
     } catch (error) {
       console.error('Transcription error:', error);
+      if (error instanceof Error && error.message !== errorMessage) { // If a more specific error was set
+        errorMessage = error.message;
+      } else if (error instanceof Error) {
+        // Keep default if it's a generic error not caught by previous specific message
+         errorMessage = error.message; // Or stick to the default "Failed to transcribe audio"
+      }
+      // else: errorMessage remains the default
 
-      // Clear loading state
-      onUpdate(clip.id, { automatedTranscription: null });
+      // Update clip with error state
+      onUpdate(clip.id, { automatedTranscription: `Error: ${errorMessage}` });
 
       toast({
         variant: "destructive",
         title: "Transcription Failed",
-        description: error instanceof Error ? error.message : "Failed to transcribe audio",
+        description: errorMessage,
       });
     } finally {
       // Remove from transcribing set
@@ -122,27 +131,37 @@ export function useAIOperations() {
     }
 
     try {
-      // Add to translating set
       setTranslatingClips(prev => new Set(prev).add(clip.id));
 
-      // Set loading state
-      onUpdate(clip.id, {
-        translation: "Translating...",
-        translationTargetLanguage: targetLanguage
-      });
+      if (targetLanguage === 'english') {
+        onUpdate(clip.id, {
+          englishTranslation: "Translating...",
+          translationTargetLanguage: targetLanguage
+        });
+      } else {
+        onUpdate(clip.id, {
+          translation: "Translating...",
+          translationTargetLanguage: targetLanguage
+        });
+      }
 
-      // Translate - use the correct input format
       const result = await translateTranscriptionFlow({
         originalTranscription: clip.automatedTranscription,
         sourceLanguage: clip.language || 'unknown',
         targetLanguage: targetLanguage
       });
 
-      // Update clip with result - extract translatedText from result object
-      onUpdate(clip.id, {
-        translation: result.translatedText,
-        translationTargetLanguage: targetLanguage
-      });
+      if (targetLanguage === 'english') {
+        onUpdate(clip.id, {
+          englishTranslation: result.translatedText,
+          translationTargetLanguage: targetLanguage
+        });
+      } else {
+        onUpdate(clip.id, {
+          translation: result.translatedText,
+          translationTargetLanguage: targetLanguage
+        });
+      }
 
       toast({
         title: "Translation Complete",
@@ -151,20 +170,26 @@ export function useAIOperations() {
 
     } catch (error) {
       console.error('Translation error:', error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to translate text";
 
-      // Clear loading state
-      onUpdate(clip.id, {
-        translation: null,
-        translationTargetLanguage: null
-      });
+      if (targetLanguage === 'english') {
+        onUpdate(clip.id, {
+          englishTranslation: `Error: ${errorMessage}`,
+          translationTargetLanguage: targetLanguage
+        });
+      } else {
+        onUpdate(clip.id, {
+          translation: `Error: ${errorMessage}`,
+          translationTargetLanguage: targetLanguage
+        });
+      }
 
       toast({
         variant: "destructive",
         title: "Translation Failed",
-        description: error instanceof Error ? error.message : "Failed to translate text",
+        description: errorMessage,
       });
     } finally {
-      // Remove from translating set
       setTranslatingClips(prev => {
         const newSet = new Set(prev);
         newSet.delete(clip.id);
