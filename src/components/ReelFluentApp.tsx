@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Header from "./Header";
 import VideoInputForm from "./VideoInputForm";
 import LanguageSelector from "./LanguageSelector";
@@ -140,6 +140,10 @@ export default function ReelFluentApp() {
   // Current clip - use focused clip if available, otherwise use indexed clip
   const currentClip = focusedClip || (enhancedClips[currentClipIndex] || null);
   const isYouTubeVideo = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
+
+  // Drawer refs
+  const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Utility functions
   const generateUniqueId = () => {
@@ -548,21 +552,28 @@ export default function ReelFluentApp() {
       toast({
         variant: "destructive",
         title: "Media Not Found",
-        description: "The media source for this clip is no longer available.",
+        description: "The media associated with this saved clip could not be found.",
       });
       return;
     }
 
-    if (mediaSource.id !== activeMediaSourceId) {
-      handleSelectMediaSource(mediaSource.id);
+    if (activeMediaSourceId !== clipToLoad.mediaSourceId) {
+      handleSelectMediaSource(mediaSource.id); // Pass the ID (string)
+      toast({
+        title: "Media Source Switched",
+        description: `Switched to "${mediaSource.displayName}". Please click the saved clip again to load it.`,
+        duration: 5000,
+      });
+      if (drawerCloseRef.current) {
+        drawerCloseRef.current.click();
+      }
+      return;
     }
 
-    // Hydrate the loaded clip with AI tools data from cache and session
-    let hydratedClip: Clip = {
+    let clipToHydrate: Clip = {
       ...clipToLoad,
       id: clipToLoad.id || generateUniqueId(),
-      startTime: clipToLoad.startTime,
-      endTime: clipToLoad.endTime,
+      isFocusedClip: true,
       language: clipToLoad.language || language,
       userTranscription: clipToLoad.userTranscription || "",
       automatedTranscription: clipToLoad.automatedTranscription || null,
@@ -570,67 +581,65 @@ export default function ReelFluentApp() {
       translationTargetLanguage: clipToLoad.translationTargetLanguage || null,
       englishTranslation: clipToLoad.englishTranslation || null,
       comparisonResult: clipToLoad.comparisonResult || null,
-      isFocusedClip: true,
     };
-    try {
-      const aiToolsCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
-      hydratedClip = hydrateClipWithAIData(hydratedClip, clipToLoad.mediaSourceId, sessionClips, aiToolsCache);
-    } catch (e) {
-      // fallback: use the constructed hydratedClip as above
-    }
 
-    // Ensure AI tools cache and unlock state are still updated for consistency
-    if (clipToLoad.mediaSourceId && (hydratedClip.automatedTranscription || hydratedClip.translation || hydratedClip.englishTranslation || hydratedClip.comparisonResult)) {
-      const cacheKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
-      const aiData: any = {};
-
-      if (hydratedClip.automatedTranscription) {
-        aiData.automatedTranscription = hydratedClip.automatedTranscription;
-        aiData.language = hydratedClip.language;
-      }
-      if (hydratedClip.translation) {
-        aiData.translation = hydratedClip.translation;
-        aiData.translationTargetLanguage = hydratedClip.translationTargetLanguage;
-      }
-      if (hydratedClip.englishTranslation) {
-        aiData.englishTranslation = hydratedClip.englishTranslation;
-        aiData.translationTargetLanguage = "english";
-      }
-      if (hydratedClip.comparisonResult) {
-        aiData.comparisonResult = hydratedClip.comparisonResult;
-      }
-
-      // Update AI tools cache directly to ensure consistency
-      try {
-        const currentCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}" );
-        currentCache[cacheKey] = { ...currentCache[cacheKey], ...aiData };
-        localStorage.setItem("reel-fluent-ai-tools-cache", JSON.stringify(currentCache));
-      } catch (error) {
-        console.warn("Failed to update AI tools cache:", error);
-      }
-
-      // Also unlock the clip if it has AI data
-      try {
-        const unlockKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
-        const unlockState = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-unlock-state") || "{}" );
-        unlockState[unlockKey] = true;
-        localStorage.setItem("reel-fluent-ai-tools-unlock-state", JSON.stringify(unlockState));
-      } catch (error) {
-        console.warn("Failed to update unlock state:", error);
-      }
-
-      // CRITICAL: Update the current clip data with AI tools results
-      // This ensures the AI tools show up immediately when clip is loaded from saved attempts
-      updateClipData(hydratedClip.id, aiData);
-    }
+    const hydratedClip = hydrateClipWithAIData(
+      clipToHydrate,
+      clipToLoad.mediaSourceId,
+      sessionClips,
+      getAIToolsCache()
+    );
 
     setFocusedClip(hydratedClip);
+    setShowClipTrimmer(false);
+
+    if (clipToLoad.mediaSourceId && (hydratedClip.automatedTranscription || hydratedClip.translation || hydratedClip.englishTranslation || hydratedClip.comparisonResult)) {
+      const cacheKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
+      const aiDataToCache: Partial<Clip> = {};
+      if (hydratedClip.automatedTranscription) aiDataToCache.automatedTranscription = hydratedClip.automatedTranscription;
+      if (hydratedClip.language) aiDataToCache.language = hydratedClip.language;
+      if (hydratedClip.translation) aiDataToCache.translation = hydratedClip.translation;
+      if (hydratedClip.translationTargetLanguage) aiDataToCache.translationTargetLanguage = hydratedClip.translationTargetLanguage;
+      if (hydratedClip.englishTranslation) aiDataToCache.englishTranslation = hydratedClip.englishTranslation;
+      if (hydratedClip.comparisonResult) aiDataToCache.comparisonResult = hydratedClip.comparisonResult;
+
+      if (Object.keys(aiDataToCache).length > 0) {
+        try {
+          const currentCache = getAIToolsCache();
+          currentCache[cacheKey] = { ...currentCache[cacheKey], ...aiDataToCache };
+          localStorage.setItem("reel-fluent-ai-tools-cache", JSON.stringify(currentCache));
+        } catch (error) {
+          console.warn("Failed to update AI tools cache on load from session:", error);
+        }
+      }
+      updateClipData(hydratedClip.id, aiDataToCache);
+    }
 
     toast({
       title: "Clip Loaded",
       description: `Loaded "${clipToLoad.displayName || 'Unnamed Clip'}" (${formatSecondsToMMSS(clipToLoad.startTime)} - ${formatSecondsToMMSS(clipToLoad.endTime)})`,
     });
-  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, language, toast, handleSelectMediaSource, setFocusedClip, updateClipData, sessionClips]);
+
+    if (drawerCloseRef.current) {
+      drawerCloseRef.current.click();
+    }
+    if (playerContainerRef.current) {
+      playerContainerRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [
+    isAnyClipTranscribing,
+    mediaSources,
+    activeMediaSourceId,
+    sessionClips,
+    toast,
+    handleSelectMediaSource,
+    setFocusedClip,
+    setShowClipTrimmer,
+    language,
+    updateClipData,
+    drawerCloseRef,
+    playerContainerRef,
+  ]);
 
   const handleRemoveFromSession = useCallback((clipId: string) => {
     removeSessionClip(clipId);
@@ -755,6 +764,17 @@ export default function ReelFluentApp() {
       }
     }
   }, [mediaDuration, activeMediaSourceId, mediaSources, updateMediaSource]);
+
+  function getAIToolsCache(): Record<string, any> {
+    if (typeof window === 'undefined') return {};
+    try {
+      const cached = localStorage.getItem("reel-fluent-ai-tools-cache");
+      return cached ? JSON.parse(cached) : {};
+    } catch (e) {
+      console.error("Error reading AI tools cache from ReelFluentApp:", e);
+      return {};
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">

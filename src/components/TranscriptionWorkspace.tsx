@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CircleCheckBig, GripVertical, Eye, Scissors, Focus, Lock, Unlock } from "lucide-react";
+import { CircleCheckBig, GripVertical, Eye, Scissors, Focus, Lock, Unlock, Sparkles } from "lucide-react";
 import ClipNavigation from "./ClipNavigation";
 import ClipDurationSelector from "./ClipDurationSelector";
 import ClipTrimmer from "./ClipTrimmer";
@@ -81,7 +81,7 @@ const isMobileBrowser = (): boolean => {
 };
 
 export default function TranscriptionWorkspace({
-  currentClip,
+  currentClip: initialCurrentClip,
   clips,
   mediaSrc,
   currentClipIndex,
@@ -124,28 +124,30 @@ export default function TranscriptionWorkspace({
   const startWidth = useRef(0);
 
   // Core state
-  const [userTranscriptionInput, setUserTranscriptionInput] = useState(currentClip.userTranscription || "");
+  const [userTranscriptionInput, setUserTranscriptionInput] = useState(initialCurrentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [hasUserManuallyChangedTab, setHasUserManuallyChangedTab] = useState(false);
   const [isTranscriptionSaved, setIsTranscriptionSaved] = useState(false);
 
+  // State for the fully hydrated clip to be used by child components
+  const [displayClip, setDisplayClip] = useState<Clip>(initialCurrentClip);
+
   // Media playback state
   const [isCurrentClipPlaying, setIsCurrentClipPlaying] = useState(false);
-  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(currentClip?.startTime || 0);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(initialCurrentClip?.startTime || 0);
   const [isLooping, setIsLooping] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [translationTargetLanguage, setTranslationTargetLanguage] = useState(currentClip.translationTargetLanguage || "english");
+  const [translationTargetLanguage, setTranslationTargetLanguage] = useState(initialCurrentClip.translationTargetLanguage || "english");
   const [previewClip, setPreviewClip] = useState<{ startTime: number; endTime: number } | null>(null);
   const [isInPreviewMode, setIsInPreviewMode] = useState(false);
 
   // AI Tools state management
   const aiToolsState = useAIToolsState({
-    currentClip,
+    currentClip: displayClip,
     sessionClips,
     activeMediaSourceId,
     onUpdateClipData,
     onSaveToSession,
-    canSaveToSession,
     userTranscriptionInput,
     language
   });
@@ -199,43 +201,58 @@ export default function TranscriptionWorkspace({
     document.body.style.userSelect = 'none';
   };
 
-  // Reset state when clip changes
+  // Reset state when clip changes (mainly for displayClip hydration)
   useEffect(() => {
-    // Hydrate the currentClip with AI tools data from cache/session
-    let hydratedClip = currentClip;
+    let hydratedClip = initialCurrentClip;
+    if (!hydratedClip) {
+      // If initialCurrentClip is null/undefined, try to create a default empty clip structure
+      // to prevent errors, though this scenario should ideally be handled upstream.
+      setDisplayClip({ id: '', startTime: 0, endTime: 0 });
+      return;
+    }
     try {
       const aiToolsCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
-      hydratedClip = hydrateClipWithAIData(currentClip, activeMediaSourceId, sessionClips, aiToolsCache);
+      hydratedClip = hydrateClipWithAIData(initialCurrentClip, activeMediaSourceId, sessionClips, aiToolsCache);
     } catch (e) {
-      // fallback: use currentClip as is
+      console.warn("Error hydrating clip in TranscriptionWorkspace:", e);
+      hydratedClip = initialCurrentClip; // Fallback
     }
-    setUserTranscriptionInput(hydratedClip.userTranscription || "");
-    setTranslationTargetLanguage(hydratedClip.translationTargetLanguage || "english");
-    // Only reset playback time when the actual clip changes, not when sessionClips update
-    setCurrentPlaybackTime(hydratedClip?.startTime || 0);
-    setPlaybackRate(1.0);
-    setPreviewClip(null);
-  }, [currentClip?.id, currentClip?.startTime, currentClip?.endTime, activeMediaSourceId, sessionClips.length]);
+    setDisplayClip(hydratedClip);
+    // DO NOT set userTranscriptionInput or other UI states here directly from hydratedClip
+    // to avoid interrupting user input. Let another useEffect handle initial population.
+
+  }, [initialCurrentClip, activeMediaSourceId, sessionClips]);
+
+  // Effect to initialize UI elements when displayClip fundamentally changes
+  useEffect(() => {
+    if (displayClip) {
+      setUserTranscriptionInput(displayClip.userTranscription || "");
+      setTranslationTargetLanguage(displayClip.translationTargetLanguage || "english");
+      setCurrentPlaybackTime(displayClip.startTime || 0);
+      setPlaybackRate(1.0);
+      setPreviewClip(null);
+    }
+  }, [displayClip?.id, displayClip?.startTime, displayClip?.endTime]); // Only run when the clip truly changes
 
   // Separate effect for checking if clip is saved (doesn't reset playback)
   useEffect(() => {
     const isClipSaved = sessionClips?.some(sessionClip =>
       activeMediaSourceId &&
       sessionClip.mediaSourceId === activeMediaSourceId &&
-      sessionClip.startTime === currentClip.startTime &&
-      sessionClip.endTime === currentClip.endTime
+      sessionClip.startTime === displayClip.startTime &&
+      sessionClip.endTime === displayClip.endTime
     ) || false;
 
     setIsTranscriptionSaved(isClipSaved);
-  }, [activeMediaSourceId, sessionClips, currentClip?.startTime || 0, currentClip?.endTime || 0]);
+  }, [activeMediaSourceId, sessionClips, displayClip?.startTime, displayClip?.endTime]);
 
   // Enhanced tab management - preserve AI tab state for focused clips with AI data
   useEffect(() => {
-    const isFocusedClipWithAIData = currentClip?.isFocusedClip && (
-      currentClip.automatedTranscription ||
-      currentClip.translation ||
-      currentClip.englishTranslation ||
-      currentClip.comparisonResult
+    const isFocusedClipWithAIData = displayClip?.isFocusedClip && (
+      displayClip.automatedTranscription ||
+      displayClip.translation ||
+      displayClip.englishTranslation ||
+      displayClip.comparisonResult
     );
 
     // For focused clips with AI data, switch to AI tab
@@ -249,14 +266,14 @@ export default function TranscriptionWorkspace({
   }, [
     activeTab,
     aiToolsState.canAccessAITools,
-    currentClip?.id,
-    currentClip?.startTime,
-    currentClip?.endTime,
-    currentClip?.isFocusedClip,
-    currentClip?.automatedTranscription,
-    currentClip?.translation,
-    currentClip?.englishTranslation,
-    currentClip?.comparisonResult,
+    displayClip?.id,
+    displayClip?.startTime,
+    displayClip?.endTime,
+    displayClip?.isFocusedClip,
+    displayClip?.automatedTranscription,
+    displayClip?.translation,
+    displayClip?.englishTranslation,
+    displayClip?.comparisonResult,
     activeMediaSourceId,
     hasUserManuallyChangedTab
   ]);
@@ -266,12 +283,12 @@ export default function TranscriptionWorkspace({
   // or when a new non-focused clip is selected and no manual tab choice has been made.
   useEffect(() => {
     // If it's not a focused clip and the user hasn't manually chosen a tab, default to manual.
-    if (!currentClip?.isFocusedClip && !hasUserManuallyChangedTab) {
+    if (!displayClip?.isFocusedClip && !hasUserManuallyChangedTab) {
       setActiveTab("manual");
     }
     // If it IS a focused clip, the above effect or user interaction handles the tab.
     // This effect should not interfere if hasUserManuallyChangedTab is true.
-  }, [currentClip?.id, currentClip?.isFocusedClip, hasUserManuallyChangedTab]);
+  }, [displayClip?.id, displayClip?.isFocusedClip, hasUserManuallyChangedTab]);
 
   // Auto tab switching logic - switch to AI if content is there and user hasn't manually picked.
   useEffect(() => {
@@ -312,7 +329,7 @@ export default function TranscriptionWorkspace({
   }, [aiToolsState.canAccessAITools, toast, aiToolsState]);
 
   const handleSaveOrUpdate = useCallback(() => {
-    if (!currentClip || !onSaveToSession) return;
+    if (!displayClip || !onSaveToSession) return;
 
     const hasTranscription = userTranscriptionInput.trim().length > 0;
     if (!hasTranscription) {
@@ -323,40 +340,28 @@ export default function TranscriptionWorkspace({
       return;
     }
 
-    // Mark any existing AI tool data as manual save to prevent duplicate session saves
     const existingAIData = {
-      automatedTranscription: currentClip.automatedTranscription,
-      translation: currentClip.translation,
-      englishTranslation: currentClip.englishTranslation,
-      comparisonResult: currentClip.comparisonResult,
-      translationTargetLanguage: currentClip.translationTargetLanguage,
-      language: currentClip.language
+      automatedTranscription: displayClip.automatedTranscription,
+      translation: displayClip.translation,
+      englishTranslation: displayClip.englishTranslation,
+      comparisonResult: displayClip.comparisonResult,
+      translationTargetLanguage: displayClip.translationTargetLanguage,
+      language: displayClip.language
     };
 
-    // Filter out null/undefined values
     const aiDataToSave = Object.fromEntries(
       Object.entries(existingAIData).filter(([, value]) => value != null)
     );
 
-    // Save AI data with manual save flag if any exists
     if (Object.keys(aiDataToSave).length > 0) {
-      aiToolsState.handleAutoSave(currentClip.id, aiDataToSave, true); // true = isManualSave
+      aiToolsState.handleAutoSave(displayClip.id, aiDataToSave, true);
     }
 
-    onUserTranscriptionChange(currentClip.id, userTranscriptionInput);
+    onUserTranscriptionChange(displayClip.id, userTranscriptionInput);
     onSaveToSession(userTranscriptionInput);
     setIsTranscriptionSaved(true);
 
-    // Unlock AI tools for this specific clip only
-    aiToolsState.unlockCurrentClip();
-
-    if (canSaveToSession) {
-      toast({
-        title: "Transcription Attempt Saved",
-        description: "Your transcription attempt is saved! Use the Saved Attempts button to review or make changes anytime."
-      });
-    }
-  }, [currentClip, userTranscriptionInput, onUserTranscriptionChange, onSaveToSession, canSaveToSession, toast, aiToolsState]);
+  }, [displayClip, userTranscriptionInput, onUserTranscriptionChange, onSaveToSession, toast, aiToolsState, setIsTranscriptionSaved]);
 
   const handlePreviewClip = useCallback((startTime: number, endTime: number) => {
     setPreviewClip({ startTime, endTime });
@@ -372,10 +377,10 @@ export default function TranscriptionWorkspace({
     setIsInPreviewMode(false);
     if (videoPlayerRef.current) {
       videoPlayerRef.current.pause();
-      const resetClip = focusedClip || currentClip;
+      const resetClip = focusedClip || displayClip;
       videoPlayerRef.current.seek(resetClip.startTime);
     }
-  }, [currentClip, focusedClip]);
+  }, [displayClip, focusedClip]);
 
   // Helper functions for clip management
   const handleClipClick = useCallback((index: number) => {
@@ -415,21 +420,21 @@ export default function TranscriptionWorkspace({
   }, [sessionClips, activeMediaSourceId]);
 
   const getCurrentClipDisplayName = useCallback((): string => {
-    if (!currentClip) return "Clip";
+    if (!displayClip) return "Clip";
     if (!sessionClips || !activeMediaSourceId) {
       return `Clip ${currentClipIndex + 1}`;
     }
 
     const savedClip = sessionClips.find(sessionClip =>
       sessionClip.mediaSourceId === activeMediaSourceId &&
-      sessionClip.startTime === currentClip.startTime &&
-      sessionClip.endTime === currentClip.endTime
+      sessionClip.startTime === displayClip.startTime &&
+      sessionClip.endTime === displayClip.endTime
     );
 
     return savedClip?.displayName || `Clip ${currentClipIndex + 1}`;
-  }, [sessionClips, activeMediaSourceId, currentClip, currentClipIndex]);
+  }, [sessionClips, activeMediaSourceId, displayClip, currentClipIndex]);
 
-  if (!currentClip) {
+  if (!displayClip) {
     return (
       <div className="text-center py-10 text-muted-foreground">
         <p>Load a video or audio file and ensure clips are generated to begin.</p>
@@ -438,8 +443,8 @@ export default function TranscriptionWorkspace({
   }
 
   const effectiveClip = previewClip
-    ? { ...currentClip, startTime: previewClip.startTime, endTime: previewClip.endTime }
-    : focusedClip || currentClip;
+    ? { ...displayClip, startTime: previewClip.startTime, endTime: previewClip.endTime }
+    : focusedClip || displayClip;
 
   const disableTextarea = isLoadingMedia || isSavingMedia;
   const clipDisplayName = focusedClip ? (focusedClip.displayName || 'Custom Clip') : getCurrentClipDisplayName();
@@ -512,11 +517,11 @@ export default function TranscriptionWorkspace({
                     onDurationChange={onClipDurationChange}
                     disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
                   />
-                  {currentClip && clips.length > 1 && (
+                  {displayClip && clips.length > 1 && (
                     <ClipOptionsDropdown
                       currentClipIndex={currentClipIndex}
                       onRemoveClip={onRemoveClip}
-                      clipId={currentClip.id}
+                      clipId={displayClip.id}
                       disabled={isLoadingMedia || isSavingMedia || isAnyClipTranscribing}
                     />
                   )}
@@ -609,17 +614,8 @@ export default function TranscriptionWorkspace({
                 disabled={disableTextarea || !aiToolsState.canAccessAITools}
                 className="flex-1 flex items-center justify-center gap-1 md:gap-2 text-sm px-1 md:px-3 min-w-0"
               >
-                {aiToolsState.canAccessAITools ? (
-                  <>
-                    <Unlock className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
-                    <span className="truncate block">AI Tools</span>
-                  </>
-                ) : (
-                  <>
-                    <Lock className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
-                    <span className="truncate block">AI Tools</span>
-                  </>
-                )}
+                <Sparkles className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
+                <span className="truncate block">AI Tools</span>
               </TabsTrigger>
               <Button
                 variant="ghost"
@@ -638,7 +634,7 @@ export default function TranscriptionWorkspace({
 
             <TabsContent value="manual" className="mt-4">
               <TranscriptionTab
-                currentClip={currentClip}
+                currentClip={displayClip}
                 userTranscriptionInput={userTranscriptionInput}
                 onUserInputChange={handleUserInputChange}
                 onSaveAndUnlockAI={handleSaveOrUpdate}
@@ -661,7 +657,7 @@ export default function TranscriptionWorkspace({
 
             <TabsContent value="ai" className="mt-4">
               <AIToolsTab
-                currentClip={currentClip}
+                currentClip={displayClip}
                 userTranscriptionInput={userTranscriptionInput}
                 videoPlayerRef={videoPlayerRef}
                 effectiveClip={effectiveClip}

@@ -2,7 +2,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Unlock, Save } from "lucide-react";
+import { Save, Sparkles } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import MediaControls from './MediaControls';
 import type { VideoPlayerRef } from "../VideoPlayer";
@@ -109,12 +109,12 @@ export default function TranscriptionTab({
         <Button
           onClick={handleSaveOrAccessAI}
           disabled={disableTextarea}
-          variant="default"
+          variant={isTranscriptionSaved ? "outline" : "default"}
           className="text-sm"
         >
-          {isTranscriptionSaved ? <Unlock className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" /> : <Save className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />}
-          <span className="hidden md:inline">{isTranscriptionSaved ? "Access AI Tools" : "Save & Unlock AI Tools"}</span>
-          <span className="md:hidden">{isTranscriptionSaved ? "Access AI" : "Save & Unlock AI"}</span>
+          {isTranscriptionSaved ? <Sparkles className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" /> : <Save className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />}
+          <span className="hidden md:inline">{isTranscriptionSaved ? "Go to AI Tools" : "Save Transcription"}</span>
+          <span className="md:hidden">{isTranscriptionSaved ? "AI Tools" : "Save"}</span>
         </Button>
       </CardFooter>
     </Card>

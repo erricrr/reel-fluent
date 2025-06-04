@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, FileDiff, Languages, Edit3, AlertTriangle } from "lucide-react";
+import { Sparkles, FileDiff, Languages, Edit3, AlertTriangle, Captions } from "lucide-react";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 import MediaControls from './MediaControls';
@@ -347,7 +347,7 @@ export default function AIToolsTab({
             className="w-full mb-2 text-sm"
             disabled={transcribeButtonDisabled}
           >
-            <Sparkles className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
+            <Captions className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
             <span className="hidden md:inline">
               {hasValidAutomatedTranscription ? "Already Transcribed" :
                isAnyClipTranscribing ? "Transcribing..." :
