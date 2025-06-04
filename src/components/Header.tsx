@@ -74,7 +74,7 @@ export default function Header() {
             <></>
           )}
           <Button
-            variant="ghost"
+            variant="default2"
             size="icon"
             onClick={toggleTheme}
             aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
