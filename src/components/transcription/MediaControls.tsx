@@ -93,15 +93,14 @@ export default function MediaControls({
   return (
     <div className="space-y-2 sm:space-y-3 p-2 sm:p-3 bg-muted/30 rounded-lg border">
       {/* Timeline Controls Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
-        <span className="text-sm font-medium text-foreground truncate max-w-[200px] sm:max-w-[60%]">
+      <div className="flex items-center justify-between gap-1 sm:gap-2">
+        <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">
           {isCurrentClipPlaying ? "Playing" : "Paused"} &ndash; {clipDisplayName}
         </span>
-        <span className="text-sm font-mono text-muted-foreground whitespace-nowrap">
+        <span className="text-sm font-mono text-muted-foreground whitespace-nowrap flex-shrink-0">
           {formatSecondsToMMSS(Math.max(effectiveClip.startTime, currentPlaybackTime))} / {formatSecondsToMMSS(effectiveClip.endTime)}
         </span>
       </div>
-
       {/* Timeline Slider */}
       <div>
         <Slider
