@@ -124,7 +124,7 @@ export default function MediaControls({
             checked={isLooping}
             onCheckedChange={(checked) => setIsLooping(Boolean(checked))}
             disabled={disableTextarea || !mediaSrc}
-            className="h-3 w-3 sm:h-4 sm:w-4"
+            className="h-4 w-4"
           />
           <Label htmlFor={`loop-toggle-${effectiveClip.id}`} className="text-sm font-normal text-muted-foreground whitespace-nowrap">
             Loop
@@ -134,7 +134,7 @@ export default function MediaControls({
         {/* Playback Controls */}
         <div className="flex items-center justify-center gap-2 flex-grow min-w-0">
           <Button
-            variant="ghost"
+            variant="default2"
             size="icon"
             className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
             onClick={skipBackward}
@@ -143,7 +143,7 @@ export default function MediaControls({
             <SkipBack className="h-3 w-3 sm:h-4 sm:w-4" />
           </Button>
           <Button
-            variant="ghost"
+            variant="default2"
             size="icon"
             className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
             onClick={togglePlayPause}
@@ -156,7 +156,7 @@ export default function MediaControls({
             )}
           </Button>
           <Button
-            variant="ghost"
+            variant="default2"
             size="icon"
             className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0"
             onClick={skipForward}
