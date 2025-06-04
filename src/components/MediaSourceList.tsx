@@ -63,7 +63,7 @@ export default function MediaSourceList({
               </div>
             </button>
             <Button
-              variant="ghost"
+              variant="default2"
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
