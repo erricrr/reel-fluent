@@ -136,8 +136,8 @@ export default function ReelFluentApp() {
     return createEnhancedClips(sessionClips, activeMediaSourceId);
   }, [createEnhancedClips, sessionClips, activeMediaSourceId]);
 
-  // Current clip
-  const currentClip = enhancedClips[currentClipIndex] || null;
+  // Current clip - use focused clip if available, otherwise use indexed clip
+  const currentClip = focusedClip || (enhancedClips[currentClipIndex] || null);
   const isYouTubeVideo = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
   // Utility functions
@@ -440,6 +440,12 @@ export default function ReelFluentApp() {
   }, [mediaDuration, clipSegmentationDuration, backToAutoClips]);
 
   // Session management
+
+  // Update clip data for TranscriptionWorkspace
+  const updateClipData = useCallback((clipId: string, aiContent: any) => {
+    updateClip(clipId, aiContent);
+  }, [updateClip]);
+
   const handleSaveToSession = useCallback((overrideUserTranscription?: string) => {
     if (!currentClip || !activeMediaSourceId) return;
 
@@ -553,13 +559,58 @@ export default function ReelFluentApp() {
       isFocusedClip: true,
     };
 
+    // Ensure AI tools cache is populated for this clip (DRY solution for session/navigation consistency)
+    if (clipToLoad.mediaSourceId && (clipToLoad.automatedTranscription || clipToLoad.translation || clipToLoad.englishTranslation || clipToLoad.comparisonResult)) {
+      const cacheKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
+      const aiData: any = {};
+
+      if (clipToLoad.automatedTranscription) {
+        aiData.automatedTranscription = clipToLoad.automatedTranscription;
+        aiData.language = clipToLoad.language;
+      }
+      if (clipToLoad.translation) {
+        aiData.translation = clipToLoad.translation;
+        aiData.translationTargetLanguage = clipToLoad.translationTargetLanguage;
+      }
+      if (clipToLoad.englishTranslation) {
+        aiData.englishTranslation = clipToLoad.englishTranslation;
+        aiData.translationTargetLanguage = "english";
+      }
+      if (clipToLoad.comparisonResult) {
+        aiData.comparisonResult = clipToLoad.comparisonResult;
+      }
+
+      // Update AI tools cache directly to ensure consistency
+      try {
+        const currentCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
+        currentCache[cacheKey] = { ...currentCache[cacheKey], ...aiData };
+        localStorage.setItem("reel-fluent-ai-tools-cache", JSON.stringify(currentCache));
+      } catch (error) {
+        console.warn("Failed to update AI tools cache:", error);
+      }
+
+      // Also unlock the clip if it has AI data
+      try {
+        const unlockKey = `${clipToLoad.mediaSourceId}-${clipToLoad.startTime}-${clipToLoad.endTime}`;
+        const unlockState = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-unlock-state") || "{}");
+        unlockState[unlockKey] = true;
+        localStorage.setItem("reel-fluent-ai-tools-unlock-state", JSON.stringify(unlockState));
+      } catch (error) {
+        console.warn("Failed to update unlock state:", error);
+      }
+
+      // CRITICAL: Update the current clip data with AI tools results
+      // This ensures the AI tools show up immediately when clip is loaded from saved attempts
+      updateClipData(loadedClip.id, aiData);
+    }
+
     setFocusedClip(loadedClip);
 
     toast({
       title: "Clip Loaded",
       description: `Loaded "${clipToLoad.displayName || 'Unnamed Clip'}" (${formatSecondsToMMSS(clipToLoad.startTime)} - ${formatSecondsToMMSS(clipToLoad.endTime)})`,
     });
-  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, language, toast, handleSelectMediaSource, setFocusedClip]);
+  }, [isAnyClipTranscribing, mediaSources, activeMediaSourceId, language, toast, handleSelectMediaSource, setFocusedClip, updateClipData]);
 
   const handleRemoveFromSession = useCallback((clipId: string) => {
     removeSessionClip(clipId);
@@ -667,11 +718,6 @@ export default function ReelFluentApp() {
     }
   }, [user, sourceFile, sourceUrl, mediaDisplayName, mediaDuration, currentSourceType, language, clipSegmentationDuration, sessionClips, setIsSaving, toast]);
 
-  // Update clip data for TranscriptionWorkspace
-  const updateClipData = useCallback((clipId: string, aiContent: any) => {
-    updateClip(clipId, aiContent);
-  }, [updateClip]);
-
   // Handle duration updates for direct URLs (when duration becomes available)
   useEffect(() => {
     if (mediaDuration > 0 && clips.length === 0 && mediaSrc) {
@@ -696,7 +742,7 @@ export default function ReelFluentApp() {
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg border-border">
           <CardHeader className="pb-0">
-            <CardTitle>Upload Your Media</CardTitle>
+            <CardTitle className="text-xl md:text-2xl">Upload Your Media</CardTitle>
             <CardDescription>Select language and upload media</CardDescription>
           </CardHeader>
           <CardContent className="p-6">

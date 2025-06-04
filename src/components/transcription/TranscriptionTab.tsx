@@ -77,7 +77,7 @@ export default function TranscriptionTab({
   return (
     <Card>
       <CardHeader className="pb-3 md:pb-6">
-        <CardTitle className="text-base md:text-lg">Type What You Hear</CardTitle>
+        <CardTitle className="text-xl md:text-2xl">Type What You Hear</CardTitle>
         <CardDescription className="text-sm">
           Listen to {clipDisplayName} ({formatSecondsToMMSS(currentClip.startTime)} - {formatSecondsToMMSS(currentClip.endTime)}) and type the dialogue.
         </CardDescription>
@@ -98,7 +98,7 @@ export default function TranscriptionTab({
         />
 
         <Textarea
-          className="min-h-24 resize-y"
+          className="min-h-24 resize-y text-sm"
           disabled={disableTextarea || !mediaSrc}
           placeholder={`Type what you hear in the clip to practice ${language.charAt(0).toUpperCase() + language.slice(1)}...`}
           value={userTranscriptionInput}

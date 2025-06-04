@@ -111,8 +111,16 @@ const isClipUnlocked = (clipKey?: string): boolean => {
 // Generate unique key for each clip using multiple properties for absolute uniqueness
 const getClipUnlockKey = (mediaSourceId?: string | null, currentClip?: Clip): string | null => {
   if (!mediaSourceId || !currentClip) return null;
-  // Use multiple clip properties to ensure absolute uniqueness
-  return `${mediaSourceId}-${currentClip.id}-${currentClip.startTime}-${currentClip.endTime}`;
+  // Use startTime and endTime for consistency across focused and regular clips
+  return `${mediaSourceId}-${currentClip.startTime}-${currentClip.endTime}`;
+};
+
+// Generate consistent cache key for clips (DRY solution for session/navigation consistency)
+const getClipCacheKey = (mediaSourceId?: string | null, currentClip?: Clip): string | null => {
+  if (!mediaSourceId || !currentClip) return null;
+  // Use startTime and endTime instead of clip.id for consistency
+  // This ensures the same clip accessed via navigation or saved attempts uses the same cache
+  return `${mediaSourceId}-${currentClip.startTime}-${currentClip.endTime}`;
 };
 
 export function useAIToolsState(config: AIToolsStateConfig) {
@@ -151,11 +159,68 @@ export function useAIToolsState(config: AIToolsStateConfig) {
     }
   }, [clipUnlockKey]);
 
-  // Reset userActivelyUsingAITools when clip changes to prevent access bleeding across clips
+  // Special handling for focused clips - ensure immediate cache and unlock state population
   useEffect(() => {
-    setUserActivelyUsingAITools(false);
-    setAiToolsButtonClicked(false);
-  }, [currentClip.id]);
+    if (currentClip?.isFocusedClip && activeMediaSourceId) {
+      const clipCacheKey = getClipCacheKey(activeMediaSourceId, currentClip);
+      const unlockKey = getClipUnlockKey(activeMediaSourceId, currentClip);
+
+      // Check if this focused clip has AI data that needs to be cached
+      const hasAIData = currentClip.automatedTranscription ||
+                       currentClip.translation ||
+                       currentClip.englishTranslation ||
+                       currentClip.comparisonResult;
+
+      if (hasAIData && clipCacheKey) {
+        // Populate cache immediately
+        const cacheData: any = {};
+
+        if (currentClip.automatedTranscription) {
+          cacheData.automatedTranscription = currentClip.automatedTranscription;
+          cacheData.language = currentClip.language;
+        }
+        if (currentClip.translation) {
+          cacheData.translation = currentClip.translation;
+          cacheData.translationTargetLanguage = currentClip.translationTargetLanguage;
+        }
+        if (currentClip.englishTranslation) {
+          cacheData.englishTranslation = currentClip.englishTranslation;
+          cacheData.translationTargetLanguage = "english";
+        }
+        if (currentClip.comparisonResult) {
+          cacheData.comparisonResult = currentClip.comparisonResult;
+        }
+
+        // Update local cache
+        localAIToolsCache.current[clipCacheKey] = cacheData;
+        updateAIToolsCache(clipCacheKey, cacheData);
+
+        // Ensure unlock state is set for focused clips with AI data
+        if (unlockKey) {
+          setUnlockState(unlockKey, true);
+          setIsCurrentClipUnlocked(true);
+        }
+      }
+    }
+  }, [currentClip?.isFocusedClip, currentClip?.id, activeMediaSourceId, currentClip?.automatedTranscription, currentClip?.translation, currentClip?.englishTranslation, currentClip?.comparisonResult]);
+
+  // Reset userActivelyUsingAITools when clip changes to prevent access bleeding across clips
+  // BUT preserve state for focused clips that have existing AI data
+  useEffect(() => {
+    // Check if this is a focused clip with existing AI data
+    const isFocusedClipWithData = currentClip?.isFocusedClip && (
+      currentClip.automatedTranscription ||
+      currentClip.translation ||
+      currentClip.englishTranslation ||
+      currentClip.comparisonResult
+    );
+
+    // Only reset if this is NOT a focused clip with existing AI data
+    if (!isFocusedClipWithData) {
+      setUserActivelyUsingAITools(false);
+      setAiToolsButtonClicked(false);
+    }
+  }, [currentClip?.id, currentClip?.isFocusedClip, currentClip?.automatedTranscription, currentClip?.translation, currentClip?.englishTranslation, currentClip?.comparisonResult]);
 
   // Helper to unlock AI tools for current clip only
   const unlockCurrentClip = useCallback(() => {
@@ -185,8 +250,8 @@ export function useAIToolsState(config: AIToolsStateConfig) {
     );
 
     // Check local cache
-    const clipCacheKey = `${activeMediaSourceId}-${currentClip.id}`;
-    const cachedData = localAIToolsCache.current[clipCacheKey];
+    const clipCacheKey = getClipCacheKey(activeMediaSourceId, currentClip);
+    const cachedData = clipCacheKey ? localAIToolsCache.current[clipCacheKey] : null;
 
     // Get user transcription from multiple sources
     const localUserTranscription = userTranscriptionInput.trim();
@@ -222,11 +287,41 @@ export function useAIToolsState(config: AIToolsStateConfig) {
     };
   }, [currentClip, userTranscriptionInput, sessionClips, activeMediaSourceId]);
 
-  // Auto-save AI tool results
-  const handleAutoSave = useCallback((clipId: string, aiContent: any) => {
+  // Handle user transcription changes
+  const handleUserTranscriptionChange = useCallback((newValue: string) => {
+    const previousValue = lastUserTranscriptionForComparison;
+
+    // Clear comparison results when user transcription changes significantly
+    if (activeMediaSourceId && currentClip && previousValue.trim() !== newValue.trim()) {
+      const clipCacheKey = getClipCacheKey(activeMediaSourceId, currentClip);
+
+      // Clear comparison results from cache
+      if (clipCacheKey) {
+        clearAIToolsCacheForClip(clipCacheKey, ['comparisonResult']);
+      }
+
+      // Clear comparison results from parent component
+      if (onUpdateClipData) {
+        onUpdateClipData(currentClip.id, { comparisonResult: null });
+      }
+
+      // Also clear from current clip state (forces re-fetch)
+      currentClip.comparisonResult = null;
+
+      setLastUserTranscriptionForComparison(newValue.trim());
+
+      // Log for debugging
+      console.log(`Cleared comparison results for clip ${currentClip.id} due to transcription change`);
+    }
+  }, [activeMediaSourceId, currentClip, onUpdateClipData, lastUserTranscriptionForComparison]);
+
+  // Enhanced auto-save that integrates with session system
+  const handleAutoSave = useCallback((clipId: string, aiContent: any, isManualSave = false) => {
     if (!activeMediaSourceId) return;
 
-    const clipCacheKey = `${activeMediaSourceId}-${clipId}`;
+    const clipCacheKey = getClipCacheKey(activeMediaSourceId, currentClip);
+    if (!clipCacheKey) return;
+
     const currentCache = localAIToolsCache.current[clipCacheKey] || {};
 
     // Merge new content with existing cache
@@ -235,7 +330,7 @@ export function useAIToolsState(config: AIToolsStateConfig) {
       ...aiContent
     };
 
-    // Update both local ref and localStorage
+    // Update both local ref and localStorage for immediate persistence
     localAIToolsCache.current[clipCacheKey] = updatedCache;
     updateAIToolsCache(clipCacheKey, updatedCache);
 
@@ -244,29 +339,9 @@ export function useAIToolsState(config: AIToolsStateConfig) {
       onUpdateClipData(clipId, updatedCache);
     }
 
-    // DO NOT call onSaveToSession here - that should only happen when user manually saves
-    // The onSaveToSession call was causing automatic unlocking of AI tools
-  }, [activeMediaSourceId, onUpdateClipData]);
-
-  // Handle user transcription changes
-  const handleUserTranscriptionChange = useCallback((newValue: string) => {
-    const previousValue = lastUserTranscriptionForComparison;
-
-    // Clear comparison results when user transcription changes significantly
-    if (activeMediaSourceId && currentClip && previousValue.trim() !== newValue.trim()) {
-      const clipCacheKey = `${activeMediaSourceId}-${currentClip.id}`;
-
-      // Clear comparison results from cache
-      clearAIToolsCacheForClip(clipCacheKey, ['comparisonResult']);
-
-      // Clear comparison results from parent component
-      if (onUpdateClipData) {
-        onUpdateClipData(currentClip.id, { comparisonResult: null });
-      }
-
-      setLastUserTranscriptionForComparison(newValue.trim());
-    }
-  }, [activeMediaSourceId, currentClip, onUpdateClipData, lastUserTranscriptionForComparison]);
+    // NOTE: Removed automatic session save to prevent clearing AI tools data
+    // Session saves should only be triggered explicitly by user actions or manual save operations
+  }, [activeMediaSourceId, onUpdateClipData, currentClip]);
 
   // Protection wrapper for AI operations
   const withAIToolsProtection = useCallback(async (action: () => Promise<void>) => {
@@ -306,7 +381,9 @@ export function useAIToolsState(config: AIToolsStateConfig) {
   useEffect(() => {
     if (!currentClip || !activeMediaSourceId) return;
 
-    const clipCacheKey = `${activeMediaSourceId}-${currentClip.id}`;
+    const clipCacheKey = getClipCacheKey(activeMediaSourceId, currentClip);
+    if (!clipCacheKey) return;
+
     const cacheData: any = {};
     let shouldUpdateCache = false;
 

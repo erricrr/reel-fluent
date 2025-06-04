@@ -87,6 +87,19 @@ export default function AIToolsTab({
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [practiceText, setPracticeText] = useState("");
 
+  // Auto-save helper function for DRY principle
+  const performAutoSave = useCallback((clipData: Partial<Clip>, operation: string, isManualSave = false) => {
+    // Always auto-save to cache for immediate persistence
+    aiToolsState.handleAutoSave(currentClip.id, clipData, isManualSave);
+
+    // Notify user about auto-save (session save will be handled by handleAutoSave)
+    toast({
+      title: `${operation} Auto-Saved`,
+      description: "Results have been automatically saved.",
+      duration: 2000,
+    });
+  }, [currentClip.id, aiToolsState, toast]);
+
   const handleTranscribeClip = useCallback(async () => {
     if (!currentClip || (isAudioSource && !mediaSrc)) {
       toast({
@@ -104,14 +117,15 @@ export default function AIToolsTab({
       try {
         await onTranscribeAudio(currentClip.id);
 
-        // Auto-save the result
+        // Auto-save the result if successful
         if (currentClip.automatedTranscription &&
             !currentClip.automatedTranscription.startsWith("Error:") &&
             currentClip.automatedTranscription !== "Transcribing...") {
-          aiToolsState.handleAutoSave(currentClip.id, {
+
+          performAutoSave({
             automatedTranscription: currentClip.automatedTranscription,
             language: currentClip.language
-          });
+          }, "Transcription");
         }
       } catch (error) {
         console.warn("Transcription error:", error);
@@ -124,7 +138,7 @@ export default function AIToolsTab({
         setTimeout(() => aiToolsState.setAiToolsButtonClicked(false), 2000);
       }
     });
-  }, [currentClip, isAudioSource, mediaSrc, toast, onTranscribeAudio, aiToolsState]);
+  }, [currentClip, isAudioSource, mediaSrc, toast, onTranscribeAudio, aiToolsState, performAutoSave]);
 
   const handleGetCorrections = useCallback(async () => {
     const comprehensiveData = aiToolsState.getComprehensiveTranscriptionData();
@@ -153,15 +167,16 @@ export default function AIToolsTab({
       try {
         await onGetCorrections(currentClip.id);
 
-        // Auto-save the result
+        // Auto-save the result if successful
         if (currentClip.comparisonResult &&
             Array.isArray(currentClip.comparisonResult) &&
             currentClip.comparisonResult.length > 0 &&
             currentClip.comparisonResult[0].token !== "Comparing..." &&
             !currentClip.comparisonResult[0].token.startsWith("Error:")) {
-          aiToolsState.handleAutoSave(currentClip.id, {
+
+          performAutoSave({
             comparisonResult: currentClip.comparisonResult
-          });
+          }, "Comparison");
         }
       } catch (error) {
         console.warn("Corrections error:", error);
@@ -169,7 +184,7 @@ export default function AIToolsTab({
         setTimeout(() => aiToolsState.setAiToolsButtonClicked(false), 2000);
       }
     });
-  }, [currentClip, onGetCorrections, toast, aiToolsState]);
+  }, [currentClip, onGetCorrections, toast, aiToolsState, performAutoSave]);
 
   const handleTranslate = useCallback(async () => {
     const comprehensiveData = aiToolsState.getComprehensiveTranscriptionData();
@@ -189,21 +204,23 @@ export default function AIToolsTab({
       try {
         await onTranslate(currentClip.id, translationTargetLanguage);
 
-        // Auto-save the result
+        // Auto-save the result if successful
         if (currentClip.translation &&
             !currentClip.translation.startsWith("Error:") &&
             currentClip.translation !== "Translating...") {
-          aiToolsState.handleAutoSave(currentClip.id, {
+
+          performAutoSave({
             translation: currentClip.translation,
             translationTargetLanguage
-          });
+          }, "Translation");
         } else if (currentClip.englishTranslation &&
                   !currentClip.englishTranslation.startsWith("Error:") &&
                   currentClip.englishTranslation !== "Translating...") {
-          aiToolsState.handleAutoSave(currentClip.id, {
+
+          performAutoSave({
             englishTranslation: currentClip.englishTranslation,
             translationTargetLanguage: "english"
-          });
+          }, "Translation");
         }
       } catch (error) {
         console.warn("Translation error:", error);
@@ -211,7 +228,7 @@ export default function AIToolsTab({
         setTimeout(() => aiToolsState.setAiToolsButtonClicked(false), 2000);
       }
     });
-  }, [currentClip, translationTargetLanguage, onTranslate, toast, aiToolsState]);
+  }, [currentClip, translationTargetLanguage, onTranslate, toast, aiToolsState, performAutoSave]);
 
   const getTranslationForCurrentTarget = (): string | null | undefined => {
     if (currentClip.translation !== undefined && currentClip.translationTargetLanguage === translationTargetLanguage) {
@@ -302,7 +319,7 @@ export default function AIToolsTab({
   return (
     <Card>
       <CardHeader className="pb-3 md:pb-6">
-        <CardTitle className="text-base md:text-lg">Transcription Support</CardTitle>
+        <CardTitle className="text-xl md:text-2xl">Transcription Support</CardTitle>
         <CardDescription className="text-sm">
           Compare the Automated Transcription with your version and translate to available languages.
         </CardDescription>
@@ -383,7 +400,7 @@ export default function AIToolsTab({
                 </p>
               </div>
               <Textarea
-                className="h-[70px] text-sm resize-y"
+                className="h-[70px] resize-y"
                 placeholder="Practice typing here..."
                 value={practiceText}
                 onChange={(e) => setPracticeText(e.target.value)}

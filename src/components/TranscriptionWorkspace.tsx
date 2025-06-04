@@ -202,11 +202,14 @@ export default function TranscriptionWorkspace({
   useEffect(() => {
     setUserTranscriptionInput(currentClip.userTranscription || "");
     setTranslationTargetLanguage(currentClip.translationTargetLanguage || "english");
+    // Only reset playback time when the actual clip changes, not when sessionClips update
     setCurrentPlaybackTime(currentClip?.startTime || 0);
     setPlaybackRate(1.0);
     setPreviewClip(null);
+  }, [currentClip?.id || null, currentClip?.startTime || 0, currentClip?.endTime || 0]); // Ensure consistent array size
 
-    // Check if current clip is saved
+  // Separate effect for checking if clip is saved (doesn't reset playback)
+  useEffect(() => {
     const isClipSaved = sessionClips?.some(sessionClip =>
       activeMediaSourceId &&
       sessionClip.mediaSourceId === activeMediaSourceId &&
@@ -215,35 +218,61 @@ export default function TranscriptionWorkspace({
     ) || false;
 
     setIsTranscriptionSaved(isClipSaved);
-  }, [currentClip.id, activeMediaSourceId, sessionClips]);
+  }, [activeMediaSourceId, sessionClips, currentClip?.startTime || 0, currentClip?.endTime || 0]);
 
-  // Comprehensive tab management - handles all tab reset scenarios in one place
+  // Enhanced tab management - preserve AI tab state for focused clips with AI data
   useEffect(() => {
-    // Always reset to manual tab when:
-    // 1. Clip changes (regardless of previous tab state)
-    // 2. Media source changes
-    // 3. Currently on AI tab but clip is not accessible
+    // Check if this is a focused clip with AI data that should preserve its state
+    const isFocusedClipWithAIData = currentClip?.isFocusedClip && (
+      currentClip.automatedTranscription ||
+      currentClip.translation ||
+      currentClip.englishTranslation ||
+      currentClip.comparisonResult
+    );
 
-    const shouldResetToManual =
-      activeTab === "ai" && !aiToolsState.canAccessAITools;
-
-    if (shouldResetToManual) {
-      setActiveTab("manual");
-      setHasUserManuallyChangedTab(false);
+    // For focused clips with AI data, switch to AI tab and mark as manually changed to preserve it
+    if (isFocusedClipWithAIData && aiToolsState.canAccessAITools) {
+      setActiveTab("ai");
+      setHasUserManuallyChangedTab(true); // Prevent auto-switching away
+    } else {
+      // Normal reset logic for other clips
+      const shouldResetToManual = activeTab === "ai" && !aiToolsState.canAccessAITools;
+      if (shouldResetToManual) {
+        setActiveTab("manual");
+        setHasUserManuallyChangedTab(false);
+      }
     }
   }, [
     activeTab,
     aiToolsState.canAccessAITools,
-    currentClip.id,
+    currentClip?.id || null,
+    currentClip?.startTime || 0,
+    currentClip?.endTime || 0,
+    currentClip?.isFocusedClip || false,
+    currentClip?.automatedTranscription || null,
+    currentClip?.translation || null,
+    currentClip?.englishTranslation || null,
+    currentClip?.comparisonResult || null,
     activeMediaSourceId
   ]);
 
   // Force immediate tab reset when clip changes (runs before AI state updates)
+  // BUT preserve state for focused clips with AI data
   useEffect(() => {
-    // Reset tab to manual for every clip change to ensure clean state
-    setActiveTab("manual");
-    setHasUserManuallyChangedTab(false);
-  }, [currentClip.id]);
+    // Check if this is a focused clip with AI data
+    const isFocusedClipWithAIData = currentClip?.isFocusedClip && (
+      currentClip.automatedTranscription ||
+      currentClip.translation ||
+      currentClip.englishTranslation ||
+      currentClip.comparisonResult
+    );
+
+    // Only reset tab for clips that are NOT focused clips with AI data
+    if (!isFocusedClipWithAIData) {
+      setActiveTab("manual");
+      setHasUserManuallyChangedTab(false);
+    }
+  }, [currentClip?.id || null, currentClip?.startTime || 0, currentClip?.endTime || 0, currentClip?.isFocusedClip || false]);
 
   // Clear preview when trimmer is hidden
   useEffect(() => {
@@ -292,6 +321,8 @@ export default function TranscriptionWorkspace({
     const newValue = e.target.value;
     setUserTranscriptionInput(newValue);
     setIsTranscriptionSaved(false);
+
+    // Clear comparison results when user transcription changes
     aiToolsState.handleUserTranscriptionChange(newValue);
   };
 
@@ -323,6 +354,26 @@ export default function TranscriptionWorkspace({
         description: "Please write a transcription before saving."
       });
       return;
+    }
+
+    // Mark any existing AI tool data as manual save to prevent duplicate session saves
+    const existingAIData = {
+      automatedTranscription: currentClip.automatedTranscription,
+      translation: currentClip.translation,
+      englishTranslation: currentClip.englishTranslation,
+      comparisonResult: currentClip.comparisonResult,
+      translationTargetLanguage: currentClip.translationTargetLanguage,
+      language: currentClip.language
+    };
+
+    // Filter out null/undefined values
+    const aiDataToSave = Object.fromEntries(
+      Object.entries(existingAIData).filter(([, value]) => value != null)
+    );
+
+    // Save AI data with manual save flag if any exists
+    if (Object.keys(aiDataToSave).length > 0) {
+      aiToolsState.handleAutoSave(currentClip.id, aiDataToSave, true); // true = isManualSave
     }
 
     onUserTranscriptionChange(currentClip.id, userTranscriptionInput);
