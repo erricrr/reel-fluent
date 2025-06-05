@@ -25,8 +25,8 @@ export default function ClipDurationSelector({ selectedDuration, onDurationChang
       <Label htmlFor="clip-duration-select">Clip Segmentation Duration</Label>
       <RadioGroup
         id="clip-duration-select"
-        value={String(selectedDuration)}
-        onValueChange={onDurationChange}
+        value={String(selectedDuration / 1000)}
+        onValueChange={(value) => onDurationChange(value + "s")}
         disabled={disabled}
         className="flex flex-row gap-2 xs:gap-4 flex-wrap"
       >

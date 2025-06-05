@@ -34,13 +34,80 @@ import { useMediaSources, type MediaSource, type SessionClip } from "@/hooks/use
 import { useClipManagement } from "@/hooks/useClipManagement";
 import { useMediaProcessing } from "@/hooks/useMediaProcessing";
 import { useAIOperations } from "@/hooks/useAIOperations";
-import type { Clip } from '@/lib/videoUtils';
+import { generateClips, createFocusedClip, extractAudioFromVideoSegment, type Clip } from '@/lib/videoUtils';
 import { hydrateClipWithAIData } from '@/lib/aiToolsHydration';
+
+const SEGMENTATION_PREFS_KEY = "reel-fluent-segmentation-prefs";
+const DEFAULT_SEGMENTATION_DURATION_MS = 15000; // Default to 15 seconds
+
+// Helper to get segmentation preferences
+const getSegmentationPreferences = (): Record<string, number> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const prefs = localStorage.getItem(SEGMENTATION_PREFS_KEY);
+    return prefs ? JSON.parse(prefs) : {};
+  } catch (e) {
+    console.error("Error reading segmentation preferences:", e);
+    return {};
+  }
+};
+
+// Helper to get a specific preference
+const getSegmentationPreference = (mediaSourceId: string): number | null => {
+  const prefs = getSegmentationPreferences();
+  return prefs[mediaSourceId] || null;
+};
+
+// Helper to set a specific preference
+const setSegmentationPreference = (mediaSourceId: string, durationMs: number): void => {
+  if (typeof window === 'undefined' || !mediaSourceId) return;
+  try {
+    const prefs = getSegmentationPreferences();
+    prefs[mediaSourceId] = durationMs;
+    localStorage.setItem(SEGMENTATION_PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.error("Error saving segmentation preference:", e);
+  }
+};
 
 export default function ReelFluentApp() {
   // Basic UI state
   const [language, setLanguage] = useState<string>("vietnamese");
-  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(15);
+  const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(DEFAULT_SEGMENTATION_DURATION_MS);
+
+  // Destructure from useMediaSources first
+  const mediaSourcesHookValues = useMediaSources();
+  const {
+    mediaSources, activeMediaSourceId, sessionClips,
+    addMediaSource, removeMediaSource, selectMediaSource, updateMediaSource,
+    addSessionClip, removeSessionClip, updateSessionClip,
+  } = mediaSourcesHookValues;
+
+  // Then destructure from useClipManagement
+  const clipManagementHookValues = useClipManagement(language);
+  const {
+    clips, currentClipIndex, focusedClip, showClipTrimmer,
+    isAnyClipTranscribing, workInProgressClips, clipsRef,
+    generateClipsFromDuration,
+    selectClip, createCustomClip, backToAutoClips, updateClip,
+    removeClip: removeClipFromManager,
+    updateUserTranscription, setTranscribingState, setTranslatingState, getCurrentClip,
+    createEnhancedClips, enhanceClipWithSessionData,
+    setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer, setIsAnyClipTranscribing, setWorkInProgressClips
+  } = clipManagementHookValues;
+
+  const mediaProcessingHookValues = useMediaProcessing();
+  const {
+    isLoading, isSaving, isYouTubeProcessing, processingProgress, processingStatus,
+    youtubeVideoInfo, processFile, processYouTubeUrl, resetProcessingState,
+    cleanupObjectUrl, cleanupBlobUrl, setIsSaving, globalAppBusyState
+  } = mediaProcessingHookValues;
+
+  const aiOperationsHookValues = useAIOperations();
+  const {
+    transcribeClip, translateClip, getCorrections, isAnyOperationInProgress,
+    isClipTranscribing, isClipTranslating, isClipGettingCorrections
+  } = aiOperationsHookValues;
 
   // Current media state
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -62,75 +129,9 @@ export default function ReelFluentApp() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Custom hooks
-  const mediaSourcesHook = useMediaSources();
-  const clipManagementHook = useClipManagement(language);
-  const mediaProcessingHook = useMediaProcessing();
-  const aiOperationsHook = useAIOperations();
-
-  // Destructure hook values
-  const {
-    mediaSources,
-    activeMediaSourceId,
-    sessionClips,
-    addMediaSource,
-    removeMediaSource,
-    selectMediaSource,
-    updateMediaSource,
-    addSessionClip,
-    removeSessionClip,
-    updateSessionClip
-  } = mediaSourcesHook;
-
-  const {
-    clips,
-    currentClipIndex,
-    focusedClip,
-    showClipTrimmer,
-    isAnyClipTranscribing,
-    generateClipsFromDuration,
-    selectClip,
-    createCustomClip,
-    backToAutoClips,
-    updateClip,
-    removeClip,
-    updateUserTranscription,
-    createEnhancedClips,
-    setShowClipTrimmer,
-    setFocusedClip,
-    setIsAnyClipTranscribing
-  } = clipManagementHook;
-
-  const {
-    isLoading,
-    isSaving,
-    isYouTubeProcessing,
-    processingProgress,
-    processingStatus,
-    youtubeVideoInfo,
-    processFile,
-    processYouTubeUrl,
-    resetProcessingState,
-    cleanupObjectUrl,
-    cleanupBlobUrl,
-    setIsSaving,
-    globalAppBusyState
-  } = mediaProcessingHook;
-
-  const {
-    transcribeClip,
-    translateClip,
-    getCorrections,
-    isAnyOperationInProgress,
-    isClipTranscribing,
-    isClipTranslating,
-    isClipGettingCorrections
-  } = aiOperationsHook;
-
-  // Sync AI operations with clip management
-  useEffect(() => {
-    setIsAnyClipTranscribing(isAnyOperationInProgress());
-  }, [isAnyOperationInProgress, setIsAnyClipTranscribing]);
+  // Drawer refs
+  const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Enhanced clips with session data
   const enhancedClips = useMemo(() => {
@@ -138,12 +139,8 @@ export default function ReelFluentApp() {
   }, [createEnhancedClips, sessionClips, activeMediaSourceId]);
 
   // Current clip - use focused clip if available, otherwise use indexed clip
-  const currentClip = focusedClip || (enhancedClips[currentClipIndex] || null);
-  const isYouTubeVideo = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
-
-  // Drawer refs
-  const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
-  const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  const currentClipToDisplay = focusedClip || (clips[currentClipIndex] || null);
+  const isYouTubeVideoCheck = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
   // Utility functions
   const generateUniqueId = () => {
@@ -169,7 +166,7 @@ export default function ReelFluentApp() {
         setMediaDuration(duration);
         setCurrentSourceType(type);
         setSourceFile(file);
-    setSourceUrl(undefined);
+        setSourceUrl(undefined);
         generateClipsFromDuration(duration, clipSegmentationDuration);
       }
     });
@@ -200,7 +197,7 @@ export default function ReelFluentApp() {
           generateClipsFromDuration(duration, clipSegmentationDuration);
         }
       });
-      } else {
+    } else {
       // Handle direct media URLs (MP3, WAV, MP4, WebM, etc.)
       try {
         // Extract filename from URL for display name
@@ -257,7 +254,7 @@ export default function ReelFluentApp() {
         const duration = await getDuration();
 
         const mediaSource: MediaSource = {
-      id: generateUniqueId(),
+          id: generateUniqueId(),
           src: url, // Use the URL directly
           displayName,
           type: mediaType,
@@ -268,14 +265,14 @@ export default function ReelFluentApp() {
         if (addMediaSource(mediaSource)) {
           selectMediaSource(mediaSource.id);
           setMediaSrc(url);
-    setMediaDisplayName(displayName);
+          setMediaDisplayName(displayName);
           setMediaDuration(duration); // Set the actual duration
           setCurrentSourceType(mediaType);
           setSourceFile(null);
           generateClipsFromDuration(duration, clipSegmentationDuration); // Generate clips immediately since we have duration
         }
 
-      toast({
+        toast({
           title: "Direct Media URL Added",
           description: `Added "${displayName}" (${formatSecondsToMMSS(duration)}) from direct URL.`,
         });
@@ -331,12 +328,12 @@ export default function ReelFluentApp() {
     //   title: "Media Source Selected",
     //   description: `Switched to "${source.displayName}"`,
     // });
-  }, [mediaSources, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, sourceUrl, setFocusedClip, setShowClipTrimmer, toast, isYouTubeVideo, selectClip]);
+  }, [mediaSources, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, sourceUrl, setFocusedClip, setShowClipTrimmer, toast, isYouTubeVideoCheck, selectClip]);
 
   const handleRemoveMediaSource = useCallback((sourceId: string) => {
     if (isAnyClipTranscribing) {
-    toast({
-      variant: "destructive",
+      toast({
+        variant: "destructive",
         title: "Action Disabled",
         description: "Cannot remove media while transcription is in progress.",
       });
@@ -373,13 +370,40 @@ export default function ReelFluentApp() {
     setLanguage(newLanguage);
   }, []);
 
-  const handleClipDurationChange = useCallback((newDurationValue: string) => {
-    const newDuration = parseInt(newDurationValue, 10);
-    setClipSegmentationDuration(newDuration);
-    if (mediaDuration > 0) {
-      generateClipsFromDuration(mediaDuration, newDuration);
+  const handleClipDurationChange = useCallback((durationString: string) => {
+    if (!activeMediaSourceId || !mediaDuration) return;
+
+    let newDurationMs: number;
+    if (durationString.endsWith('s')) {
+      newDurationMs = parseInt(durationString.slice(0, -1), 10) * 1000;
+    } else if (durationString.endsWith('m')) {
+      newDurationMs = parseInt(durationString.slice(0, -1), 10) * 60 * 1000;
+    } else {
+      console.error("Invalid duration string format:", durationString);
+      return;
     }
-  }, [mediaDuration, generateClipsFromDuration]);
+
+    if (isNaN(newDurationMs) || newDurationMs <= 0) {
+        console.error("Parsed duration is invalid:", newDurationMs);
+        return;
+    }
+
+    setSegmentationPreference(activeMediaSourceId, newDurationMs);
+    setClipSegmentationDuration(newDurationMs);
+
+    const newClips = generateClips(mediaDuration, newDurationMs / 1000, language);
+    setClips(newClips);
+    setCurrentClipIndex(0);
+    setFocusedClip(null);
+    setShowClipTrimmer(false);
+
+    toast({
+      title: "Clip Segmentation Updated",
+      description: `Clips are now segmented to ${durationString}.`,
+      duration: 3000,
+    });
+
+  }, [activeMediaSourceId, mediaDuration, language, toast, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
 
   // Clip operations
   const handleSelectClip = useCallback((index: number) => {
@@ -391,8 +415,8 @@ export default function ReelFluentApp() {
   }, [updateUserTranscription]);
 
   const handleRemoveClip = useCallback((clipIdToRemove: string) => {
-    removeClip(clipIdToRemove);
-  }, [removeClip]);
+    removeClipFromManager(clipIdToRemove);
+  }, [removeClipFromManager]);
 
   // AI operations
   const handleTranscribeAudio = useCallback(async (clipId: string) => {
@@ -459,15 +483,15 @@ export default function ReelFluentApp() {
   // Session management
 
   // Update clip data for TranscriptionWorkspace
-  const updateClipData = useCallback((clipId: string, aiContent: any) => {
+  const updateClipData = useCallback((clipId: string, aiContent: Partial<Clip>) => {
     updateClip(clipId, aiContent);
   }, [updateClip]);
 
   const handleSaveToSession = useCallback((overrideUserTranscription?: string) => {
-    if (!currentClip || !activeMediaSourceId) return;
+    if (!currentClipToDisplay || !activeMediaSourceId) return;
 
     const totalDuration = sessionClips.reduce((acc, clip) => acc + (clip.endTime - clip.startTime), 0);
-    const newClipDuration = currentClip.endTime - currentClip.startTime;
+    const newClipDuration = currentClipToDisplay.endTime - currentClipToDisplay.startTime;
 
     if (totalDuration + newClipDuration > 30 * 60) {
       toast({
@@ -479,14 +503,14 @@ export default function ReelFluentApp() {
     }
 
     const existingClipIndex = sessionClips.findIndex(clip =>
-      clip.startTime === currentClip.startTime &&
-      clip.endTime === currentClip.endTime &&
+      clip.startTime === currentClipToDisplay.startTime &&
+      clip.endTime === currentClipToDisplay.endTime &&
       clip.mediaSourceId === activeMediaSourceId
     );
 
     const userTrans = overrideUserTranscription !== undefined
       ? overrideUserTranscription
-      : (currentClip.userTranscription || "");
+      : (currentClipToDisplay.userTranscription || "");
 
     const originalClipNumber = existingClipIndex >= 0
       ? sessionClips[existingClipIndex].originalClipNumber
@@ -494,20 +518,20 @@ export default function ReelFluentApp() {
 
     const sessionClip: SessionClip = {
       id: existingClipIndex >= 0 ? sessionClips[existingClipIndex].id : generateUniqueId(),
-      startTime: currentClip.startTime,
-      endTime: currentClip.endTime,
-      language: currentClip.language || language,
+      startTime: currentClipToDisplay.startTime,
+      endTime: currentClipToDisplay.endTime,
+      language: currentClipToDisplay.language || language,
       displayName: existingClipIndex >= 0
         ? sessionClips[existingClipIndex].displayName
-        : (currentClip.displayName || (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`)),
+        : (currentClipToDisplay.displayName || (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`)),
       mediaSourceId: activeMediaSourceId,
       originalClipNumber: originalClipNumber,
       userTranscription: userTrans,
-      automatedTranscription: currentClip.automatedTranscription || null,
-      translation: currentClip.translation || null,
-      translationTargetLanguage: currentClip.translationTargetLanguage || null,
-      englishTranslation: currentClip.englishTranslation || null,
-      comparisonResult: currentClip.comparisonResult || null,
+      automatedTranscription: currentClipToDisplay.automatedTranscription || null,
+      translation: currentClipToDisplay.translation || null,
+      translationTargetLanguage: currentClipToDisplay.translationTargetLanguage || null,
+      englishTranslation: currentClipToDisplay.englishTranslation || null,
+      comparisonResult: currentClipToDisplay.comparisonResult || null,
     };
 
       if (existingClipIndex >= 0) {
@@ -517,10 +541,10 @@ export default function ReelFluentApp() {
     }
 
     const isAIOutputUpdate = existingClipIndex >= 0 && (
-      currentClip.automatedTranscription !== sessionClips[existingClipIndex].automatedTranscription ||
-      currentClip.translation !== sessionClips[existingClipIndex].translation ||
-      currentClip.englishTranslation !== sessionClips[existingClipIndex].englishTranslation ||
-      currentClip.comparisonResult !== sessionClips[existingClipIndex].comparisonResult
+      currentClipToDisplay.automatedTranscription !== sessionClips[existingClipIndex].automatedTranscription ||
+      currentClipToDisplay.translation !== sessionClips[existingClipIndex].translation ||
+      currentClipToDisplay.englishTranslation !== sessionClips[existingClipIndex].englishTranslation ||
+      currentClipToDisplay.comparisonResult !== sessionClips[existingClipIndex].comparisonResult
     );
 
     if (existingClipIndex === -1 || isAIOutputUpdate) {
@@ -531,7 +555,7 @@ export default function ReelFluentApp() {
           : "Clip has been saved to your session.",
       });
     }
-  }, [currentClip, activeMediaSourceId, sessionClips, language, toast, focusedClip, currentClipIndex, updateSessionClip, addSessionClip]);
+  }, [currentClipToDisplay, activeMediaSourceId, sessionClips, language, toast, focusedClip, currentClipIndex, updateSessionClip, addSessionClip]);
 
   const handleRenameClip = useCallback((clipId: string, newName: string) => {
     updateSessionClip(clipId, { displayName: newName });
@@ -765,6 +789,29 @@ export default function ReelFluentApp() {
     }
   }, [mediaDuration, activeMediaSourceId, mediaSources, updateMediaSource]);
 
+  // Effect for initializing and re-generating clips when media source or critical params change
+  useEffect(() => {
+    if (activeMediaSourceId && mediaDuration > 0 && language) {
+      let durationForClipsMs = getSegmentationPreference(activeMediaSourceId);
+      if (durationForClipsMs === null) {
+        durationForClipsMs = DEFAULT_SEGMENTATION_DURATION_MS;
+      }
+      setClipSegmentationDuration(durationForClipsMs);
+
+      const newClips = generateClips(mediaDuration, durationForClipsMs / 1000, language);
+      setClips(newClips);
+      setCurrentClipIndex(0);
+      setFocusedClip(null);
+      setShowClipTrimmer(false);
+    } else {
+      setClips([]);
+      setCurrentClipIndex(0);
+      setFocusedClip(null);
+      setShowClipTrimmer(false);
+      setClipSegmentationDuration(DEFAULT_SEGMENTATION_DURATION_MS);
+    }
+  }, [activeMediaSourceId, mediaDuration, language, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
+
   function getAIToolsCache(): Record<string, any> {
     if (typeof window === 'undefined') return {};
     try {
@@ -834,11 +881,11 @@ export default function ReelFluentApp() {
           </CardContent>
         </Card>
 
-        {mediaSrc && clips.length > 0 && currentClip && (
+        {mediaSrc && clips.length > 0 && currentClipToDisplay && (
           <div className="space-y-4">
             <TranscriptionWorkspace
-              currentClip={currentClip}
-              clips={enhancedClips}
+              currentClip={currentClipToDisplay}
+              clips={clips}
               mediaSrc={mediaSrc}
               currentClipIndex={currentClipIndex}
               onSelectClip={handleSelectClip}
@@ -847,7 +894,7 @@ export default function ReelFluentApp() {
               onTranslate={handleTranslate}
               onRemoveClip={handleRemoveClip}
               onUserTranscriptionChange={handleUserTranscriptionChange}
-              isYouTubeVideo={isYouTubeVideo}
+              isYouTubeVideo={isYouTubeVideoCheck}
               language={language}
               isAudioSource={currentSourceType === 'audio'}
               clipSegmentationDuration={clipSegmentationDuration}
@@ -855,9 +902,9 @@ export default function ReelFluentApp() {
               isLoadingMedia={isLoading}
               isSavingMedia={isSaving}
               isAnyClipTranscribing={isAnyClipTranscribing}
-              isCurrentClipTranscribing={currentClip ? isClipTranscribing(currentClip.id) : false}
-              isCurrentClipTranslating={currentClip ? isClipTranslating(currentClip.id) : false}
-              isCurrentClipComparing={currentClip ? isClipGettingCorrections(currentClip.id) : false}
+              isCurrentClipTranscribing={currentClipToDisplay ? isClipTranscribing(currentClipToDisplay.id) : false}
+              isCurrentClipTranslating={currentClipToDisplay ? isClipTranslating(currentClipToDisplay.id) : false}
+              isCurrentClipComparing={currentClipToDisplay ? isClipGettingCorrections(currentClipToDisplay.id) : false}
               mediaDuration={mediaDuration}
               focusedClip={focusedClip}
               showClipTrimmer={showClipTrimmer}
@@ -867,14 +914,14 @@ export default function ReelFluentApp() {
               onSaveToSession={handleSaveToSession}
               onOpenSessionDrawer={() => setSessionDrawerOpen(true)}
               canSaveToSession={
-                currentClip &&
+                currentClipToDisplay &&
                 !sessionClips.some(sessionClip =>
                   sessionClip.mediaSourceId === activeMediaSourceId &&
-                  sessionClip.startTime === currentClip.startTime &&
-                  sessionClip.endTime === currentClip.endTime
+                  sessionClip.startTime === currentClipToDisplay.startTime &&
+                  sessionClip.endTime === currentClipToDisplay.endTime
                 ) &&
                 (sessionClips.reduce((acc, clip) => acc + (clip.endTime - clip.startTime), 0) +
-                 (currentClip.endTime - currentClip.startTime)) <= 30 * 60
+                 (currentClipToDisplay.endTime - currentClipToDisplay.startTime)) <= 30 * 60
               }
               sessionClips={sessionClips}
               activeMediaSourceId={activeMediaSourceId}
