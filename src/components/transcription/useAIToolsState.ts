@@ -281,8 +281,8 @@ export function useAIToolsState(config: AIToolsStateConfig) {
       shouldUpdateCache = true;
     }
     if (currentClip.englishTranslation &&
-        currentClip.englishTranslation !== "Translating..." &&
-        !String(currentClip.englishTranslation).startsWith("Error:")) {
+              currentClip.englishTranslation !== "Translating..." &&
+              !String(currentClip.englishTranslation).startsWith("Error:")) {
       cacheData.englishTranslation = currentClip.englishTranslation;
       // Ensure english translation target language is set correctly
       cacheData.translationTargetLanguage = "english";

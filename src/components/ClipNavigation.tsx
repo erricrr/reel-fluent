@@ -29,6 +29,7 @@ interface ClipNavigationProps {
   title?: string;
   showHeader?: boolean; // Whether to show the header with title and dropdown
   className?: string; // Allow custom styling
+  triggerScrollToFirstClipKey?: number | string; // New prop
 }
 
 export default function ClipNavigation({
@@ -44,9 +45,27 @@ export default function ClipNavigation({
   title = "Clip Navigation",
   showHeader = true,
   className,
+  triggerScrollToFirstClipKey, // Destructure new prop
 }: ClipNavigationProps) {
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const activeClipRef = React.useRef<HTMLButtonElement>(null);
+
+  // Scroll to the beginning when triggerScrollToFirstClipKey changes
+  React.useEffect(() => {
+    if (triggerScrollToFirstClipKey === undefined || clips.length === 0) {
+      return;
+    }
+
+    if (scrollContainerRef.current) {
+      const scrollAreaViewport = scrollContainerRef.current.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
+      if (scrollAreaViewport) {
+        scrollAreaViewport.scrollTo({
+          left: 0,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [triggerScrollToFirstClipKey, clips.length]); // Depend on the key and clips.length
 
   // Helper function to check if clip is fully visible and scroll if needed
   const ensureClipVisible = React.useCallback(() => {

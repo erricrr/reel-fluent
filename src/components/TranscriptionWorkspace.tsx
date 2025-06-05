@@ -122,12 +122,14 @@ export default function TranscriptionWorkspace({
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+  const prevActiveMediaSourceIdRef = useRef<string | null | undefined>(); // For detecting media source change
 
   // Core state
   const [userTranscriptionInput, setUserTranscriptionInput] = useState(initialCurrentClip.userTranscription || "");
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [hasUserManuallyChangedTab, setHasUserManuallyChangedTab] = useState(false);
   const [isTranscriptionSaved, setIsTranscriptionSaved] = useState(false);
+  const [clipNavScrollToTopKey, setClipNavScrollToTopKey] = useState<number>(Date.now()); // Key to trigger scroll
 
   // State for the fully hydrated clip to be used by child components
   const [displayClip, setDisplayClip] = useState<Clip>(initialCurrentClip);
@@ -292,6 +294,23 @@ export default function TranscriptionWorkspace({
     hasUserManuallyChangedTab,
     displayClip?.id // Re-evaluate when the fundamental clip context changes
   ]);
+
+  // useEffect for scrolling ClipNavigation to top when media source changes
+  useEffect(() => {
+    const mediaSourceHasChanged = prevActiveMediaSourceIdRef.current !== activeMediaSourceId && activeMediaSourceId !== undefined;
+
+    if (
+      mediaSourceHasChanged &&
+      clips.length > 0 &&
+      currentClipIndex === 0 &&
+      !focusedClip
+    ) {
+      setClipNavScrollToTopKey(Date.now()); // Update the key to trigger scroll in ClipNavigation
+    }
+
+    // Store current activeMediaSourceId for the next render comparison
+    prevActiveMediaSourceIdRef.current = activeMediaSourceId;
+  }, [clips, currentClipIndex, focusedClip, activeMediaSourceId]);
 
   const handlePlayerTimeUpdate = useCallback((time: number) => {
     setCurrentPlaybackTime(time);
@@ -532,6 +551,7 @@ export default function TranscriptionWorkspace({
                   isClipSaved={isClipSaved}
                   showHeader={false}
                   className="p-0 bg-transparent shadow-none"
+                  triggerScrollToFirstClipKey={clipNavScrollToTopKey}
                 />
               </div>
 
