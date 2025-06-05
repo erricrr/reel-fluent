@@ -586,7 +586,7 @@ export default function TranscriptionWorkspace({
                 </div>
                 <h3 className="text-xl font-semibold text-primary mb-3">Focus on Clip Trimmer</h3>
                 <p className="text-muted-foreground mb-4 leading-relaxed">
-                  Use the <strong>Clip Trimmer</strong> on the left to select your custom clip range.
+                  Use the <strong>Clip Trimmer</strong> to select your custom clip range.
                   Preview your selection and create a focused clip for AI processing.
                 </p>
                 <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
