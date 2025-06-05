@@ -59,7 +59,7 @@ export function useClipManagement(language: string) {
   }, [language, updateClipsRef, toast]);
 
   const backToAutoClips = useCallback((duration: number, clipSegmentationDuration: number) => {
-    const autoClips = generateClips(duration, clipSegmentationDuration, language);
+    const autoClips = generateClips(duration, clipSegmentationDuration / 1000, language);
     updateClipsRef(autoClips);
     setCurrentClipIndex(0);
     setFocusedClip(null);
