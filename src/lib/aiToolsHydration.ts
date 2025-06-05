@@ -10,17 +10,26 @@ import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
  * 4. Non-loading data from session.
  */
 export function hydrateClipWithAIData(
-  clip: Clip, // This is initialCurrentClip from TranscriptionWorkspace
+  clip: Clip,
   mediaSourceId: string | null | undefined,
   sessionClips: Clip[],
   aiToolsCache: Record<string, any>
 ): Clip {
   if (!mediaSourceId) return { ...clip };
 
-  const cacheKey = `${mediaSourceId}-${clip.startTime}-${clip.endTime}`;
+  // Ensure we have the correct mediaSourceId for the clip
+  const effectiveMediaSourceId = (clip as any).mediaSourceId || mediaSourceId;
+
+  // Generate cache key using effectiveMediaSourceId
+  const cacheKey = `${effectiveMediaSourceId}-${clip.startTime}-${clip.endTime}`;
   const cachedData = aiToolsCache[cacheKey] || {};
+
+  // Find matching session clip with strict mediaSourceId matching
   const sessionAssociatedData = sessionClips.find(
-    sc => sc.startTime === clip.startTime && sc.endTime === clip.endTime && (sc as any).mediaSourceId === mediaSourceId
+    sc =>
+      sc.startTime === clip.startTime &&
+      sc.endTime === clip.endTime &&
+      ((sc as any).mediaSourceId === effectiveMediaSourceId)
   ) || {};
 
   let hydratedClip: Clip = { ...clip }; // Start with the incoming clip's data as the base
@@ -66,10 +75,6 @@ export function hydrateClipWithAIData(
     } else if (sessionValue !== undefined && sessionValue !== null && !isLoadingOrErrorState(sessionValue)) {
       // 4. Else, try non-loading session data.
       (hydratedClip as any)[field] = sessionValue;
-    } else {
-      // If all else fails (e.g., prop is null/undefined, cache/session are also null/undefined or have stale loading states),
-      // the value in hydratedClip (from the initial { ...clip }) will persist, which is typically null/undefined for these fields initially.
-      // No explicit assignment needed here as it's already set from the initial spread.
     }
   });
 
@@ -79,12 +84,8 @@ export function hydrateClipWithAIData(
   hydratedClip.endTime = clip.endTime;
   hydratedClip.isFocusedClip = clip.isFocusedClip;
 
-  // Preserve mediaSourceId if present on the original clip or session data
-  if ((clip as any).mediaSourceId) {
-    (hydratedClip as any).mediaSourceId = (clip as any).mediaSourceId;
-  } else if ((sessionAssociatedData as any).mediaSourceId) {
-    (hydratedClip as any).mediaSourceId = (sessionAssociatedData as any).mediaSourceId;
-  }
+  // Always set the effectiveMediaSourceId to ensure proper cache/session lookup in future operations
+  (hydratedClip as any).mediaSourceId = effectiveMediaSourceId;
 
   return hydratedClip;
 }

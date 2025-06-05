@@ -2,17 +2,13 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Clip } from '@/lib/videoUtils';
 import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 
-// Updated to remove explicit unlock; access depends on saved transcription, AI data availability, and active use.
+// Updated to remove explicit unlock; access depends on saved transcription and active use.
 const shouldEnableAITools = (
   isTranscriptionSaved: boolean,
-  userActivelyUsingAITools: boolean = false,
-  hasExistingAIData: boolean = false
+  userActivelyUsingAITools: boolean = false
 ): boolean => {
-  // Allow access if:
-  // 1. Transcription is saved in session, OR
-  // 2. User is actively interacting with AI tools, OR
-  // 3. The clip already has valid AI data (automated transcription, translation, etc.)
-  return isTranscriptionSaved || userActivelyUsingAITools || hasExistingAIData;
+  // Allow access if transcription is saved OR user is actively interacting with AI tools (e.g., clicked a button)
+  return isTranscriptionSaved || userActivelyUsingAITools;
 };
 
 interface SessionClip extends Clip {
@@ -166,7 +162,7 @@ export function useAIToolsState(config: AIToolsStateConfig) {
 
   // REMOVED: unlockCurrentClip function
 
-    const getComprehensiveTranscriptionData = useCallback(() => {
+  const getComprehensiveTranscriptionData = useCallback(() => {
     const sourceIdForLookup = currentClip?.mediaSourceId || activeMediaSourceId;
     if (!currentClip || !sourceIdForLookup) {
       // ... (return default empty structure) ...
@@ -175,8 +171,7 @@ export function useAIToolsState(config: AIToolsStateConfig) {
         automatedTranscription: null,
         hasValidUserTranscription: userTranscriptionInput.trim().length > 0,
         hasValidAutomatedTranscription: false,
-        isTranscriptionSaved: false,
-        hasExistingAIData: false
+        isTranscriptionSaved: false
       };
     }
     const clipCacheKey = getClipCacheKey(sourceIdForLookup, currentClip);
@@ -201,52 +196,12 @@ export function useAIToolsState(config: AIToolsStateConfig) {
     );
     const isTranscriptionSaved = Boolean(sessionAssociatedData && sessionAssociatedData.userTranscription && sessionAssociatedData.userTranscription.trim().length > 0);
 
-    // Check if the clip has any existing valid AI data (including from cache, session, or current clip)
-    const clipTranslation = currentClip.translation;
-    const sessionTranslation = sessionAssociatedData?.translation;
-    const cachedTranslation = cachedData?.translation;
-    const finalTranslation = clipTranslation || sessionTranslation || cachedTranslation;
-
-    const clipEnglishTranslation = currentClip.englishTranslation;
-    const sessionEnglishTranslation = sessionAssociatedData?.englishTranslation;
-    const cachedEnglishTranslation = cachedData?.englishTranslation;
-    const finalEnglishTranslation = clipEnglishTranslation || sessionEnglishTranslation || cachedEnglishTranslation;
-
-    const clipComparisonResult = currentClip.comparisonResult;
-    const sessionComparisonResult = sessionAssociatedData?.comparisonResult;
-    const cachedComparisonResult = cachedData?.comparisonResult;
-    const finalComparisonResult = clipComparisonResult || sessionComparisonResult || cachedComparisonResult;
-
-    const hasValidTranslation = Boolean(
-      finalTranslation &&
-      finalTranslation !== "Translating..." &&
-      !finalTranslation.startsWith("Error:")
-    );
-
-    const hasValidEnglishTranslation = Boolean(
-      finalEnglishTranslation &&
-      finalEnglishTranslation !== "Translating..." &&
-      !finalEnglishTranslation.startsWith("Error:")
-    );
-
-    const hasValidComparisonResult = Boolean(
-      finalComparisonResult &&
-      Array.isArray(finalComparisonResult) &&
-      finalComparisonResult.length > 0 &&
-      !(finalComparisonResult.length === 1 &&
-        (finalComparisonResult[0].token === "Comparing..." ||
-         finalComparisonResult[0].token.startsWith("Error:")))
-    );
-
-    const hasExistingAIData = hasValidAutomatedTranscription || hasValidTranslation || hasValidEnglishTranslation || hasValidComparisonResult;
-
     return {
       userTranscription: finalUserTranscription,
       automatedTranscription: finalAutomatedTranscription,
       hasValidUserTranscription,
       hasValidAutomatedTranscription,
-      isTranscriptionSaved,
-      hasExistingAIData
+      isTranscriptionSaved
     };
   }, [currentClip, userTranscriptionInput, sessionClips, activeMediaSourceId, localAIToolsCache]); // localAIToolsCache is a dependency
 
@@ -297,9 +252,8 @@ export function useAIToolsState(config: AIToolsStateConfig) {
   // Derived state
   const comprehensiveData = getComprehensiveTranscriptionData();
   const canAccessAITools = shouldEnableAITools(
-    comprehensiveData.isTranscriptionSaved, // Transcription saved in session
-    userActivelyUsingAITools, // User actively using AI tools
-    comprehensiveData.hasExistingAIData // Clip has existing AI data
+    comprehensiveData.isTranscriptionSaved, // Main condition is now whether transcription is saved
+    userActivelyUsingAITools
   );
 
   const hasValidAIContent = Boolean(

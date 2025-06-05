@@ -140,25 +140,23 @@ export default function AIToolsTab({
     });
   }, [currentClip, isAudioSource, mediaSrc, toast, onTranscribeAudio, aiToolsState, performAutoSave]);
 
-    const handleGetCorrections = useCallback(async () => {
+  const handleGetCorrections = useCallback(async () => {
     const comprehensiveData = aiToolsState.getComprehensiveTranscriptionData();
 
-    // For auto clips with existing AI data, allow corrections if there's automated transcription
-    // and some form of user transcription (including from session)
+    if (!comprehensiveData.hasValidUserTranscription) {
+      toast({
+        variant: "destructive",
+        title: "Missing User Transcription",
+        description: "Please enter and save your transcription before comparing with AI."
+      });
+      return;
+    }
+
     if (!comprehensiveData.hasValidAutomatedTranscription) {
       toast({
         variant: "destructive",
         title: "Missing AI Transcription",
         description: "Please ensure automated transcription is successful first."
-      });
-      return;
-    }
-
-    if (!comprehensiveData.hasValidUserTranscription && !comprehensiveData.userTranscription) {
-      toast({
-        variant: "destructive",
-        title: "Missing User Transcription",
-        description: "Please enter and save your transcription before comparing with AI."
       });
       return;
     }
@@ -188,11 +186,10 @@ export default function AIToolsTab({
     });
   }, [currentClip, onGetCorrections, toast, aiToolsState, performAutoSave]);
 
-    const handleTranslate = useCallback(async () => {
+  const handleTranslate = useCallback(async () => {
     const comprehensiveData = aiToolsState.getComprehensiveTranscriptionData();
 
-    // For auto clips with existing AI data, allow translation if there's automated transcription
-    if (!comprehensiveData.hasValidAutomatedTranscription && !comprehensiveData.automatedTranscription) {
+    if (!comprehensiveData.hasValidAutomatedTranscription) {
       toast({
         variant: "destructive",
         title: "No Text to Translate",
