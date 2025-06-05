@@ -28,9 +28,10 @@ export interface Clip {
   language?: string;
   isFocusedClip?: boolean; // Indicates if this is a user-created focused clip
   displayName?: string; // Optional display name for session clips
+  mediaSourceId?: string; // ID of the media source this clip belongs to
 }
 
-export function generateClips(duration: number, clipLength: number, language: string): Clip[] {
+export function generateClips(duration: number, clipLength: number, language: string, mediaSourceId?: string): Clip[] {
   if (isNaN(duration) || duration <= 0) {
     return [];
   }
@@ -38,11 +39,12 @@ export function generateClips(duration: number, clipLength: number, language: st
   const clips: Clip[] = [];
   let currentTime = 0;
   let clipId = 0;
+  const uniquePrefix = mediaSourceId ? `${mediaSourceId}-clip` : 'clip';
 
   while (currentTime < duration) {
     const endTime = Math.min(currentTime + clipLength, duration);
     clips.push({
-      id: `clip-${clipId++}`,
+      id: `${uniquePrefix}-${clipId++}`,
       startTime: currentTime,
       endTime: endTime,
       userTranscription: null,
@@ -54,15 +56,17 @@ export function generateClips(duration: number, clipLength: number, language: st
       comparisonResult: null,
       language: language,
       isFocusedClip: false,
+      mediaSourceId: mediaSourceId,
     });
     currentTime += clipLength;
   }
   return clips;
 }
 
-export function createFocusedClip(startTime: number, endTime: number, language: string): Clip {
+export function createFocusedClip(startTime: number, endTime: number, language: string, mediaSourceId?: string): Clip {
+  const uniqueId = mediaSourceId ? `${mediaSourceId}-focused-clip-${Date.now()}` : `focused-clip-${Date.now()}`;
   return {
-    id: `focused-clip-${Date.now()}`,
+    id: uniqueId,
     startTime: startTime,
     endTime: endTime,
     userTranscription: null,
@@ -74,6 +78,7 @@ export function createFocusedClip(startTime: number, endTime: number, language: 
     comparisonResult: null,
     language: language,
     isFocusedClip: true,
+    mediaSourceId: mediaSourceId,
   };
 }
 

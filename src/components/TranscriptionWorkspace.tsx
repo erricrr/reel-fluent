@@ -16,6 +16,7 @@ import type { Clip } from '@/lib/videoUtils';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { hydrateClipWithAIData } from '@/lib/aiToolsHydration';
+import type { CorrectionToken } from '@/ai/flows/compare-transcriptions-flow';
 
 // Import the new extracted components
 import MediaControls from "./transcription/MediaControls";
@@ -154,6 +155,19 @@ export default function TranscriptionWorkspace({
     language
   });
 
+  // Helper to check for active loading states or error states (consistent with aiToolsHydration.ts)
+  const isLoadingOrErrorState = (value: any): boolean => {
+    if (typeof value === 'string') {
+      return value.endsWith('...') || value.startsWith('Error:');
+    }
+    if (Array.isArray(value) && value.length > 0 && typeof (value[0] as CorrectionToken)?.token === 'string') {
+        if (value.length === 1 && ((value[0] as CorrectionToken).token === "Comparing..." || (value[0] as CorrectionToken).token.startsWith("Error:"))) {
+            return true;
+        }
+    }
+    return false;
+  };
+
   // Resize handler for left pane
   useEffect(() => {
     const handleResize = () => {
@@ -205,25 +219,64 @@ export default function TranscriptionWorkspace({
 
   // Reset state when clip changes (mainly for displayClip hydration)
   useEffect(() => {
-    let hydratedClip = initialCurrentClip;
-    if (!hydratedClip) {
-      // If initialCurrentClip is null/undefined, try to create a default empty clip structure
-      // to prevent errors, though this scenario should ideally be handled upstream.
-      setDisplayClip({ id: '', startTime: 0, endTime: 0 });
+    let clipToHydrate: Clip | null = null;
+
+    if (focusedClip) {
+      clipToHydrate = focusedClip;
+    } else if (initialCurrentClip) {
+      clipToHydrate = initialCurrentClip;
+    }
+
+    if (!clipToHydrate) {
+      setDisplayClip({ id: '', startTime: 0, endTime: 0, userTranscription: '', automatedTranscription: null, translation: null, englishTranslation: null, comparisonResult: null, language: language || 'en' });
       return;
     }
+
+    // We pass the clipToHydrate directly. hydrateClipWithAIData will prioritize its fields
+    // (loading states, then actual data) before looking at cache/session.
+    // This relies on initialCurrentClip being correctly populated by ReelFluentApp
+    // (e.g., with new transcription data after an operation, or as a clean clip after media source change).
+    let hydratedClipResult = clipToHydrate; // Start with the assumption it might be the final, or will be hydrated
     try {
       const aiToolsCache = JSON.parse(localStorage.getItem("reel-fluent-ai-tools-cache") || "{}");
-      hydratedClip = hydrateClipWithAIData(initialCurrentClip, activeMediaSourceId, sessionClips, aiToolsCache);
+      hydratedClipResult = hydrateClipWithAIData(clipToHydrate, activeMediaSourceId, sessionClips, aiToolsCache);
     } catch (e) {
       console.warn("Error hydrating clip in TranscriptionWorkspace:", e);
-      hydratedClip = initialCurrentClip; // Fallback
+      // Fallback to the clip we started with if hydration fails
+      hydratedClipResult = clipToHydrate;
     }
-    setDisplayClip(hydratedClip);
-    // DO NOT set userTranscriptionInput or other UI states here directly from hydratedClip
-    // to avoid interrupting user input. Let another useEffect handle initial population.
+    setDisplayClip(hydratedClipResult);
 
-  }, [initialCurrentClip, activeMediaSourceId, sessionClips]);
+  }, [
+    // Identity of the clips and context
+    initialCurrentClip?.id,
+    focusedClip?.id,
+    activeMediaSourceId,
+    language,
+    sessionClips, // Assumed to be stable from the custom hook if content hasn't changed
+
+    // Stringified relevant data of the clip that will be chosen for hydration.
+    // This ensures the effect runs if the content of these fields changes for the active clip.
+    focusedClip ? JSON.stringify({
+      at: focusedClip.automatedTranscription,
+      t: focusedClip.translation,
+      et: focusedClip.englishTranslation,
+      cr: focusedClip.comparisonResult,
+      l: focusedClip.language,
+      ttl: focusedClip.translationTargetLanguage,
+      ut: focusedClip.userTranscription // User transcription is also key for display
+    }) : null,
+
+    initialCurrentClip && !focusedClip ? JSON.stringify({
+      at: initialCurrentClip.automatedTranscription,
+      t: initialCurrentClip.translation,
+      et: initialCurrentClip.englishTranslation,
+      cr: initialCurrentClip.comparisonResult,
+      l: initialCurrentClip.language,
+      ttl: initialCurrentClip.translationTargetLanguage,
+      ut: initialCurrentClip.userTranscription
+    }) : null
+  ]);
 
   // Effect to initialize UI elements when displayClip fundamentally changes
   useEffect(() => {

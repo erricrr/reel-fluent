@@ -139,7 +139,10 @@ export default function ReelFluentApp() {
   }, [createEnhancedClips, sessionClips, activeMediaSourceId]);
 
   // Current clip - use focused clip if available, otherwise use indexed clip
-  const currentClipToDisplay = focusedClip || (clips[currentClipIndex] || null);
+  const currentClipToDisplay = useMemo(() => {
+    return focusedClip || (clips && clips[currentClipIndex]) || null;
+  }, [focusedClip, clips, currentClipIndex]);
+
   const isYouTubeVideoCheck = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
   // Utility functions
@@ -150,7 +153,7 @@ export default function ReelFluentApp() {
   // Media upload handlers
   const handleFileUpload = useCallback(async (file: File) => {
     await processFile(file, (src, displayName, duration, type) => {
-      const mediaSource: MediaSource = {
+      const newMediaSource: MediaSource = {
         id: generateUniqueId(),
         src,
         displayName,
@@ -159,176 +162,133 @@ export default function ReelFluentApp() {
         language
       };
 
-      if (addMediaSource(mediaSource)) {
-        selectMediaSource(mediaSource.id);
+      if (addMediaSource(newMediaSource)) {
+        selectMediaSource(newMediaSource.id);
         setMediaSrc(src);
         setMediaDisplayName(displayName);
         setMediaDuration(duration);
         setCurrentSourceType(type);
         setSourceFile(file);
         setSourceUrl(undefined);
-        generateClipsFromDuration(duration, clipSegmentationDuration);
       }
     });
-  }, [processFile, addMediaSource, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, language]);
+  }, [processFile, addMediaSource, selectMediaSource, language]);
 
   const handleUrlSubmit = useCallback(async (url: string) => {
     setSourceUrl(url);
 
     if (isYouTubeUrl(url)) {
-      // Handle YouTube URLs
-      await processYouTubeUrl(url, (src, displayName, duration, videoInfo) => {
-        const mediaSource: MediaSource = {
+      await processYouTubeUrl(url, (src, ytDisplayName, ytDuration, videoInfo) => {
+        const newYtMediaSource: MediaSource = {
           id: generateUniqueId(),
           src,
-          displayName,
-          type: 'audio', // YouTube videos are processed as audio files
-          duration,
-          language // Add the selected language
+          displayName: ytDisplayName,
+          type: 'audio',
+          duration: ytDuration,
+          language
         };
 
-        if (addMediaSource(mediaSource)) {
-          selectMediaSource(mediaSource.id);
+        if (addMediaSource(newYtMediaSource)) {
+          selectMediaSource(newYtMediaSource.id);
           setMediaSrc(src);
-          setMediaDisplayName(displayName);
-          setMediaDuration(duration);
-          setCurrentSourceType('audio'); // Set as audio since we extract audio from YouTube
+          setMediaDisplayName(ytDisplayName);
+          setMediaDuration(ytDuration);
+          setCurrentSourceType('audio');
           setSourceFile(null);
-          generateClipsFromDuration(duration, clipSegmentationDuration);
         }
       });
     } else {
-      // Handle direct media URLs (MP3, WAV, MP4, WebM, etc.)
       try {
-        // Extract filename from URL for display name
         const urlObj = new URL(url);
         const pathname = urlObj.pathname;
         const filename = pathname.split('/').pop() || 'Media File';
-        const displayName = decodeURIComponent(filename);
+        const decodedDisplayName = decodeURIComponent(filename);
 
-        // Determine media type from URL extension
         const extension = pathname.toLowerCase().split('.').pop() || '';
         const isVideoExtension = ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension);
         const isAudioExtension = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(extension);
+        let resolvedMediaType: 'video' | 'audio' | 'url' = 'url';
+        if (isVideoExtension) resolvedMediaType = 'video';
+        else if (isAudioExtension) resolvedMediaType = 'audio';
 
-        let mediaType: 'video' | 'audio' | 'url' = 'url';
-        if (isVideoExtension) {
-          mediaType = 'video';
-        } else if (isAudioExtension) {
-          mediaType = 'audio';
-        }
-
-        // Load the media to get its actual duration
-        const getDuration = (): Promise<number> => {
-          return new Promise((resolve, reject) => {
-            const media = mediaType === 'video' ? document.createElement('video') : document.createElement('audio');
-            media.crossOrigin = 'anonymous';
-            media.preload = 'metadata';
-
-            const timeout = setTimeout(() => {
-              media.src = '';
-              reject(new Error('Timeout loading media metadata'));
-            }, 10000); // 10 second timeout
-
-            media.onloadedmetadata = () => {
-              clearTimeout(timeout);
-              const duration = media.duration;
-              media.src = ''; // Clean up
-              if (isNaN(duration) || duration <= 0) {
-                reject(new Error('Invalid media duration'));
-              } else {
-                resolve(duration);
-              }
-            };
-
-            media.onerror = () => {
-              clearTimeout(timeout);
-              media.src = ''; // Clean up
-              reject(new Error('Failed to load media from URL. The server may not allow cross-origin requests.'));
-            };
-
-            media.src = url;
-          });
-        };
-
-        const duration = await getDuration();
-
-        const mediaSource: MediaSource = {
-          id: generateUniqueId(),
-          src: url, // Use the URL directly
-          displayName,
-          type: mediaType,
-          duration: duration, // Use the actual duration we just got
-          language // Add the selected language
-        };
-
-        if (addMediaSource(mediaSource)) {
-          selectMediaSource(mediaSource.id);
-          setMediaSrc(url);
-          setMediaDisplayName(displayName);
-          setMediaDuration(duration); // Set the actual duration
-          setCurrentSourceType(mediaType);
-          setSourceFile(null);
-          generateClipsFromDuration(duration, clipSegmentationDuration); // Generate clips immediately since we have duration
-        }
-
-        toast({
-          title: "Direct Media URL Added",
-          description: `Added "${displayName}" (${formatSecondsToMMSS(duration)}) from direct URL.`,
+        const resolvedDuration = await new Promise<number>((resolve, reject) => {
+          const media = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
+          media.crossOrigin = 'anonymous';
+          media.preload = 'metadata';
+          const timeout = setTimeout(() => { media.src=''; reject(new Error('Timeout loading media metadata')); }, 10000);
+          media.onloadedmetadata = () => { clearTimeout(timeout); media.src=''; if (isNaN(media.duration) || media.duration <=0) reject(new Error('Invalid media duration')); else resolve(media.duration); };
+          media.onerror = () => { clearTimeout(timeout); media.src=''; reject(new Error('Failed to load media from URL.')); };
+          media.src = url;
         });
+
+        const directUrlMediaSource: MediaSource = {
+          id: generateUniqueId(),
+          src: url,
+          displayName: decodedDisplayName,
+          type: resolvedMediaType,
+          duration: resolvedDuration,
+          language
+        };
+
+        if (addMediaSource(directUrlMediaSource)) {
+          selectMediaSource(directUrlMediaSource.id);
+          setMediaSrc(url);
+          setMediaDisplayName(decodedDisplayName);
+          setMediaDuration(resolvedDuration);
+          setCurrentSourceType(resolvedMediaType);
+          setSourceFile(null);
+        }
+        toast({ title: "Direct Media URL Added", description: `Added "${decodedDisplayName}" (${formatSecondsToMMSS(resolvedDuration)}) from direct URL.` });
       } catch (error) {
         console.error('Direct URL processing error:', error);
-        toast({
-          variant: "destructive",
-          title: "Invalid URL",
-          description: error instanceof Error ? error.message : "Please enter a valid YouTube URL or direct media file URL.",
-        });
+        toast({ variant: "destructive", title: "Invalid URL", description: error instanceof Error ? error.message : "Please enter a valid YouTube URL or direct media file URL." });
       }
     }
-  }, [processYouTubeUrl, addMediaSource, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, toast, language]);
+  }, [processYouTubeUrl, addMediaSource, selectMediaSource, toast, language]);
 
   // Media source management
   const handleSelectMediaSource = useCallback((sourceId: string) => {
     const source = mediaSources.find(s => s.id === sourceId);
     if (!source) return;
 
-    // Clear current state first
+    // Clear current clip-specific state first
     setFocusedClip(null);
     setShowClipTrimmer(false);
 
-    // Update to new source
+    // Update to new source - these will trigger the main useEffect for clip generation
     selectMediaSource(sourceId);
     setMediaSrc(source.src);
     setMediaDisplayName(source.displayName);
     setMediaDuration(source.duration);
     setCurrentSourceType(source.type);
 
-    // Reset clip selection to first clip
+    // Reset clip selection index for the upcoming new clips. The clips themselves
+    // will be generated by the main useEffect that reacts to activeMediaSourceId and mediaDuration changes.
     selectClip(0);
 
-    // Update source file/url appropriately
-    setSourceFile(null); // Always clear the file since we don't store original files
-
-    // Set sourceUrl based on whether this was originally from a URL
+    // Update source file/url appropriately (these don't affect clip generation directly)
+    setSourceFile(null);
     if (source.type === 'url' || (source.type === 'audio' && source.src.startsWith('blob:'))) {
-      // This is either a direct URL or YouTube (which creates blob URLs)
-      // For YouTube, we'll lose the original URL but that's okay
       setSourceUrl(source.type === 'url' ? source.src : undefined);
     } else {
-      // This was a file upload
       setSourceUrl(undefined);
     }
 
-    // Generate clips for this source
-    if (source.duration > 0) {
-      generateClipsFromDuration(source.duration, clipSegmentationDuration);
-    }
+    // The direct call to generateClipsFromDuration has been removed.
+    // The main useEffect reacting to activeMediaSourceId and mediaDuration will handle clip regeneration
+    // using the correct segmentation preference for the new source.
 
-    // toast({
-    //   title: "Media Source Selected",
-    //   description: `Switched to "${source.displayName}"`,
-    // });
-  }, [mediaSources, selectMediaSource, generateClipsFromDuration, clipSegmentationDuration, sourceUrl, setFocusedClip, setShowClipTrimmer, toast, isYouTubeVideoCheck, selectClip]);
+  }, [
+    mediaSources,
+    selectMediaSource,
+    setFocusedClip,
+    setShowClipTrimmer,
+    selectClip,
+    // Add other direct state setters if they were implicitly part of original dependencies
+    // For example, setMediaSrc, setMediaDisplayName, setMediaDuration, setCurrentSourceType, setSourceUrl
+    // However, these are primarily for local component state and don't need to be deps for this callback's identity
+    // unless an ESLint rule complains. The core logic depends on the hook setters and mediaSources.
+  ]);
 
   const handleRemoveMediaSource = useCallback((sourceId: string) => {
     if (isAnyClipTranscribing) {
@@ -391,19 +351,10 @@ export default function ReelFluentApp() {
     setSegmentationPreference(activeMediaSourceId, newDurationMs);
     setClipSegmentationDuration(newDurationMs);
 
-    const newClips = generateClips(mediaDuration, newDurationMs / 1000, language);
-    setClips(newClips);
-    setCurrentClipIndex(0);
-    setFocusedClip(null);
-    setShowClipTrimmer(false);
+    // Use the hook's generateClipsFromDuration to ensure mediaSourceId is set
+    generateClipsFromDuration(mediaDuration, newDurationMs / 1000, activeMediaSourceId);
 
-    toast({
-      title: "Clip Segmentation Updated",
-      description: `Clips are now segmented to ${durationString}.`,
-      duration: 3000,
-    });
-
-  }, [activeMediaSourceId, mediaDuration, language, toast, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
+  }, [activeMediaSourceId, mediaDuration, language, generateClipsFromDuration, setClipSegmentationDuration]);
 
   // Clip operations
   const handleSelectClip = useCallback((index: number) => {
@@ -418,7 +369,7 @@ export default function ReelFluentApp() {
     removeClipFromManager(clipIdToRemove);
   }, [removeClipFromManager]);
 
-  // AI operations
+    // AI operations
   const handleTranscribeAudio = useCallback(async (clipId: string) => {
     const targetClip = (focusedClip && focusedClip.id === clipId) ? focusedClip : clips.find(c => c.id === clipId);
     if (!targetClip || !mediaSrc || !currentSourceType) {
@@ -449,20 +400,21 @@ export default function ReelFluentApp() {
     await getCorrections(targetClip, updateClip);
   }, [focusedClip, clips, getCorrections, updateClip, toast]);
 
-  // Custom clip creation
+  // Handle custom clip creation
   const handleCreateFocusedClip = useCallback((startTime: number, endTime: number) => {
-    setPendingCustomClip({ startTime, endTime });
-    setShowCustomClipNaming(true);
-  }, []);
+    if (activeMediaSourceId) {
+      createCustomClip(startTime, endTime, undefined, activeMediaSourceId);
+    }
+  }, [createCustomClip, activeMediaSourceId]);
 
   const handleConfirmCustomClipName = useCallback(() => {
-    if (!pendingCustomClip) return;
+    if (!pendingCustomClip || !activeMediaSourceId) return;
     const clipName = customClipName.trim() || `Custom Clip ${Date.now()}`;
-    createCustomClip(pendingCustomClip.startTime, pendingCustomClip.endTime, clipName);
+    createCustomClip(pendingCustomClip.startTime, pendingCustomClip.endTime, clipName, activeMediaSourceId);
     setShowCustomClipNaming(false);
     setPendingCustomClip(null);
     setCustomClipName("");
-  }, [pendingCustomClip, customClipName, createCustomClip]);
+  }, [pendingCustomClip, customClipName, createCustomClip, activeMediaSourceId]);
 
   const handleCancelCustomClipName = useCallback(() => {
     setShowCustomClipNaming(false);
@@ -475,10 +427,12 @@ export default function ReelFluentApp() {
   }, [showClipTrimmer, setShowClipTrimmer]);
 
   const handleBackToAutoClips = useCallback(() => {
-    if (mediaDuration > 0) {
-      backToAutoClips(mediaDuration, clipSegmentationDuration);
+    if (mediaDuration && activeMediaSourceId) {
+      backToAutoClips(mediaDuration, clipSegmentationDuration, activeMediaSourceId);
+      setShowClipTrimmer(false);
+      setFocusedClip(null);
     }
-  }, [mediaDuration, clipSegmentationDuration, backToAutoClips]);
+  }, [mediaDuration, clipSegmentationDuration, backToAutoClips, setShowClipTrimmer, setFocusedClip, activeMediaSourceId]);
 
   // Session management
 
@@ -771,13 +725,13 @@ export default function ReelFluentApp() {
     }
   }, [user, sourceFile, sourceUrl, mediaDisplayName, mediaDuration, currentSourceType, language, clipSegmentationDuration, sessionClips, setIsSaving, toast]);
 
-  // Handle duration updates for direct URLs (when duration becomes available)
+  // Effect to generate clips when duration becomes available
   useEffect(() => {
-    if (mediaDuration > 0 && clips.length === 0 && mediaSrc) {
+    if (mediaDuration > 0 && clips.length === 0 && mediaSrc && activeMediaSourceId) {
       // Generate clips when duration becomes available (e.g., for direct URLs)
-      generateClipsFromDuration(mediaDuration, clipSegmentationDuration);
+      generateClipsFromDuration(mediaDuration, clipSegmentationDuration, activeMediaSourceId);
     }
-  }, [mediaDuration, clips.length, mediaSrc, generateClipsFromDuration, clipSegmentationDuration]);
+  }, [mediaDuration, clips.length, mediaSrc, generateClipsFromDuration, clipSegmentationDuration, activeMediaSourceId]);
 
   // Separate effect to update MediaSource duration when it becomes available
   useEffect(() => {
@@ -798,19 +752,18 @@ export default function ReelFluentApp() {
       }
       setClipSegmentationDuration(durationForClipsMs);
 
-      const newClips = generateClips(mediaDuration, durationForClipsMs / 1000, language);
-      setClips(newClips);
-      setCurrentClipIndex(0);
-      setFocusedClip(null);
-      setShowClipTrimmer(false);
+      // Use the hook's generateClipsFromDuration to ensure mediaSourceId is set
+      generateClipsFromDuration(mediaDuration, durationForClipsMs / 1000, activeMediaSourceId);
     } else {
-      setClips([]);
-      setCurrentClipIndex(0);
-      setFocusedClip(null);
-      setShowClipTrimmer(false);
+      // If no active source or duration, clear clips
+      // generateClipsFromDuration(0,0, activeMediaSourceId || '') would also work if it handles duration 0 gracefully
+      setClips([]); // from useClipManagement
+      setCurrentClipIndex(0); // from useClipManagement
+      setFocusedClip(null); // from useClipManagement
+      setShowClipTrimmer(false); // from useClipManagement
       setClipSegmentationDuration(DEFAULT_SEGMENTATION_DURATION_MS);
     }
-  }, [activeMediaSourceId, mediaDuration, language, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
+  }, [activeMediaSourceId, mediaDuration, language, generateClipsFromDuration, setClipSegmentationDuration, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
 
   function getAIToolsCache(): Record<string, any> {
     if (typeof window === 'undefined') return {};

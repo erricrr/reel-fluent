@@ -139,10 +139,10 @@ export function useAIOperations() {
           translationTargetLanguage: targetLanguage
         });
       } else {
-        onUpdate(clip.id, {
-          translation: "Translating...",
-          translationTargetLanguage: targetLanguage
-        });
+      onUpdate(clip.id, {
+        translation: "Translating...",
+        translationTargetLanguage: targetLanguage
+      });
       }
 
       const result = await translateTranscriptionFlow({
@@ -157,10 +157,10 @@ export function useAIOperations() {
           translationTargetLanguage: targetLanguage
         });
       } else {
-        onUpdate(clip.id, {
-          translation: result.translatedText,
-          translationTargetLanguage: targetLanguage
-        });
+      onUpdate(clip.id, {
+        translation: result.translatedText,
+        translationTargetLanguage: targetLanguage
+      });
       }
 
       toast({
@@ -178,10 +178,10 @@ export function useAIOperations() {
           translationTargetLanguage: targetLanguage
         });
       } else {
-        onUpdate(clip.id, {
+      onUpdate(clip.id, {
           translation: `Error: ${errorMessage}`,
           translationTargetLanguage: targetLanguage
-        });
+      });
       }
 
       toast({

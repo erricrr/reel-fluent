@@ -18,6 +18,7 @@ export function useClipManagement(language: string) {
   const [showClipTrimmer, setShowClipTrimmer] = useState<boolean>(false);
   const [isAnyClipTranscribing, setIsAnyClipTranscribing] = useState<boolean>(false);
   const [workInProgressClips, setWorkInProgressClips] = useState<Record<string, Clip>>({});
+  const [activeMediaSourceId, setActiveMediaSourceId] = useState<string | null>(null);
 
   const clipsRef = useRef<Clip[]>([]);
   const { toast } = useToast();
@@ -28,11 +29,12 @@ export function useClipManagement(language: string) {
     setClips(newClips);
   }, []);
 
-  const generateClipsFromDuration = useCallback((duration: number, clipLength: number) => {
-    const newClips = generateClips(duration, clipLength, language);
+  const generateClipsFromDuration = useCallback((duration: number, clipLength: number, mediaSourceId: string) => {
+    const newClips = generateClips(duration, clipLength, language, mediaSourceId);
     updateClipsRef(newClips);
     setCurrentClipIndex(0);
     setFocusedClip(null);
+    setActiveMediaSourceId(mediaSourceId);
   }, [language, updateClipsRef]);
 
   const selectClip = useCallback((index: number) => {
@@ -41,8 +43,8 @@ export function useClipManagement(language: string) {
     }
   }, [clips.length]);
 
-  const createCustomClip = useCallback((startTime: number, endTime: number, displayName?: string) => {
-    const customClip = createFocusedClip(startTime, endTime, language);
+  const createCustomClip = useCallback((startTime: number, endTime: number, displayName?: string, mediaSourceId?: string) => {
+    const customClip = createFocusedClip(startTime, endTime, language, mediaSourceId);
     if (displayName) {
       customClip.displayName = displayName;
     }
@@ -58,12 +60,13 @@ export function useClipManagement(language: string) {
     });
   }, [language, updateClipsRef, toast]);
 
-  const backToAutoClips = useCallback((duration: number, clipSegmentationDuration: number) => {
-    const autoClips = generateClips(duration, clipSegmentationDuration / 1000, language);
+  const backToAutoClips = useCallback((duration: number, clipSegmentationDuration: number, mediaSourceId: string) => {
+    const autoClips = generateClips(duration, clipSegmentationDuration / 1000, language, mediaSourceId);
     updateClipsRef(autoClips);
     setCurrentClipIndex(0);
     setFocusedClip(null);
     setShowClipTrimmer(false);
+    setActiveMediaSourceId(mediaSourceId);
   }, [language, updateClipsRef]);
 
   const updateClip = useCallback((clipId: string, updates: Partial<Clip>) => {
@@ -145,6 +148,12 @@ export function useClipManagement(language: string) {
     const baseClip = clips[clipIndex];
     if (!baseClip || !activeMediaSourceId) return baseClip;
 
+    // Ensure the base clip has the correct mediaSourceId
+    const baseClipWithMediaSource = {
+      ...baseClip,
+      mediaSourceId: (baseClip as any).mediaSourceId || activeMediaSourceId
+    };
+
     // Find matching saved session clip
     const savedClip = sessionClips.find(sessionClip =>
       sessionClip.mediaSourceId === activeMediaSourceId &&
@@ -168,19 +177,20 @@ export function useClipManagement(language: string) {
       };
 
       return {
-        ...baseClip,
-        userTranscription: mergeField(baseClip.userTranscription, savedClip.userTranscription),
-        automatedTranscription: mergeField(baseClip.automatedTranscription, savedClip.automatedTranscription),
-        translation: mergeField(baseClip.translation, savedClip.translation),
-        translationTargetLanguage: mergeField(baseClip.translationTargetLanguage, savedClip.translationTargetLanguage),
-        englishTranslation: mergeField(baseClip.englishTranslation, savedClip.englishTranslation),
-        comparisonResult: mergeField(baseClip.comparisonResult, savedClip.comparisonResult),
-        displayName: savedClip.displayName || baseClip.displayName,
-        language: savedClip.language || baseClip.language,
+        ...baseClipWithMediaSource,
+        userTranscription: mergeField(baseClipWithMediaSource.userTranscription, savedClip.userTranscription),
+        automatedTranscription: mergeField(baseClipWithMediaSource.automatedTranscription, savedClip.automatedTranscription),
+        translation: mergeField(baseClipWithMediaSource.translation, savedClip.translation),
+        translationTargetLanguage: mergeField(baseClipWithMediaSource.translationTargetLanguage, savedClip.translationTargetLanguage),
+        englishTranslation: mergeField(baseClipWithMediaSource.englishTranslation, savedClip.englishTranslation),
+        comparisonResult: mergeField(baseClipWithMediaSource.comparisonResult, savedClip.comparisonResult),
+        displayName: savedClip.displayName || baseClipWithMediaSource.displayName,
+        language: savedClip.language || baseClipWithMediaSource.language,
+        mediaSourceId: activeMediaSourceId // Always ensure the correct mediaSourceId
       };
     }
 
-    return baseClip;
+    return baseClipWithMediaSource;
   }, [clips]);
 
   // Memoized enhanced clips
@@ -197,6 +207,7 @@ export function useClipManagement(language: string) {
     isAnyClipTranscribing,
     workInProgressClips,
     clipsRef,
+    activeMediaSourceId,
 
     // Actions
     generateClipsFromDuration,
@@ -219,5 +230,6 @@ export function useClipManagement(language: string) {
     setShowClipTrimmer,
     setIsAnyClipTranscribing,
     setWorkInProgressClips,
+    setActiveMediaSourceId,
   };
 }
