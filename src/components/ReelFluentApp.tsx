@@ -927,7 +927,7 @@ export default function ReelFluentApp() {
         onClick={() => setSessionDrawerOpen(false)}
       />
       <div
-        className={`fixed inset-x-0 bottom-0 bg-background transform transition-transform duration-300 ease-in-out ${isSessionDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        className={`rounded-t-xl fixed inset-x-0 bottom-0 bg-background transform transition-transform duration-300 ease-in-out ${isSessionDrawerOpen ? 'translate-y-0' : 'translate-y-full'}`}
         style={{
           height: 'calc(100vh - 120px)',
           maxHeight: 'calc(100vh - 120px)',
