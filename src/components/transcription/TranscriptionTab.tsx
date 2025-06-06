@@ -7,6 +7,7 @@ import type { Clip } from '@/lib/videoUtils';
 import MediaControls from './MediaControls';
 import type { VideoPlayerRef } from "../VideoPlayer";
 import { useEffect, useRef } from "react";
+import { useMobileViewportReset } from "@/hooks/use-mobile-viewport";
 
 // Inline utility function
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -67,30 +68,8 @@ export default function TranscriptionTab({
   onTabChange,
 }: TranscriptionTabProps) {
 
-  // Helper function to reset viewport on mobile after save
-  const resetMobileViewport = () => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) { // Check for mobile screen width
-      const activeElement = document.activeElement as HTMLElement;
-      if (activeElement && typeof activeElement.blur === 'function') {
-        activeElement.blur(); // Attempt to dismiss keyboard
-      }
-
-      // Delay to allow UI to settle and keyboard to retract
-      setTimeout(() => {
-        window.scrollTo(0, 0); // Fallback scroll to top
-
-        const viewport = document.querySelector("meta[name=viewport]");
-        if (viewport) {
-          const content = viewport.getAttribute("content");
-          // Force a re-evaluation by temporarily changing and then restoring the content
-          viewport.setAttribute("content", content + ",width=device-width"); // Adding extra attribute to ensure change
-          setTimeout(() => {
-            viewport.setAttribute("content", content || "width=device-width, initial-scale=1");
-          }, 50); // Short delay for the change to register and revert
-        }
-      }, 150); // Main delay for keyboard dismissal and UI updates
-    }
-  };
+    // Use the mobile viewport reset hook
+  const resetMobileViewport = useMobileViewportReset();
 
   // Track previous value of isTranscriptionSaved
   const prevIsTranscriptionSavedRef = useRef<boolean>();
@@ -141,6 +120,7 @@ export default function TranscriptionTab({
           placeholder={`Type what you hear in the clip to practice ${language.charAt(0).toUpperCase() + language.slice(1)}...`}
           value={userTranscriptionInput}
           onChange={onUserInputChange}
+          onBlur={resetMobileViewport}
         />
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2">

@@ -12,6 +12,7 @@ import type { VideoPlayerRef } from "../VideoPlayer";
 import { getLanguageLabel } from "@/lib/languageOptions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useMobileViewportReset } from "@/hooks/use-mobile-viewport";
 
 // Inline utility component
 const ThreeDotsLoader: React.FC<{ className?: string }> = ({ className = "" }) => (
@@ -87,6 +88,7 @@ export default function AIToolsTab({
   const { toast } = useToast();
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [practiceText, setPracticeText] = useState("");
+  const resetMobileViewport = useMobileViewportReset();
 
   // Auto-save helper function for DRY principle
   const performAutoSave = useCallback((clipData: Partial<Clip>, operation: string, isManualSave = false) => {
@@ -448,6 +450,7 @@ export default function AIToolsTab({
                 placeholder="Practice typing here..."
                 value={practiceText}
                 onChange={(e) => setPracticeText(e.target.value)}
+                onBlur={resetMobileViewport}
               />
             </div>
           ) : (
