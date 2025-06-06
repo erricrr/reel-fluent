@@ -478,7 +478,18 @@ export default function ReelFluentApp() {
       language: currentClipToDisplay.language || language,
       displayName: existingClipIndex >= 0
         ? sessionClips[existingClipIndex].displayName
-        : (currentClipToDisplay.displayName || (originalClipNumber ? `Clip ${originalClipNumber}` : `Clip ${sessionClips.length + 1}`)),
+        : (
+            currentClipToDisplay.displayName
+            || (
+              focusedClip
+                ? `Custom Clip ${
+                    sessionClips.filter(
+                      clip => clip.mediaSourceId === activeMediaSourceId && clip.originalClipNumber === undefined
+                    ).length + 1
+                  }`
+                : `Clip ${originalClipNumber}`
+            )
+          ),
       mediaSourceId: activeMediaSourceId,
       originalClipNumber: originalClipNumber,
       userTranscription: userTrans,
