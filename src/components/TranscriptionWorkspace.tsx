@@ -533,8 +533,8 @@ export default function TranscriptionWorkspace({
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col md:flex-row gap-y-4 md:gap-y-0 md:gap-x-2 p-3 sm:p-4 md:p-6">
-        {/* Left Pane */}
+    <div className="w-full flex flex-col md:flex-row gap-y-4 md:gap-y-0 md:gap-x-2">
+    {/* Left Pane */}
         <div ref={leftPaneRef} className="w-full space-y-4 resize-none overflow-visible md:w-auto md:min-w-[15rem] md:max-w-[50%] md:overflow-auto">
           <VideoPlayer
             ref={videoPlayerRef}
