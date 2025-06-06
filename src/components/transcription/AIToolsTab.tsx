@@ -11,6 +11,7 @@ import TranslationLanguageSelector from '../TranslationLanguageSelector';
 import type { VideoPlayerRef } from "../VideoPlayer";
 import { getLanguageLabel } from "@/lib/languageOptions";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 // Inline utility component
 const ThreeDotsLoader: React.FC<{ className?: string }> = ({ className = "" }) => (
@@ -383,8 +384,11 @@ export default function AIToolsTab({
           <h3 className="font-semibold mb-2 text-foreground text-sm md:text-base">Automated Transcription:</h3>
           <Button
             onClick={handleTranscribeClip}
-            className="w-full mb-2 text-sm"
-            disabled={transcribeButtonDisabled}
+            className={cn(
+              "w-full mb-2 text-sm",
+              isCurrentClipTranscribing && "opacity-50 cursor-not-allowed"
+            )}
+            disabled={transcribeButtonDisabled || isCurrentClipTranscribing}
             title={!aiToolsState.canAccessAITools ? "Save your transcription in the 'Your Transcription' tab first" : undefined}
           >
             <Captions className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
@@ -462,18 +466,21 @@ export default function AIToolsTab({
           <h3 className="font-semibold text-foreground text-sm md:text-base">Transcription Comparison:</h3>
           <Button
             onClick={handleGetCorrections}
-            disabled={correctionsButtonDisabled}
-            className="w-full text-sm"
+            className={cn(
+              "w-full text-sm",
+              isCurrentClipComparing && "opacity-50 cursor-not-allowed"
+            )}
+            disabled={correctionsButtonDisabled || isCurrentClipComparing}
             title={!aiToolsState.canAccessAITools ? "Save your transcription in the 'Your Transcription' tab first" : undefined}
           >
             <FileDiff className="mr-1 md:mr-2 h-3 md:h-4 w-3 md:w-4" />
             <span className="hidden md:inline">
               {hasValidComparisonResult ? "Already Compared" :
-               isCorrectionsLoading ? "Comparing..." : "Get Corrections"}
+               isCurrentClipComparing ? "Comparing..." : "Compare"}
             </span>
             <span className="md:hidden">
               {hasValidComparisonResult ? "Completed" :
-               isCorrectionsLoading ? "Comparing..." : "Compare"}
+               isCurrentClipComparing ? "Comparing..." : "Compare"}
             </span>
           </Button>
           <ScrollArea className="h-[120px] w-full rounded-md border p-3 bg-muted/50" resizable>
