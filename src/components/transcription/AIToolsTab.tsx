@@ -13,7 +13,6 @@ import { getLanguageLabel } from "@/lib/languageOptions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useMobileViewportReset } from "@/hooks/use-mobile-viewport";
-import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 
 // Inline utility component
 const ThreeDotsLoader: React.FC<{ className?: string }> = ({ className = "" }) => (
@@ -90,9 +89,6 @@ export default function AIToolsTab({
   const [isPracticeMode, setIsPracticeMode] = useState(false);
   const [practiceText, setPracticeText] = useState("");
   const resetMobileViewport = useMobileViewportReset();
-
-  // Use auto-resize textarea hook for practice mode
-  const { textareaRef: practiceTextareaRef, triggerResize: triggerPracticeResize } = useAutoResizeTextarea();
 
   // Auto-save helper function for DRY principle
   const performAutoSave = useCallback((clipData: Partial<Clip>, operation: string, isManualSave = false) => {
@@ -450,14 +446,10 @@ export default function AIToolsTab({
                 </p>
               </div>
               <Textarea
-                ref={practiceTextareaRef}
                 className="h-[70px] resize-y text-sm md:text-base"
                 placeholder="Practice typing here..."
                 value={practiceText}
-                onChange={(e) => {
-                  setPracticeText(e.target.value);
-                  triggerPracticeResize(); // Trigger resize after content change
-                }}
+                onChange={(e) => setPracticeText(e.target.value)}
                 onBlur={resetMobileViewport}
               />
             </div>
