@@ -645,7 +645,7 @@ export default function TranscriptionWorkspace({
         </div>
 
         {/* Resize Handle */}
-        <div className="hidden md:flex items-center justify-center px-1 cursor-col-resize select-none" onMouseDown={onMouseDown}>
+        <div className="-mx-1.5 hidden md:flex items-center justify-center cursor-col-resize select-none" onMouseDown={onMouseDown}>
           <GripVertical className="h-5 w-5 text-muted-foreground" />
         </div>
 
