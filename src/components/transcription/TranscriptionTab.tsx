@@ -115,7 +115,7 @@ export default function TranscriptionTab({
         />
 
         <Textarea
-          className="min-h-24 resize-y text-sm md:text-base"
+          className="min-h-24 resize-y md:text-base sm:text-sm"
           disabled={disableTextarea || !mediaSrc}
           placeholder={`Type what you hear in the clip to practice ${language.charAt(0).toUpperCase() + language.slice(1)}...`}
           value={userTranscriptionInput}
