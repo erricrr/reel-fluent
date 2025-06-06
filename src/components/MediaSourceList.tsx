@@ -22,7 +22,7 @@ export default function MediaSourceList({
 }: MediaSourceListProps) {
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium text-muted-foreground">
+      <h3 className="text-sm font-medium text-muted-foreground pt-3">
         Media Sources ({sources.length}/3)
       </h3>
       <div className="space-y-2">
