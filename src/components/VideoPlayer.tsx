@@ -236,6 +236,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     media.addEventListener('play', handlePlayEvent);
     media.addEventListener('pause', handlePauseEvent);
 
+    // Set crossOrigin for direct URLs to handle CORS
+    if (effectiveSrc.startsWith('http://') || effectiveSrc.startsWith('https://')) {
+      if (!effectiveSrc.includes('youtube.com') && !effectiveSrc.includes('youtu.be')) {
+        media.crossOrigin = 'anonymous';
+      }
+    }
+
     if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
         media.src = effectiveSrc;
         media.load();

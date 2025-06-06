@@ -57,8 +57,20 @@ export async function downloadYouTubeAudio(
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (parseError) {
+        // If response is not JSON, try to get text content
+        try {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        } catch (textError) {
+          console.warn('Could not parse error response:', parseError);
+        }
+      }
+      throw new Error(errorMessage);
     }
 
     onProgress?.(0, "Processing audio file...");

@@ -61,8 +61,18 @@ async function getVideoInfo(url: string) {
       uploader: info.uploader || 'Unknown',
       view_count: info.view_count || 0
     };
-  } catch (error) {
-    throw new Error('Failed to get video information');
+  } catch (error: any) {
+    console.error('Error getting video info:', error);
+    if (error.stderr && error.stderr.includes('Video unavailable')) {
+      throw new Error('Video is unavailable or private');
+    }
+    if (error.stderr && error.stderr.includes('Sign in to confirm your age')) {
+      throw new Error('Video requires age verification');
+    }
+    if (error.stderr && error.stderr.includes('This video is not available')) {
+      throw new Error('Video is not available in your region');
+    }
+    throw new Error('Failed to get video information. Please check the URL and try again.');
   }
 }
 
@@ -95,14 +105,39 @@ async function downloadAudio(url: string, outputPath: string) {
     return `${outputPath}.mp3`;
   } catch (error: any) {
     console.error('yt-dlp error:', error);
-    throw new Error(`Failed to download audio: ${error.message}`);
+    if (error.stderr && error.stderr.includes('Video unavailable')) {
+      throw new Error('Video is unavailable or private');
+    }
+    if (error.stderr && error.stderr.includes('Sign in to confirm your age')) {
+      throw new Error('Video requires age verification');
+    }
+    if (error.stderr && error.stderr.includes('This video is not available')) {
+      throw new Error('Video is not available in your region');
+    }
+    if (error.code === 'ENOENT') {
+      throw new Error('yt-dlp not found. Please ensure yt-dlp is installed.');
+    }
+    if (error.signal === 'SIGTERM') {
+      throw new Error('Download timed out. The video might be too long or unavailable.');
+    }
+    throw new Error(`Failed to download audio: ${error.message || 'Unknown error'}`);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
-    const body: YouTubeDownloadRequest = await request.json();
+    let body: YouTubeDownloadRequest;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('Error parsing request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
     const { url } = body;
 
     // Validate URL

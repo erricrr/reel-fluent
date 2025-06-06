@@ -12,7 +12,7 @@ import SessionClipsManager from './SessionClipsManager';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CircleCheckBig, X as XIcon } from "lucide-react";
+import { CircleCheckBig, X as XIcon, ChevronUp, ChevronDown, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +38,7 @@ import { generateClips, createFocusedClip, extractAudioFromVideoSegment, type Cl
 import { hydrateClipWithAIData } from '@/lib/aiToolsHydration';
 
 const SEGMENTATION_PREFS_KEY = "reel-fluent-segmentation-prefs";
+const UPLOAD_SECTION_VISIBILITY_KEY = "reel-fluent-upload-section-visibility";
 const DEFAULT_SEGMENTATION_DURATION_MS = 15000; // Default to 15 seconds
 
 // Helper to get segmentation preferences
@@ -70,6 +71,27 @@ const setSegmentationPreference = (mediaSourceId: string, durationMs: number): v
   }
 };
 
+// Helper functions for upload section visibility
+const getUploadSectionVisibility = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const visibility = localStorage.getItem(UPLOAD_SECTION_VISIBILITY_KEY);
+    return visibility ? JSON.parse(visibility) : false;
+  } catch (e) {
+    console.error("Error reading upload section visibility:", e);
+    return false;
+  }
+};
+
+const setUploadSectionVisibility = (hidden: boolean): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(UPLOAD_SECTION_VISIBILITY_KEY, JSON.stringify(hidden));
+  } catch (e) {
+    console.error("Error saving upload section visibility:", e);
+  }
+};
+
 // Function to get AI tools cache from localStorage
 function getLocalAIToolsCache(): Record<string, any> {
   if (typeof window === 'undefined') return {};
@@ -81,6 +103,8 @@ export default function ReelFluentApp() {
   // Basic UI state
   const [language, setLanguage] = useState<string>("vietnamese");
   const [clipSegmentationDuration, setClipSegmentationDuration] = useState<number>(DEFAULT_SEGMENTATION_DURATION_MS);
+  const [isUploadSectionHidden, setIsUploadSectionHidden] = useState<boolean>(false);
+  const [hasUserManuallyToggledUpload, setHasUserManuallyToggledUpload] = useState<boolean>(false);
 
   // Destructure from useMediaSources first
   const mediaSourcesHookValues = useMediaSources();
@@ -208,18 +232,139 @@ export default function ReelFluentApp() {
         const extension = pathname.toLowerCase().split('.').pop() || '';
         const isVideoExtension = ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension);
         const isAudioExtension = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(extension);
-        let resolvedMediaType: 'video' | 'audio' | 'url' = 'url';
-        if (isVideoExtension) resolvedMediaType = 'video';
-        else if (isAudioExtension) resolvedMediaType = 'audio';
+
+        // Default to video if we can't determine from extension
+        let resolvedMediaType: 'video' | 'audio' = 'video';
+        if (isAudioExtension) {
+          resolvedMediaType = 'audio';
+        } else if (isVideoExtension) {
+          resolvedMediaType = 'video';
+        }
+
+        console.log('Processing direct URL:', {
+          url: url.substring(0, 100) + '...',
+          filename: decodedDisplayName,
+          extension,
+          resolvedMediaType
+        });
 
         const resolvedDuration = await new Promise<number>((resolve, reject) => {
           const media = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
-          media.crossOrigin = 'anonymous';
+
+          // Try without CORS first, then with CORS if that fails
           media.preload = 'metadata';
-          const timeout = setTimeout(() => { media.src=''; reject(new Error('Timeout loading media metadata')); }, 10000);
-          media.onloadedmetadata = () => { clearTimeout(timeout); media.src=''; if (isNaN(media.duration) || media.duration <=0) reject(new Error('Invalid media duration')); else resolve(media.duration); };
-          media.onerror = () => { clearTimeout(timeout); media.src=''; reject(new Error('Failed to load media from URL.')); };
-          media.src = url;
+
+          const timeout = setTimeout(() => {
+            media.src = '';
+            reject(new Error('Timeout loading media metadata (10 seconds)'));
+          }, 10000);
+
+          const cleanup = () => {
+            clearTimeout(timeout);
+            media.removeEventListener('loadedmetadata', onLoadedMetadata);
+            media.removeEventListener('error', onError);
+            media.src = '';
+          };
+
+          const onLoadedMetadata = () => {
+            cleanup();
+            if (isNaN(media.duration) || media.duration <= 0) {
+              reject(new Error('Invalid media duration'));
+            } else {
+              console.log('Media metadata loaded:', {
+                duration: media.duration,
+                type: resolvedMediaType
+              });
+              resolve(media.duration);
+            }
+          };
+
+                    const onError = (event: Event) => {
+            console.warn('Media error event:', event);
+            const error = (media as any).error;
+            let errorMessage = 'Failed to load media from URL';
+
+            if (error) {
+              console.warn('Media error details:', error);
+              switch (error.code) {
+                case 1: // MEDIA_ERR_ABORTED
+                  errorMessage = 'Media loading was aborted';
+                  break;
+                case 2: // MEDIA_ERR_NETWORK
+                  errorMessage = 'Network error while loading media. The server may not allow cross-origin requests or the URL may be invalid.';
+                  break;
+                case 3: // MEDIA_ERR_DECODE
+                  errorMessage = 'Media format not supported or corrupted';
+                  break;
+                case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                  errorMessage = 'Media format not supported by browser';
+                  break;
+                default:
+                  errorMessage = `Media error (code: ${error.code})`;
+              }
+            }
+
+            // Try with CORS if the first attempt failed
+            if (!media.crossOrigin) {
+              console.log('Retrying with CORS enabled...');
+              cleanup();
+
+              // Retry with CORS
+              const corsMedia = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
+              corsMedia.crossOrigin = 'anonymous';
+              corsMedia.preload = 'metadata';
+
+              const corsTimeout = setTimeout(() => {
+                corsMedia.src = '';
+                reject(new Error('Timeout loading media metadata with CORS (10 seconds)'));
+              }, 10000);
+
+              const corsCleanup = () => {
+                clearTimeout(corsTimeout);
+                corsMedia.removeEventListener('loadedmetadata', corsOnLoadedMetadata);
+                corsMedia.removeEventListener('error', corsOnError);
+                corsMedia.src = '';
+              };
+
+              const corsOnLoadedMetadata = () => {
+                corsCleanup();
+                if (isNaN(corsMedia.duration) || corsMedia.duration <= 0) {
+                  reject(new Error('Invalid media duration'));
+                } else {
+                  console.log('Media metadata loaded with CORS:', {
+                    duration: corsMedia.duration,
+                    type: resolvedMediaType
+                  });
+                  resolve(corsMedia.duration);
+                }
+              };
+
+              const corsOnError = () => {
+                corsCleanup();
+                reject(new Error(errorMessage + ' (CORS retry also failed)'));
+              };
+
+              corsMedia.addEventListener('loadedmetadata', corsOnLoadedMetadata);
+              corsMedia.addEventListener('error', corsOnError);
+              corsMedia.src = url;
+
+              return;
+            }
+
+            cleanup();
+            reject(new Error(errorMessage));
+          };
+
+          media.addEventListener('loadedmetadata', onLoadedMetadata);
+          media.addEventListener('error', onError);
+
+          // Try loading the media
+          try {
+            media.src = url;
+          } catch (srcError) {
+            cleanup();
+            reject(new Error('Invalid media URL'));
+          }
         });
 
         const directUrlMediaSource: MediaSource = {
@@ -239,10 +384,17 @@ export default function ReelFluentApp() {
           setCurrentSourceType(resolvedMediaType);
           setSourceFile(null);
         }
-        toast({ title: "Direct Media URL Added", description: `Added "${decodedDisplayName}" (${formatSecondsToMMSS(resolvedDuration)}) from direct URL.` });
+        toast({
+          title: "Direct Media URL Added",
+          description: `Added "${decodedDisplayName}" (${formatSecondsToMMSS(resolvedDuration)}) from direct URL.`
+        });
       } catch (error) {
         console.error('Direct URL processing error:', error);
-        toast({ variant: "destructive", title: "Invalid URL", description: error instanceof Error ? error.message : "Please enter a valid YouTube URL or direct media file URL." });
+        toast({
+          variant: "destructive",
+          title: "Invalid URL",
+          description: error instanceof Error ? error.message : "Please enter a valid YouTube URL or direct media file URL."
+        });
       }
     }
   }, [processYouTubeUrl, addMediaSource, selectMediaSource, toast, language]);
@@ -269,8 +421,10 @@ export default function ReelFluentApp() {
 
     // Update source file/url appropriately (these don't affect clip generation directly)
     setSourceFile(null);
-    if (source.type === 'url' || (source.type === 'audio' && source.src.startsWith('blob:'))) {
-      setSourceUrl(source.type === 'url' ? source.src : undefined);
+    if (source.src.startsWith('blob:')) {
+      setSourceUrl(undefined);
+    } else if (source.src.startsWith('http://') || source.src.startsWith('https://')) {
+      setSourceUrl(source.src);
     } else {
       setSourceUrl(undefined);
     }
@@ -330,6 +484,13 @@ export default function ReelFluentApp() {
   const handleLanguageChange = useCallback((newLanguage: string) => {
     setLanguage(newLanguage);
   }, []);
+
+  const handleToggleUploadSection = useCallback(() => {
+    const newHiddenState = !isUploadSectionHidden;
+    setIsUploadSectionHidden(newHiddenState);
+    setUploadSectionVisibility(newHiddenState);
+    setHasUserManuallyToggledUpload(true);
+  }, [isUploadSectionHidden]);
 
   const handleClipDurationChange = useCallback((durationString: string) => {
     if (!activeMediaSourceId || !mediaDuration) return;
@@ -755,6 +916,47 @@ export default function ReelFluentApp() {
     }
   }, [mediaDuration, activeMediaSourceId, mediaSources, updateMediaSource]);
 
+  // Load upload section visibility preference on mount
+  useEffect(() => {
+    setIsUploadSectionHidden(getUploadSectionVisibility());
+  }, []);
+
+  // Smart auto-hide: Hide upload section when user starts working with transcription
+  useEffect(() => {
+    // Only auto-hide if:
+    // 1. User hasn't manually toggled the upload section
+    // 2. Upload section is currently visible
+    // 3. We have media loaded and clips generated
+    // 4. User has started transcribing (has session clips or is actively transcribing)
+    if (
+      !hasUserManuallyToggledUpload &&
+      !isUploadSectionHidden &&
+      mediaSources.length > 0 &&
+      clips.length > 0 &&
+      (sessionClips.length > 0 || isAnyClipTranscribing)
+    ) {
+      setIsUploadSectionHidden(true);
+      setUploadSectionVisibility(true);
+    }
+  }, [
+    hasUserManuallyToggledUpload,
+    isUploadSectionHidden,
+    mediaSources.length,
+    clips.length,
+    sessionClips.length,
+    isAnyClipTranscribing
+  ]);
+
+  // Auto-show upload section when no media is loaded
+  useEffect(() => {
+    if (mediaSources.length === 0 && isUploadSectionHidden) {
+      setIsUploadSectionHidden(false);
+      setUploadSectionVisibility(false);
+      // Reset manual toggle flag when no media is present
+      setHasUserManuallyToggledUpload(false);
+    }
+  }, [mediaSources.length, isUploadSectionHidden]);
+
   // Effect for initializing and re-generating clips when media source or critical params change
   useEffect(() => {
     if (activeMediaSourceId && mediaDuration > 0 && language) {
@@ -800,57 +1002,108 @@ export default function ReelFluentApp() {
       <Header />
       <main className="flex-grow container mx-auto px-4 md:px-6 py-8 space-y-8">
         <Card className="shadow-lg border-border">
-          <CardHeader className="pb-0">
-            <CardTitle className="text-xl md:text-2xl">Upload Your Media</CardTitle>
-            <CardDescription>Select language and upload media</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="lg:flex lg:gap-6">
-              {mediaSources.length < 3 && (
-                <div className={cn(
-                  "w-full grid gap-4 sm:gap-6 transition-all duration-300 ease-in-out",
-                  "grid-cols-1 md:grid-cols-[1fr_2fr]"
-                )}>
-                  <div className="space-y-4">
-                    <LanguageSelector
-                      selectedLanguage={language}
-                      onLanguageChange={handleLanguageChange}
-                      disabled={globalAppBusyState || isAnyClipTranscribing}
-                    />
-                  </div>
-                  <div className="space-y-4">
-                    <VideoInputForm
-                      onSourceLoad={({ file, url }) => {
-                        if (file) {
-                          handleFileUpload(file);
-                        } else if (url) {
-                          handleUrlSubmit(url);
-                        }
-                      }}
-                      isLoading={globalAppBusyState || isAnyClipTranscribing}
-                    />
-                    {isYouTubeProcessing && (
-                      <YouTubeProcessingLoader status={processingStatus} />
-                    )}
-                  </div>
+                    {isUploadSectionHidden ? (
+            // Collapsed state - minimal header with expand button
+            <div
+              className="flex items-center justify-between p-4 border-b border-border bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+              onClick={handleToggleUploadSection}
+            >
+              <div className="flex items-center gap-3">
+                <Upload className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Upload Your Media</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {mediaSources.length > 0
+                      ? `${mediaSources.length} media source${mediaSources.length > 1 ? 's' : ''} loaded`
+                      : 'Click to upload media'
+                    }
+                  </p>
                 </div>
-              )}
-              {mediaSources.length > 0 && (
-                <div className={cn(
-                  "transition-all duration-300 ease-in-out",
-                  mediaSources.length < 3 ? "lg:w-1/3" : "w-full"
-                )}>
-                  <MediaSourceList
-                    sources={mediaSources}
-                    activeSourceId={activeMediaSourceId}
-                    onSelectSource={handleSelectMediaSource}
-                    onRemoveSource={handleRemoveMediaSource}
-                    disabled={globalAppBusyState || isAnyClipTranscribing}
-                  />
-                </div>
-              )}
+              </div>
+              <Button
+                variant="default2"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleUploadSection();
+                }}
+                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown className="h-4 w-4 mr-1" />
+                <span className="text-xs">Show</span>
+              </Button>
             </div>
-          </CardContent>
+          ) : (
+            // Expanded state - full upload section
+            <>
+              <CardHeader className="pb-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl md:text-2xl">Upload Your Media</CardTitle>
+                    <CardDescription>Select language and upload media</CardDescription>
+                  </div>
+                  {mediaSources.length > 0 && (
+                    <Button
+                      variant="default2"
+                      size="sm"
+                      onClick={handleToggleUploadSection}
+                      className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronUp className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Hide</span>
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="lg:flex lg:gap-6">
+                  {mediaSources.length < 3 && (
+                    <div className={cn(
+                      "w-full grid gap-4 sm:gap-6 transition-all duration-300 ease-in-out",
+                      "grid-cols-1 md:grid-cols-[1fr_2fr]"
+                    )}>
+                      <div className="space-y-4">
+                        <LanguageSelector
+                          selectedLanguage={language}
+                          onLanguageChange={handleLanguageChange}
+                          disabled={globalAppBusyState || isAnyClipTranscribing}
+                        />
+                      </div>
+                      <div className="space-y-4">
+                        <VideoInputForm
+                          onSourceLoad={({ file, url }) => {
+                            if (file) {
+                              handleFileUpload(file);
+                            } else if (url) {
+                              handleUrlSubmit(url);
+                            }
+                          }}
+                          isLoading={globalAppBusyState || isAnyClipTranscribing}
+                        />
+                        {isYouTubeProcessing && (
+                          <YouTubeProcessingLoader status={processingStatus} />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {mediaSources.length > 0 && (
+                    <div className={cn(
+                      "transition-all duration-300 ease-in-out",
+                      mediaSources.length < 3 ? "lg:w-1/3" : "w-full"
+                    )}>
+                      <MediaSourceList
+                        sources={mediaSources}
+                        activeSourceId={activeMediaSourceId}
+                        onSelectSource={handleSelectMediaSource}
+                        onRemoveSource={handleRemoveMediaSource}
+                        disabled={globalAppBusyState || isAnyClipTranscribing}
+                      />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </>
+          )}
         </Card>
 
         {mediaSrc && clips.length > 0 && currentClipToDisplay && (
