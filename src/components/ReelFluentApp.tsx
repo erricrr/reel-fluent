@@ -70,6 +70,13 @@ const setSegmentationPreference = (mediaSourceId: string, durationMs: number): v
   }
 };
 
+// Function to get AI tools cache from localStorage
+function getLocalAIToolsCache(): Record<string, any> {
+  if (typeof window === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem('reel-fluent-ai-tools-cache') || '{}'); }
+  catch { return {}; }
+}
+
 export default function ReelFluentApp() {
   // Basic UI state
   const [language, setLanguage] = useState<string>("vietnamese");
@@ -133,15 +140,9 @@ export default function ReelFluentApp() {
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // Enhanced clips with session data
-  const enhancedClips = useMemo(() => {
-    return createEnhancedClips(sessionClips, activeMediaSourceId);
-  }, [createEnhancedClips, sessionClips, activeMediaSourceId]);
-
   // Current clip - use focused clip if available, otherwise use indexed clip
-  const currentClipToDisplay = useMemo(() => {
-    return focusedClip || (clips && clips[currentClipIndex]) || null;
-  }, [focusedClip, clips, currentClipIndex]);
+  const currentClipToDisplay = useMemo(() => focusedClip || clips[currentClipIndex] || null,
+    [focusedClip, clips, currentClipIndex]);
 
   const isYouTubeVideoCheck = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
@@ -565,7 +566,7 @@ export default function ReelFluentApp() {
       clipToHydrate,
       clipToLoad.mediaSourceId,
       sessionClips,
-      getAIToolsCache()
+      getLocalAIToolsCache()
     );
 
     setFocusedClip(hydratedClip);
@@ -583,7 +584,7 @@ export default function ReelFluentApp() {
 
       if (Object.keys(aiDataToCache).length > 0) {
         try {
-          const currentCache = getAIToolsCache();
+          const currentCache = getLocalAIToolsCache();
           currentCache[cacheKey] = { ...currentCache[cacheKey], ...aiDataToCache };
           localStorage.setItem("reel-fluent-ai-tools-cache", JSON.stringify(currentCache));
         } catch (error) {
@@ -765,16 +766,23 @@ export default function ReelFluentApp() {
     }
   }, [activeMediaSourceId, mediaDuration, language, generateClipsFromDuration, setClipSegmentationDuration, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
 
-  function getAIToolsCache(): Record<string, any> {
-    if (typeof window === 'undefined') return {};
-    try {
-      const cached = localStorage.getItem("reel-fluent-ai-tools-cache");
-      return cached ? JSON.parse(cached) : {};
-    } catch (e) {
-      console.error("Error reading AI tools cache from ReelFluentApp:", e);
-      return {};
+  // Hydrate raw clips with AI and session data after auto-generation
+  useEffect(() => {
+    if (!activeMediaSourceId || clips.length === 0) return;
+    const cache = getLocalAIToolsCache();
+    const hydratedClips = clips.map(clip => hydrateClipWithAIData(clip, activeMediaSourceId, sessionClips, cache));
+    // Only update if hydration added data
+    const needsUpdate = hydratedClips.some((hc, i) => {
+      const c = clips[i];
+      return hc.automatedTranscription !== c.automatedTranscription ||
+             hc.translation !== c.translation ||
+             hc.englishTranslation !== c.englishTranslation ||
+             hc.comparisonResult !== c.comparisonResult;
+    });
+    if (needsUpdate) {
+      setClips(hydratedClips);
     }
-  }
+  }, [activeMediaSourceId, sessionClips, clips.length]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
