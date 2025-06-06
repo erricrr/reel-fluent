@@ -24,29 +24,34 @@ export function useMobileViewportReset() {
       activeElement.blur(); // Dismiss keyboard
     }
 
-    // Conservative mobile viewport reset - only essential fixes
+    // Smooth mobile viewport reset - minimize visual disruption
     setTimeout(() => {
-      // Strategy 1: Force viewport meta tag refresh (most important for mobile)
-      const viewport = document.querySelector("meta[name=viewport]");
-      if (viewport) {
-        const originalContent = viewport.getAttribute("content") || "width=device-width, initial-scale=1";
-        // Temporarily change viewport to force browser recalculation
-        viewport.setAttribute("content", "width=device-width, initial-scale=1.01");
+      // Strategy 1: Gentle viewport reset using CSS transforms (invisible to user)
+      const body = document.body;
+      const originalTransform = body.style.transform;
 
-        setTimeout(() => {
-          viewport.setAttribute("content", originalContent);
-          // Single resize event after viewport reset
-          window.dispatchEvent(new Event('resize'));
-        }, 100);
-      }
+      // Apply a minimal, invisible transform to trigger layout recalculation
+      body.style.transform = 'translateZ(0)';
 
-      // Strategy 2: Force body style recalculation (helps with layout)
-      document.body.style.minHeight = '100vh';
-      setTimeout(() => {
-        document.body.style.minHeight = '';
-      }, 50);
+      // Use requestAnimationFrame for smooth timing
+      requestAnimationFrame(() => {
+        // Reset transform after one frame
+        body.style.transform = originalTransform;
 
-    }, 200); // Delay to ensure keyboard is fully dismissed
+        // Strategy 2: Gentle resize event (only if really needed)
+        // Only dispatch resize if viewport seems stuck
+        const currentWidth = window.innerWidth;
+        const expectedWidth = window.screen.width;
+
+        if (Math.abs(currentWidth - expectedWidth) > 50) {
+          // Viewport seems zoomed, gentle reset needed
+          setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+          }, 50);
+        }
+      });
+
+    }, 300); // Longer delay to ensure keyboard is fully dismissed
   }, []);
 
   // Global listener for viewport changes that might indicate keyboard dismissal
@@ -59,10 +64,11 @@ export function useMobileViewportReset() {
       const currentHeight = window.visualViewport?.height || window.innerHeight;
 
       // If viewport height increased significantly, keyboard was likely dismissed
-      if (currentHeight > initialViewportHeight * 1.1) {
+      // Use a higher threshold to avoid false triggers
+      if (currentHeight > initialViewportHeight * 1.2) {
         setTimeout(() => {
           resetMobileViewport();
-        }, 100);
+        }, 150);
       }
 
       initialViewportHeight = currentHeight;
