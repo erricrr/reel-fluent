@@ -8,6 +8,7 @@ import MediaControls from './MediaControls';
 import type { VideoPlayerRef } from "../VideoPlayer";
 import { useEffect, useRef } from "react";
 import { useMobileViewportReset } from "@/hooks/use-mobile-viewport";
+import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
 
 // Inline utility function
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -71,6 +72,9 @@ export default function TranscriptionTab({
     // Use the mobile viewport reset hook
   const resetMobileViewport = useMobileViewportReset();
 
+  // Use auto-resize textarea hook for mobile
+  const { textareaRef, triggerResize } = useAutoResizeTextarea();
+
   // Track previous value of isTranscriptionSaved
   const prevIsTranscriptionSavedRef = useRef<boolean>();
 
@@ -115,11 +119,15 @@ export default function TranscriptionTab({
         />
 
         <Textarea
+          ref={textareaRef}
           className="min-h-24 resize-y text-sm md:text-base"
           disabled={disableTextarea || !mediaSrc}
           placeholder={`Type what you hear in the clip to practice ${language.charAt(0).toUpperCase() + language.slice(1)}...`}
           value={userTranscriptionInput}
-          onChange={onUserInputChange}
+          onChange={(e) => {
+            onUserInputChange(e);
+            triggerResize(); // Trigger resize after content change
+          }}
           onBlur={resetMobileViewport}
         />
       </CardContent>

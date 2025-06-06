@@ -153,6 +153,12 @@ body {
     -webkit-border-radius: 0;
   }
 
+  /* Mobile-specific textarea behavior */
+  textarea {
+    /* Smooth transitions for height changes on mobile */
+    transition: height 0.1s ease-out;
+  }
+
   /* Ensure body doesn't expand beyond viewport */
   body {
     position: relative;
@@ -172,6 +178,13 @@ body {
     body {
       min-height: -webkit-fill-available;
     }
+  }
+}
+
+/* Desktop textarea behavior - ensure resize handles are available */
+@media screen and (min-width: 769px) {
+  textarea {
+    resize: vertical !important;
   }
 }
 
