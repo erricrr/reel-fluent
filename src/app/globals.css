@@ -135,3 +135,10 @@ body {
     overflow-x: hidden;
   }
 }
+
+@layer base {
+  p,
+  h3 {
+    @apply text-sm md:text-base;
+  }
+}

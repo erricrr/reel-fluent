@@ -381,7 +381,7 @@ export default function AIToolsTab({
 
         {/* Automated Transcription Section */}
         <div className="space-y-2">
-          <h3 className="font-semibold mb-2 text-foreground text-sm md:text-base">Automated Transcription:</h3>
+          <h3 className="font-semibold mb-2 text-foreground">Automated Transcription:</h3>
           <Button
             onClick={handleTranscribeClip}
             className={cn(
@@ -405,10 +405,10 @@ export default function AIToolsTab({
           <ScrollArea className="h-[100px] w-full rounded-md border p-3 bg-muted/50" resizable>
             {currentClip.automatedTranscription === "Transcribing..." && <ThreeDotsLoader className="mx-auto my-4" />}
             {currentClip.automatedTranscription && currentClip.automatedTranscription !== "Transcribing..." ? (
-              <p className="text-sm md:text-base">{currentClip.automatedTranscription}</p>
+              <p>{currentClip.automatedTranscription}</p>
             ) : null}
             {!currentClip.automatedTranscription && (
-              <p className="text-sm md:text-base text-muted-foreground">Click "Transcribe" above to generate.</p>
+              <p className=" text-muted-foreground">Click "Transcribe" above to generate.</p>
             )}
           </ScrollArea>
         </div>
@@ -416,7 +416,7 @@ export default function AIToolsTab({
         {/* User Transcription Section */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <h3 className="font-semibold text-foreground text-sm md:text-base">Your Transcription:</h3>
+            <h3 className="font-semibold text-foreground">Your Transcription:</h3>
             <Button
               variant="outline"
               size="sm"
@@ -439,7 +439,7 @@ export default function AIToolsTab({
             <div className="space-y-2">
               <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-md">
                 <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                <p className="text-sm md:text-base text-amber-700 dark:text-amber-300">
+                <p className=" text-amber-700 dark:text-amber-300">
                   Practice mode: Changes won't be saved and will revert to your original transcription.
                 </p>
               </div>
@@ -453,9 +453,9 @@ export default function AIToolsTab({
           ) : (
             <ScrollArea className="h-[70px] w-full rounded-md border p-3 bg-muted/30" resizable>
               {userTranscriptionInput ? (
-                <p className="text-sm md:text-base whitespace-pre-wrap">{userTranscriptionInput}</p>
+                <p className=" whitespace-pre-wrap">{userTranscriptionInput}</p>
               ) : (
-                <p className="text-sm md:text-base text-muted-foreground">You haven't typed anything for this clip yet.</p>
+                <p className=" text-muted-foreground">You haven't typed anything for this clip yet.</p>
               )}
             </ScrollArea>
           )}
@@ -463,7 +463,7 @@ export default function AIToolsTab({
 
         {/* Transcription Comparison Section */}
         <div className="space-y-2">
-          <h3 className="font-semibold text-foreground text-sm md:text-base">Transcription Comparison:</h3>
+          <h3 className="font-semibold text-foreground">Transcription Comparison:</h3>
           <Button
             onClick={handleGetCorrections}
             className={cn(
@@ -487,13 +487,13 @@ export default function AIToolsTab({
             {isCurrentClipComparing ? (
               <ThreeDotsLoader className="mx-auto my-4" />
             ) : currentClip.comparisonResult === null || currentClip.comparisonResult === undefined ? (
-              <p className="text-sm md:text-base text-muted-foreground">
+              <p className=" text-muted-foreground">
                 Click "Get Corrections" above after entering your transcription and generating the AI transcription.
               </p>
             ) : currentClip.comparisonResult.length === 1 && currentClip.comparisonResult[0].token === "Error generating comparison." ? (
-              <p className="text-sm md:text-base text-destructive">{currentClip.comparisonResult[0].token}</p>
+              <p className=" text-destructive">{currentClip.comparisonResult[0].token}</p>
             ) : (
-              <p className="text-sm md:text-base whitespace-pre-wrap leading-relaxed">
+              <p className=" whitespace-pre-wrap leading-relaxed">
                 {currentClip.comparisonResult.map(renderCorrectionToken)}
               </p>
             )}
@@ -503,7 +503,7 @@ export default function AIToolsTab({
         {/* Translation Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-foreground text-sm md:text-base">Translation:</h3>
+            <h3 className="font-semibold text-foreground">Translation:</h3>
             <TranslationLanguageSelector
               selectedLanguage={translationTargetLanguage}
               onLanguageChange={setTranslationTargetLanguage}
@@ -532,15 +532,15 @@ export default function AIToolsTab({
             {isTranslationLoading ? (
               <ThreeDotsLoader className="mx-auto my-4" />
             ) : !currentTranslation ? (
-              <p className="text-sm md:text-base text-muted-foreground">
+              <p className=" text-muted-foreground">
                 Click "Translate to {getLanguageLabel(translationTargetLanguage)}" above after AI transcription is complete.
               </p>
             ) : currentTranslation === "" ? (
-              <p className="text-sm md:text-base">Translation complete. No specific output or translation was empty.</p>
+              <p>Translation complete. No specific output or translation was empty.</p>
             ) : currentTranslation?.startsWith("Error:") ? (
-              <p className="text-sm md:text-base text-destructive">{currentTranslation}</p>
+              <p className=" text-destructive">{currentTranslation}</p>
             ) : (
-              <p className="text-sm md:text-base whitespace-pre-wrap">{currentTranslation}</p>
+              <p className=" whitespace-pre-wrap">{currentTranslation}</p>
             )}
           </ScrollArea>
         </div>
