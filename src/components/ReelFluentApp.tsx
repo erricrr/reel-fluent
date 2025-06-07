@@ -131,7 +131,7 @@ export default function ReelFluentApp() {
   const {
     isLoading, isSaving, isYouTubeProcessing, processingStatus,
     youtubeVideoInfo, processFile, processYouTubeUrl, processDirectUrl, resetProcessingState,
-    cleanupObjectUrl, cleanupBlobUrl, setIsSaving, globalAppBusyState
+    setIsSaving, globalAppBusyState
   } = mediaProcessingHookValues;
 
   const aiOperationsHookValues = useAIOperations();
@@ -321,17 +321,16 @@ export default function ReelFluentApp() {
     if (sourceId === activeMediaSourceId) {
       const sourceToRemove = mediaSources.find(s => s.id === sourceId);
       if (sourceToRemove) {
-        cleanupBlobUrl(sourceToRemove.src); // Clean up the specific blob URL
+        setMediaSrc(undefined);
+        setMediaDisplayName(null);
+        setCurrentSourceType(null);
+        setMediaDuration(0);
+        setSourceFile(null);
+        setSourceUrl(undefined);
+        resetProcessingState();
       }
-      setMediaSrc(undefined);
-      setMediaDisplayName(null);
-      setCurrentSourceType(null);
-      setMediaDuration(0);
-      setSourceFile(null);
-      setSourceUrl(undefined);
-      resetProcessingState();
     }
-  }, [isAnyClipTranscribing, sessionClips, removeMediaSource, activeMediaSourceId, toast, cleanupBlobUrl, resetProcessingState]);
+  }, [isAnyClipTranscribing, sessionClips, removeMediaSource, activeMediaSourceId, toast, resetProcessingState]);
 
   // Settings handlers
   const handleLanguageChange = useCallback((newLanguage: string) => {
@@ -660,10 +659,6 @@ export default function ReelFluentApp() {
     removeMediaSource(pendingDeleteSourceId);
 
     if (pendingDeleteSourceId === activeMediaSourceId) {
-      const sourceToRemove = mediaSources.find(s => s.id === pendingDeleteSourceId);
-      if (sourceToRemove) {
-        cleanupBlobUrl(sourceToRemove.src); // Clean up the specific blob URL
-      }
       setMediaSrc(undefined);
       setMediaDisplayName(null);
       setCurrentSourceType(null);
@@ -675,7 +670,7 @@ export default function ReelFluentApp() {
 
     setDeleteDialogOpen(false);
     setPendingDeleteSourceId(null);
-  }, [pendingDeleteSourceId, sessionClips, removeSessionClip, removeMediaSource, activeMediaSourceId, cleanupBlobUrl, resetProcessingState]);
+  }, [pendingDeleteSourceId, sessionClips, removeSessionClip, removeMediaSource, activeMediaSourceId, resetProcessingState]);
 
   // Save media
   const handleSaveMedia = useCallback(async () => {

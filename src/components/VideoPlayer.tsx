@@ -218,11 +218,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       return;
     }
 
-    // Reset error state when source changes
+    // Always reset error state when source changes
     setHasLoadError(false);
 
     const localHandleLoadedMetadata = () => {
       if (!media) return;
+      // Clear any error state when metadata loads successfully
+      setHasLoadError(false);
       if (onLoadedMetadata) {
         onLoadedMetadata(media.duration);
       }
@@ -238,13 +240,25 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         mediaError: mediaError ? {
           code: mediaError.code,
           message: mediaError.message
-        } : 'No media error details'
+        } : 'No media error details',
+        src: effectiveSrc
       });
 
-      // Only show error UI for non-CORS errors or if we don't have duration info
-      if (mediaError?.code !== 2 || !media.duration) {
+      // Only show error UI for actual critical errors
+      // Don't show errors for CORS issues or network errors that might resolve
+      if (mediaError && mediaError.code === 3) {
+        // Code 3 = MEDIA_ERR_DECODE - actual format/corruption issues
+        setHasLoadError(true);
+      } else if (mediaError && mediaError.code === 4) {
+        // Code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED - format not supported
         setHasLoadError(true);
       }
+      // Don't show errors for codes 1 (aborted) or 2 (network) as these often resolve
+    };
+
+    const handleCanPlay = () => {
+      // Clear error state when media can play
+      setHasLoadError(false);
     };
 
     media.addEventListener('ratechange', handleRateChange);
@@ -256,25 +270,18 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     media.addEventListener('play', handlePlayEvent);
     media.addEventListener('pause', handlePauseEvent);
     media.addEventListener('error', handleError);
+    media.addEventListener('canplay', handleCanPlay);
 
-    // Set crossOrigin for all HTTP(S) URLs except YouTube
-    if (effectiveSrc.startsWith('http://') || effectiveSrc.startsWith('https://')) {
-      if (!effectiveSrc.includes('youtube.com') && !effectiveSrc.includes('youtu.be')) {
-        media.crossOrigin = 'anonymous';
-      }
+    // Don't set crossOrigin for direct media URLs
+    if (effectiveSrc.includes('youtube.com') || effectiveSrc.includes('youtu.be')) {
+      media.crossOrigin = 'anonymous';
+    } else {
+      media.removeAttribute('crossOrigin');
     }
 
-    // Only reload if source actually changed
-    if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
-      media.src = effectiveSrc;
-      media.load();
-    } else if (media.readyState >= 1) {
-      if (media.currentTime !== startTime) {
-        media.currentTime = startTime;
-      }
-      enforceClipBoundaryOnPlay();
-      onPlayStateChange?.(!media.paused);
-    }
+    // Force reload when switching sources
+    media.src = effectiveSrc;
+    media.load();
 
     return () => {
       media.removeEventListener('ratechange', handleRateChange);
@@ -286,6 +293,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       media.removeEventListener('play', handlePlayEvent);
       media.removeEventListener('pause', handlePauseEvent);
       media.removeEventListener('error', handleError);
+      media.removeEventListener('canplay', handleCanPlay);
     };
   }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onPlaybackRateChange, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onPlayStateChange, handleRateChange]);
 

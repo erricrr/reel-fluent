@@ -18,7 +18,6 @@ export function useMediaProcessing() {
   const [youtubeVideoInfo, setYoutubeVideoInfo] = useState<YouTubeVideoInfo | null>(null);
 
   const processingIdRef = useRef<number>(0);
-  const currentProcessingUrlRef = useRef<string | undefined>(undefined);
   const { toast } = useToast();
 
   const resetProcessingState = useCallback(() => {
@@ -48,14 +47,8 @@ export function useMediaProcessing() {
       setIsLoading(true);
       setProcessingStatus("Loading file...");
 
-      // Clean up any previous processing URL (not existing media source URLs)
-      if (currentProcessingUrlRef.current) {
-        URL.revokeObjectURL(currentProcessingUrlRef.current);
-        currentProcessingUrlRef.current = undefined;
-      }
-
+      // Create object URL for this file
       const objectUrl = URL.createObjectURL(file);
-      currentProcessingUrlRef.current = objectUrl;
 
       // Get media duration
       const getDuration = (): Promise<number> => {
@@ -80,10 +73,15 @@ export function useMediaProcessing() {
 
       const duration = await getDuration();
 
-      if (currentProcessingId !== processingIdRef.current) return;
+      if (currentProcessingId !== processingIdRef.current) {
+        // If processing was cancelled, clean up this URL
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
 
       const MAX_DURATION_MINUTES = 30;
       if (duration > MAX_DURATION_MINUTES * 60) {
+        URL.revokeObjectURL(objectUrl);
         throw new Error(`Media duration (${Math.round(duration / 60)} minutes) exceeds the ${MAX_DURATION_MINUTES}-minute limit.`);
       }
 
@@ -145,18 +143,10 @@ export function useMediaProcessing() {
       }
 
       // Create object URL from the file
-      if (currentProcessingUrlRef.current) {
-        URL.revokeObjectURL(currentProcessingUrlRef.current);
-        currentProcessingUrlRef.current = undefined;
-      }
       const objectUrl = URL.createObjectURL(result.file);
-      currentProcessingUrlRef.current = objectUrl;
 
       setYoutubeVideoInfo(result.videoInfo);
       onSuccess(objectUrl, result.videoInfo.title, duration, result.videoInfo);
-
-      // Clear the reference since we're handing off the URL to the media source
-      currentProcessingUrlRef.current = undefined;
 
       toast({
         title: "YouTube Video Processed",
@@ -204,125 +194,49 @@ export function useMediaProcessing() {
         resolvedMediaType = 'video';
       }
 
-      // Try server-side probing first
-      const tryServerSideProbing = async () => {
-        const response = await fetch('/api/media/probe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ url }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Server probe failed with status ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (!result.success || !result.mediaInfo) {
-          throw new Error('Invalid server probe response');
-        }
-
-        const { mediaInfo } = result;
-        if (!mediaInfo.duration || mediaInfo.duration <= 0) {
-          throw new Error('Invalid duration from server probe');
-        }
-
-        // Update media type based on server probe results
-        if (mediaInfo.hasVideo) {
-          resolvedMediaType = 'video';
-        } else if (mediaInfo.hasAudio && !mediaInfo.hasVideo) {
-          resolvedMediaType = 'audio';
-        }
-
-        return mediaInfo.duration;
-      };
-
-      // Try client-side loading as fallback
-      const tryClientSideLoading = () => {
-        return new Promise<number>((clientResolve, clientReject) => {
+      // Simple client-side loading
+      const getDuration = (): Promise<number> => {
+        return new Promise((resolve, reject) => {
           const media = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
-          media.crossOrigin = 'anonymous';
           media.preload = 'metadata';
 
-          const timeout = setTimeout(() => {
-            cleanup();
-            clientReject(new Error('Client-side metadata loading timed out (20s)'));
-          }, 20000);
-
           const cleanup = () => {
-            clearTimeout(timeout);
             media.removeEventListener('loadedmetadata', onMetadata);
-            media.removeEventListener('durationchange', onMetadata);
             media.removeEventListener('error', onError);
             media.src = '';
           };
 
-          const onMetadata = (event: Event) => {
-            if (media.duration && isFinite(media.duration) && media.duration > 0) {
-              cleanup();
-              clientResolve(media.duration);
+          const onMetadata = () => {
+            const duration = media.duration;
+            cleanup();
+            if (isNaN(duration) || duration <= 0) {
+              reject(new Error('Invalid media duration'));
+            } else {
+              resolve(duration);
             }
           };
 
           const onError = () => {
             cleanup();
-            const error = (media as any).error;
-            let errorMessage = 'Failed to load media from URL.';
-            if (error) {
-              switch (error.code) {
-                case 1: errorMessage = 'Media loading was aborted.'; break;
-                case 2: errorMessage = 'A network error occurred. The URL may be invalid or the server may have CORS issues.'; break;
-                case 3: errorMessage = 'The media is corrupt or in a format not supported by your browser.'; break;
-                case 4: errorMessage = 'Media not supported. The server or network failed, or the format is not supported.'; break;
-                default: errorMessage = `An unknown media error occurred (code: ${error.code}).`;
-              }
-            }
-            clientReject(new Error(errorMessage));
+            reject(new Error('Failed to load media metadata'));
           };
 
           media.addEventListener('loadedmetadata', onMetadata);
-          media.addEventListener('durationchange', onMetadata);
           media.addEventListener('error', onError);
-
-          try {
-            media.src = url;
-          } catch (srcError) {
-            cleanup();
-            clientReject(new Error('The provided URL is invalid.'));
-          }
+          media.src = url;
         });
       };
 
-      let resolvedDuration: number;
-      let errorMessages: string[] = [];
-
-      // Try server-side first
-      try {
-        resolvedDuration = await tryServerSideProbing();
-      } catch (serverError) {
-        console.warn('Server-side probing failed:', serverError);
-        errorMessages.push(`Server-side: ${(serverError as Error).message}`);
-
-        // Try client-side as fallback
-        try {
-          resolvedDuration = await tryClientSideLoading();
-        } catch (clientError) {
-          console.warn('Client-side metadata loading failed:', clientError);
-          errorMessages.push(`Client-side: ${(clientError as Error).message}`);
-          throw new Error(`Failed to load media metadata:\n${errorMessages.join('\n')}`);
-        }
-      }
+      const duration = await getDuration();
 
       if (currentProcessingId !== processingIdRef.current) return;
 
       const MAX_DURATION_MINUTES = 30;
-      if (resolvedDuration > MAX_DURATION_MINUTES * 60) {
-        throw new Error(`Media duration (${Math.round(resolvedDuration / 60)} minutes) exceeds the ${MAX_DURATION_MINUTES}-minute limit.`);
+      if (duration > MAX_DURATION_MINUTES * 60) {
+        throw new Error(`Media duration (${Math.round(duration / 60)} minutes) exceeds the ${MAX_DURATION_MINUTES}-minute limit.`);
       }
 
-      onSuccess(url, decodedDisplayName, resolvedDuration, resolvedMediaType);
+      onSuccess(url, decodedDisplayName, duration, resolvedMediaType);
 
       toast({
         title: "Direct Media URL Added",
@@ -331,40 +245,10 @@ export function useMediaProcessing() {
 
     } catch (error) {
       console.error('Direct URL processing error:', error);
-
-      let errorTitle = "Media Loading Failed";
-      let errorDescription = "Please enter a valid direct media file URL.";
-
-      if (error instanceof Error) {
-        const errorMessage = error.message;
-
-        if (errorMessage.includes('CORS') || errorMessage.includes('cross-origin')) {
-          errorTitle = "CORS Error";
-          errorDescription = "The media server doesn't allow cross-origin requests. Try a different URL or contact the media provider.";
-        } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-          errorTitle = "Loading Timeout";
-          errorDescription = "The media file is taking too long to load. The server might be slow or the file might be very large.";
-        } else if (errorMessage.includes('network error') || errorMessage.includes('HTTP error')) {
-          errorTitle = "Network Error";
-          errorDescription = "Unable to access the media URL. Check your internet connection and verify the URL is correct.";
-        } else if (errorMessage.includes('Invalid data') || errorMessage.includes('corrupt')) {
-          errorTitle = "Invalid Media Format";
-          errorDescription = "The file format is not supported or the media file is corrupted.";
-        } else if (errorMessage.includes('not accessible') || errorMessage.includes('authentication')) {
-          errorTitle = "Access Denied";
-          errorDescription = "The media file requires authentication or is not publicly accessible.";
-        } else if (errorMessage.includes('ffprobe not found')) {
-          errorTitle = "Server Configuration Error";
-          errorDescription = "The server is not properly configured to handle media files. Please try again later.";
-        } else {
-          errorDescription = errorMessage;
-        }
-      }
-
       toast({
         variant: "destructive",
-        title: errorTitle,
-        description: errorDescription
+        title: "Media Loading Failed",
+        description: "Please enter a valid direct media file URL."
       });
     } finally {
       if (currentProcessingId === processingIdRef.current) {
@@ -373,19 +257,6 @@ export function useMediaProcessing() {
       }
     }
   }, [toast]);
-
-  const cleanupObjectUrl = useCallback(() => {
-    if (currentProcessingUrlRef.current) {
-      URL.revokeObjectURL(currentProcessingUrlRef.current);
-      currentProcessingUrlRef.current = undefined;
-    }
-  }, []);
-
-  const cleanupBlobUrl = useCallback((url: string) => {
-    if (url && url.startsWith('blob:')) {
-      URL.revokeObjectURL(url);
-    }
-  }, []);
 
   return {
     // State
@@ -401,8 +272,6 @@ export function useMediaProcessing() {
     processYouTubeUrl,
     processDirectUrl,
     resetProcessingState,
-    cleanupObjectUrl,
-    cleanupBlobUrl,
 
     // Setters
     setIsLoading,
