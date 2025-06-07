@@ -72,6 +72,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const isLoopingRef = useRef(isLooping);
   const [boundaryEnforcementEnabled, setBoundaryEnforcementEnabled] = useState(true);
   const [hasLoadError, setHasLoadError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const playRequestRef = useRef<Promise<void> | null>(null);
 
   // Sync media element playbackRate to prop on mount and when it changes
   useEffect(() => {
@@ -95,8 +97,33 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const isYouTube = effectiveSrc?.includes("youtube.com/") || effectiveSrc?.includes("youtu.be/");
 
   useImperativeHandle(ref, () => ({
-    play: () => {
-      mediaRef.current?.play().catch(err => console.warn("Imperative play error:", err));
+    play: async () => {
+      if (!mediaRef.current || isLoading) return;
+
+      try {
+        // Cancel any existing play request
+        if (playRequestRef.current) {
+          await playRequestRef.current.catch(() => {});
+        }
+
+        // Start new play request
+        playRequestRef.current = mediaRef.current.play();
+        await playRequestRef.current;
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          // If we get an abort error, try playing one more time after a short delay
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (mediaRef.current) {
+            try {
+              await mediaRef.current.play();
+            } catch (retryErr) {
+              console.warn("Retry play error:", retryErr);
+            }
+          }
+        } else {
+          console.warn("Play error:", err);
+        }
+      }
     },
     pause: () => {
       mediaRef.current?.pause();
@@ -218,19 +245,19 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       return;
     }
 
-    // Always reset error state when source changes
+    setIsLoading(true);
     setHasLoadError(false);
 
     const localHandleLoadedMetadata = () => {
       if (!media) return;
-      // Clear any error state when metadata loads successfully
+      setIsLoading(false);
       setHasLoadError(false);
       if (onLoadedMetadata) {
         onLoadedMetadata(media.duration);
       }
       media.currentTime = startTime;
       enforceClipBoundaryOnPlay();
-      onPlayStateChange?.(!media.paused); // Initial state after metadata load
+      onPlayStateChange?.(!media.paused);
     };
 
     const handleError = (event: Event) => {
@@ -284,6 +311,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     media.load();
 
     return () => {
+      playRequestRef.current = null;
       media.removeEventListener('ratechange', handleRateChange);
       media.removeEventListener("loadedmetadata", localHandleLoadedMetadata);
       media.removeEventListener("timeupdate", handleTimeUpdate);
