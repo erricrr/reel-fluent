@@ -70,6 +70,8 @@ export function useClipManagement(language: string) {
   }, [language, updateClipsRef, toast]);
 
   const backToAutoClips = useCallback((duration: number, clipSegmentationDuration: number, mediaSourceId: string) => {
+    // Generate clips with the same deterministic IDs they had before
+    // This ensures AI tools cache lookup continues to work
     const autoClips = generateClips(duration, clipSegmentationDuration / 1000, language, mediaSourceId);
     updateClipsRef(autoClips);
     setCurrentClipIndex(0);

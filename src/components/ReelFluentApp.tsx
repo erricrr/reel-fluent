@@ -163,6 +163,7 @@ export default function ReelFluentApp() {
   // Drawer refs
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  const forceHydrationRef = useRef<boolean>(false);
 
   // Current clip - use focused clip if available, otherwise use indexed clip
   const currentClipToDisplay = useMemo(() => focusedClip || clips[currentClipIndex] || null,
@@ -464,6 +465,8 @@ export default function ReelFluentApp() {
       backToAutoClips(mediaDuration, clipSegmentationDuration, activeMediaSourceId);
       setShowClipTrimmer(false);
       setFocusedClip(null);
+      // Force hydration after returning to auto clips
+      forceHydrationRef.current = true;
     }
   }, [mediaDuration, clipSegmentationDuration, backToAutoClips, setShowClipTrimmer, setFocusedClip, activeMediaSourceId]);
 
@@ -782,32 +785,11 @@ export default function ReelFluentApp() {
     setIsUploadSectionHidden(getUploadSectionVisibility());
   }, []);
 
-  // Smart auto-hide: Hide upload section when user starts working with transcription
-  useEffect(() => {
-    // Only auto-hide if:
-    // 1. User hasn't manually toggled the upload section
-    // 2. Upload section is currently visible
-    // 3. We have media loaded and clips generated
-    // 4. User has started transcribing (has session clips or is actively transcribing)
-    // 5. This is NOT the first media source (user should control upload section visibility for first source)
-    if (
-      !hasUserManuallyToggledUpload &&
-      !isUploadSectionHidden &&
-      mediaSources.length > 1 && // Changed from > 0 to > 1 - only auto-hide when there are multiple sources
-      clips.length > 0 &&
-      (sessionClips.length > 0 || isAnyClipTranscribing)
-    ) {
-      setIsUploadSectionHidden(true);
-      setUploadSectionVisibility(true);
-    }
-  }, [
-    hasUserManuallyToggledUpload,
-    isUploadSectionHidden,
-    mediaSources.length,
-    clips.length,
-    sessionClips.length,
-    isAnyClipTranscribing
-  ]);
+  // DISABLED: Auto-hide logic completely removed per user request
+  // The user should have full control over upload section visibility
+  // useEffect(() => {
+  //   // Auto-hide logic was here but removed because it was interfering with user control
+  // }, []);
 
   // Auto-show upload section when no media is loaded
   useEffect(() => {
@@ -859,21 +841,40 @@ export default function ReelFluentApp() {
     }
   }, [activeMediaSourceId, mediaDuration, language, generateClipsFromDuration, setClipSegmentationDuration, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
 
-  // Hydrate raw clips with AI and session data after auto-generation
+      // Hydrate raw clips with AI and session data after auto-generation
   useEffect(() => {
     if (!activeMediaSourceId || clips.length === 0) return;
+
+    // Check if clips need hydration (don't have AI data but cache might have it)
     const cache = getLocalAIToolsCache();
-    const hydratedClips = clips.map(clip => hydrateClipWithAIData(clip, activeMediaSourceId, sessionClips, cache));
-    // Only update if hydration added data
-    const needsUpdate = hydratedClips.some((hc, i) => {
-      const c = clips[i];
-      return hc.automatedTranscription !== c.automatedTranscription ||
-             hc.translation !== c.translation ||
-             hc.englishTranslation !== c.englishTranslation ||
-             hc.comparisonResult !== c.comparisonResult;
+    let needsHydration = forceHydrationRef.current;
+
+    const hydratedClips = clips.map(clip => {
+      const hydratedClip = hydrateClipWithAIData(clip, activeMediaSourceId, sessionClips, cache);
+
+      // Check if hydration added any data
+      if (
+        hydratedClip.automatedTranscription !== clip.automatedTranscription ||
+        hydratedClip.translation !== clip.translation ||
+        hydratedClip.englishTranslation !== clip.englishTranslation ||
+        hydratedClip.comparisonResult !== clip.comparisonResult
+      ) {
+        needsHydration = true;
+      }
+
+      return hydratedClip;
     });
-    if (needsUpdate) {
+
+    if (needsHydration) {
+      console.log('Hydrating clips with AI data for media source:', activeMediaSourceId, {
+        clipsCount: clips.length,
+        hydratedClipsCount: hydratedClips.length,
+        forceHydration: forceHydrationRef.current,
+        sampleClip: clips[0] ? { id: clips[0].id, hasAI: !!clips[0].automatedTranscription } : null,
+        sampleHydrated: hydratedClips[0] ? { id: hydratedClips[0].id, hasAI: !!hydratedClips[0].automatedTranscription } : null
+      });
       setClips(hydratedClips);
+      forceHydrationRef.current = false; // Reset force flag
     }
   }, [activeMediaSourceId, sessionClips, clips.length]);
 
