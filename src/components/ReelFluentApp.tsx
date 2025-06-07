@@ -901,7 +901,7 @@ export default function ReelFluentApp() {
                   {mediaSources.length < 3 && (
                     <div className={cn(
                       "w-full grid gap-4 sm:gap-6 transition-all duration-300 ease-in-out",
-                      "grid-cols-1 md:grid-cols-[1fr_2fr] lg:grid-cols-[1fr_4fr]"
+                      "grid-cols-1 md:grid-cols-[1fr_2fr]"
                     )}>
                       <div className="space-y-4">
                         <LanguageSelector
