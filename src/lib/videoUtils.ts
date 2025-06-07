@@ -64,7 +64,9 @@ export function generateClips(duration: number, clipLength: number, language: st
 }
 
 export function createFocusedClip(startTime: number, endTime: number, language: string, mediaSourceId?: string): Clip {
-  const uniqueId = mediaSourceId ? `${mediaSourceId}-focused-clip-${Date.now()}` : `focused-clip-${Date.now()}`;
+  // Create deterministic ID based on timing instead of timestamp
+  const timeHash = Math.round(startTime * 1000).toString(36) + Math.round(endTime * 1000).toString(36);
+  const uniqueId = mediaSourceId ? `${mediaSourceId}-focused-clip-${timeHash}` : `focused-clip-${timeHash}`;
   return {
     id: uniqueId,
     startTime: startTime,

@@ -171,7 +171,22 @@ export default function ReelFluentApp() {
   const isYouTubeVideoCheck = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
   // Utility functions
-  const generateUniqueId = () => {
+  const generateUniqueId = (src?: string, displayName?: string) => {
+    // For media sources, create deterministic IDs based on source properties
+    if (src && displayName) {
+      // Create a simple hash from the source and display name
+      const input = src + displayName;
+      let hash = 0;
+      for (let i = 0; i < input.length; i++) {
+        const char = input.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+      }
+      // Convert to positive number and then to base36 string
+      const hashStr = Math.abs(hash).toString(36);
+      return `media_${hashStr}`;
+    }
+    // For session clips and other items, use timestamp-based IDs
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   };
 
@@ -179,7 +194,7 @@ export default function ReelFluentApp() {
   const handleFileUpload = useCallback(async (file: File) => {
     await processFile(file, (src, displayName, duration, type) => {
       const newMediaSource: MediaSource = {
-        id: generateUniqueId(),
+        id: generateUniqueId(src, displayName),
         src,
         displayName,
         type,
@@ -205,7 +220,7 @@ export default function ReelFluentApp() {
     if (isYouTubeUrl(url)) {
       await processYouTubeUrl(url, (src, ytDisplayName, ytDuration, videoInfo) => {
         const newYtMediaSource: MediaSource = {
-          id: generateUniqueId(),
+          id: generateUniqueId(src, ytDisplayName),
           src,
           displayName: ytDisplayName,
           type: 'audio',
@@ -227,7 +242,7 @@ export default function ReelFluentApp() {
         console.log('processDirectUrl callback called with:', { src: src.substring(0, 50) + '...', displayName, duration, type });
 
         const newMediaSource: MediaSource = {
-          id: generateUniqueId(),
+          id: generateUniqueId(src, displayName),
           src,
           displayName,
           type,
@@ -423,8 +438,12 @@ export default function ReelFluentApp() {
 
   const handleConfirmCustomClipName = useCallback(() => {
     if (!pendingCustomClip || !activeMediaSourceId) return;
-    const clipName = customClipName.trim() || `Custom Clip ${Date.now()}`;
-    createCustomClip(pendingCustomClip.startTime, pendingCustomClip.endTime, clipName, activeMediaSourceId);
+
+    // Create deterministic default name based on timing instead of timestamp
+    const defaultName = customClipName.trim() ||
+      `Custom Clip ${Math.round(pendingCustomClip.startTime)}-${Math.round(pendingCustomClip.endTime)}`;
+
+    createCustomClip(pendingCustomClip.startTime, pendingCustomClip.endTime, defaultName, activeMediaSourceId);
     setShowCustomClipNaming(false);
     setPendingCustomClip(null);
     setCustomClipName("");
@@ -485,7 +504,7 @@ export default function ReelFluentApp() {
       : (focusedClip ? undefined : currentClipIndex + 1);
 
     const sessionClip: SessionClip = {
-      id: existingClipIndex >= 0 ? sessionClips[existingClipIndex].id : generateUniqueId(),
+      id: existingClipIndex >= 0 ? sessionClips[existingClipIndex].id : generateUniqueId(undefined, currentClipToDisplay.displayName),
       startTime: currentClipToDisplay.startTime,
       endTime: currentClipToDisplay.endTime,
       language: currentClipToDisplay.language || language,
@@ -575,7 +594,7 @@ export default function ReelFluentApp() {
 
     let clipToHydrate: Clip = {
       ...clipToLoad,
-      id: clipToLoad.id || generateUniqueId(),
+      id: clipToLoad.id || generateUniqueId(undefined, clipToLoad.displayName),
       isFocusedClip: true,
       language: clipToLoad.language || language,
       userTranscription: clipToLoad.userTranscription || "",
