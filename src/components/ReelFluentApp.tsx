@@ -789,10 +789,11 @@ export default function ReelFluentApp() {
     // 2. Upload section is currently visible
     // 3. We have media loaded and clips generated
     // 4. User has started transcribing (has session clips or is actively transcribing)
+    // 5. This is NOT the first media source (user should control upload section visibility for first source)
     if (
       !hasUserManuallyToggledUpload &&
       !isUploadSectionHidden &&
-      mediaSources.length > 0 &&
+      mediaSources.length > 1 && // Changed from > 0 to > 1 - only auto-hide when there are multiple sources
       clips.length > 0 &&
       (sessionClips.length > 0 || isAnyClipTranscribing)
     ) {
