@@ -74,6 +74,54 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const [hasLoadError, setHasLoadError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const playRequestRef = useRef<Promise<void> | null>(null);
+  const isReadyRef = useRef(false);
+  const startTimeRef = useRef(startTime);
+  const endTimeRef = useRef(endTime);
+
+  const getEffectiveSrc = useCallback(() => src, [src]);
+  const effectiveSrc = getEffectiveSrc();
+  // Store source in ref to avoid useEffect triggers
+  const effectiveSrcRef = useRef(effectiveSrc);
+
+  // Update refs when props change
+  useEffect(() => {
+    startTimeRef.current = startTime;
+    endTimeRef.current = endTime;
+    isLoopingRef.current = isLooping;
+    effectiveSrcRef.current = effectiveSrc;
+  }, [startTime, endTime, isLooping, effectiveSrc]);
+
+  // Debug logging function
+  const debugLog = useCallback((message: string, ...args: any[]) => {
+    console.log(`[VideoPlayer] ${message}`, ...args);
+  }, []);
+
+  const ensureMediaReady = useCallback(async () => {
+    const media = mediaRef.current;
+    if (!media) return false;
+
+    // If media is already ready, return true
+    if (isReadyRef.current && media.readyState >= 2) return true;
+
+    debugLog("Waiting for media to be ready...");
+    // Wait for media to be ready
+    return new Promise<boolean>((resolve) => {
+      const handleCanPlay = () => {
+        isReadyRef.current = true;
+        media.removeEventListener('canplay', handleCanPlay);
+        debugLog("Media is now ready (canplay event)");
+        resolve(true);
+      };
+
+      if (media.readyState >= 2) {
+        isReadyRef.current = true;
+        debugLog("Media is already ready (readyState >= 2)");
+        resolve(true);
+      } else {
+        media.addEventListener('canplay', handleCanPlay);
+      }
+    });
+  }, [debugLog]);
 
   // Sync media element playbackRate to prop on mount and when it changes
   useEffect(() => {
@@ -83,59 +131,109 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     }
   }, [playbackRate]);
 
-  // Update the ref when isLooping changes
-  useEffect(() => {
-    isLoopingRef.current = isLooping;
-  }, [isLooping]);
-
-  const getEffectiveSrc = useCallback(() => src, [src]);
-
-  const effectiveSrc = getEffectiveSrc();
-  // Key the element on source URL AND timing to ensure proper reset for custom clips
-  const mediaKey = `${effectiveSrc}-${startTime}-${endTime}`;
-
   const isYouTube = effectiveSrc?.includes("youtube.com/") || effectiveSrc?.includes("youtu.be/");
 
   useImperativeHandle(ref, () => ({
     play: async () => {
-      if (!mediaRef.current || isLoading) return;
+      const media = mediaRef.current;
+      if (!media) {
+        debugLog("Cannot play - media ref is null");
+        return;
+      }
 
       try {
+        const currentStartTime = startTimeRef.current;
+        debugLog("Attempting to play media", { startTime: currentStartTime, endTime: endTimeRef.current });
+
+        // Ensure media is ready before attempting to play
+        const isReady = await ensureMediaReady();
+        if (!isReady) {
+          debugLog("Media not ready for playback");
+          return;
+        }
+
         // Cancel any existing play request
         if (playRequestRef.current) {
           await playRequestRef.current.catch(() => {});
         }
 
+        // Set the current time before playing - use ref for latest value
+        const currentTime = media.currentTime;
+        const beforeStart = currentTime < currentStartTime;
+        const atOrAfterEnd = typeof endTimeRef.current === 'number' &&
+                             isFinite(endTimeRef.current) &&
+                             currentTime >= endTimeRef.current;
+
+        // Only reset position if outside boundaries
+        if (beforeStart || atOrAfterEnd) {
+          media.currentTime = currentStartTime;
+          debugLog("Reset currentTime to startTime:", currentStartTime);
+        } else {
+          debugLog("Continuing from current time:", currentTime);
+        }
+
         // Start new play request
-        playRequestRef.current = mediaRef.current.play();
+        playRequestRef.current = media.play();
         await playRequestRef.current;
+        debugLog("Media playback started successfully");
       } catch (err) {
+        debugLog("Play error:", err);
         if (err instanceof Error && err.name === 'AbortError') {
           // If we get an abort error, try playing one more time after a short delay
           await new Promise(resolve => setTimeout(resolve, 100));
-          if (mediaRef.current) {
+          if (media) {
             try {
-              await mediaRef.current.play();
+              // Don't change time on retry unless needed
+              const currentTime = media.currentTime;
+              const currentStartTime = startTimeRef.current;
+              const beforeStart = currentTime < currentStartTime;
+              const atOrAfterEnd = typeof endTimeRef.current === 'number' &&
+                                   isFinite(endTimeRef.current) &&
+                                   currentTime >= endTimeRef.current;
+
+              if (beforeStart || atOrAfterEnd) {
+                media.currentTime = currentStartTime;
+                debugLog("Retry: Reset currentTime to startTime:", currentStartTime);
+              }
+
+              await media.play();
+              debugLog("Retry: Media playback started successfully");
             } catch (retryErr) {
-              console.warn("Retry play error:", retryErr);
+              debugLog("Retry play error:", retryErr);
             }
           }
         } else {
-          console.warn("Play error:", err);
+          debugLog("Other play error:", err);
         }
       }
     },
     pause: () => {
-      mediaRef.current?.pause();
+      const media = mediaRef.current;
+      if (!media) {
+        debugLog("Cannot pause - media ref is null");
+        return;
+      }
+
+      debugLog("Pausing media playback");
+      // Don't change the currentTime when pausing
+      media.pause();
+
+      // Force the UI update
+      if (onPlayStateChange) {
+        onPlayStateChange(false);
+      }
     },
     getIsPlaying: () => {
-      return mediaRef.current ? !mediaRef.current.paused : false;
+      const isPlaying = mediaRef.current ? !mediaRef.current.paused : false;
+      debugLog("getIsPlaying called, returning:", isPlaying);
+      return isPlaying;
     },
     getCurrentTime: () => {
       return mediaRef.current ? mediaRef.current.currentTime : 0;
     },
     seek: (time: number) => {
       if (mediaRef.current) {
+        debugLog("Seeking to:", time);
         mediaRef.current.currentTime = time;
       }
     },
@@ -146,35 +244,58 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     },
     seekWithoutBoundaryCheck: (time: number) => {
       if (mediaRef.current) {
+        debugLog("Seeking without boundary check to:", time);
         mediaRef.current.currentTime = time;
       }
     },
     playWithoutBoundaryCheck: async () => {
-      if (mediaRef.current) {
-        await mediaRef.current.play();
+      const media = mediaRef.current;
+      if (media) {
+        try {
+          debugLog("Playing without boundary check");
+          await media.play();
+        } catch (err) {
+          debugLog("Error in playWithoutBoundaryCheck:", err);
+        }
       }
     },
     disableBoundaryEnforcement: () => {
+      debugLog("Boundary enforcement disabled");
       setBoundaryEnforcementEnabled(false);
     },
     enableBoundaryEnforcement: () => {
+      debugLog("Boundary enforcement enabled");
       setBoundaryEnforcementEnabled(true);
     }
-  }));
+  }), [ensureMediaReady, debugLog, onPlayStateChange]);
 
   const enforceClipBoundaryOnPlay = useCallback(() => {
     const media = mediaRef.current;
     if (!media || isYouTube || !boundaryEnforcementEnabled) {
       return;
     }
+
+    const currentStartTime = startTimeRef.current;
+    const currentEndTime = endTimeRef.current;
+
     // Reset to clip start if before start or after end, on any play
-    const beforeStart = media.currentTime < startTime;
-    const atOrAfterEnd = typeof endTime === 'number' && isFinite(endTime) && media.currentTime >= endTime;
+    const beforeStart = media.currentTime < currentStartTime;
+    const atOrAfterEnd = typeof currentEndTime === 'number' && isFinite(currentEndTime) && media.currentTime >= currentEndTime;
+
+    debugLog("Enforcing clip boundary on play", {
+      currentTime: media.currentTime,
+      startTime: currentStartTime,
+      endTime: currentEndTime,
+      beforeStart,
+      atOrAfterEnd
+    });
+
     if (beforeStart || atOrAfterEnd) {
-      media.currentTime = startTime;
-      if (onTimeUpdate) onTimeUpdate(startTime);
+      media.currentTime = currentStartTime;
+      if (onTimeUpdate) onTimeUpdate(currentStartTime);
+      debugLog("Reset to startTime:", currentStartTime);
     }
-  }, [isYouTube, startTime, endTime, onTimeUpdate, boundaryEnforcementEnabled]);
+  }, [isYouTube, onTimeUpdate, boundaryEnforcementEnabled, debugLog]);
 
   const handleTimeUpdate = useCallback(() => {
     const media = mediaRef.current;
@@ -186,50 +307,83 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
     if (isYouTube || !boundaryEnforcementEnabled) return;
 
-    if (typeof endTime === 'number' && isFinite(endTime)) {
-      if (!media.paused && media.currentTime >= endTime) {
+    const currentEndTime = endTimeRef.current;
+    if (typeof currentEndTime === 'number' && isFinite(currentEndTime)) {
+      if (!media.paused && media.currentTime >= currentEndTime) {
+        debugLog("Media reached endTime:", { currentTime: media.currentTime, endTime: currentEndTime });
+
         if (isLoopingRef.current) {
-          media.currentTime = startTime;
-          if (onTimeUpdate) onTimeUpdate(startTime);
+          const currentStartTime = startTimeRef.current;
+          debugLog("Looping back to startTime:", currentStartTime);
+          media.currentTime = currentStartTime;
+          if (onTimeUpdate) onTimeUpdate(currentStartTime);
           media.play().catch(error => {
-            console.warn("Error attempting to loop playback:", error);
+            debugLog("Error attempting to loop playback:", error);
             media.pause();
-            media.currentTime = startTime;
+            media.currentTime = currentStartTime;
+            if (onPlayStateChange) {
+              onPlayStateChange(false);
+            }
           });
         } else {
-          media.currentTime = endTime;
+          debugLog("Stopping at endTime:", currentEndTime);
           media.pause();
-          if (onEnded && !isLoopingRef.current) {
+          // Do not reset currentTime here - keep it at the actual time
+          if (onPlayStateChange) {
+            onPlayStateChange(false);
+          }
+          if (onEnded) {
+            debugLog("Calling onEnded callback");
             onEnded();
           }
         }
       }
     }
-  }, [isYouTube, startTime, endTime, onTimeUpdate, onEnded, boundaryEnforcementEnabled]);
+  }, [isYouTube, onTimeUpdate, onEnded, boundaryEnforcementEnabled, onPlayStateChange, debugLog]);
 
   const handleMediaEnded = useCallback(() => {
     const media = mediaRef.current;
     if (!media || isYouTube) return;
 
+    debugLog("Media ended event triggered");
+
     if (isLoopingRef.current) {
-      media.currentTime = startTime;
-      if (onTimeUpdate) onTimeUpdate(startTime);
-      media.play().catch(error => console.warn("Loop playback error on ended event:", error));
+      const currentStartTime = startTimeRef.current;
+      debugLog("Looping back to startTime on ended event:", currentStartTime);
+      media.currentTime = currentStartTime;
+      if (onTimeUpdate) onTimeUpdate(currentStartTime);
+      media.play().catch(error => {
+        debugLog("Loop playback error on ended event:", error);
+        if (onPlayStateChange) {
+          onPlayStateChange(false);
+        }
+      });
     } else {
-      if(typeof endTime === 'number' && isFinite(endTime)){
-        media.currentTime = endTime;
+      const currentEndTime = endTimeRef.current;
+      if(typeof currentEndTime === 'number' && isFinite(currentEndTime)){
+        debugLog("Setting to endTime on ended event:", currentEndTime);
+        // Don't change the time - let it end naturally
       }
-      if (onEnded) onEnded();
+      media.pause();
+      if (onPlayStateChange) {
+        onPlayStateChange(false);
+      }
+      if (onEnded) {
+        debugLog("Calling onEnded callback from ended event");
+        onEnded();
+      }
     }
-  }, [isYouTube, startTime, endTime, onEnded]);
+  }, [isYouTube, onEnded, onTimeUpdate, onPlayStateChange, debugLog]);
 
   const handlePlayEvent = useCallback(() => {
+    debugLog("Play event triggered");
     onPlayStateChange?.(true);
-  }, [onPlayStateChange]);
+  }, [onPlayStateChange, debugLog]);
 
   const handlePauseEvent = useCallback(() => {
+    debugLog("Pause event triggered");
     onPlayStateChange?.(false);
-  }, [onPlayStateChange]);
+  }, [onPlayStateChange, debugLog]);
 
   // Notify parent when playback rate is changed (e.g., via context menu)
   const handleRateChange = useCallback(() => {
@@ -241,28 +395,61 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
   useEffect(() => {
     const media = mediaRef.current;
-    if (!media || !effectiveSrc) {
+    if (!media) {
       return;
     }
 
-    setIsLoading(true);
-    setHasLoadError(false);
+    // Only reload the source if it actually changed
+    const srcChanged = media.src !== effectiveSrc && effectiveSrc;
+
+    if (srcChanged) {
+      debugLog("Source changed, setting up media with source:", effectiveSrc, { startTime, endTime });
+
+      setIsLoading(true);
+      isReadyRef.current = false;
+      setHasLoadError(false);
+
+      // Don't set crossOrigin for direct media URLs
+      if (effectiveSrc.includes('youtube.com') || effectiveSrc.includes('youtu.be')) {
+        media.crossOrigin = 'anonymous';
+      } else {
+        media.removeAttribute('crossOrigin');
+      }
+
+      // Force reload when switching sources
+      media.src = effectiveSrc;
+      debugLog("Loading media source:", effectiveSrc);
+      media.load();
+    }
 
     const localHandleLoadedMetadata = () => {
       if (!media) return;
-      setIsLoading(false);
-      setHasLoadError(false);
+      debugLog("Metadata loaded, duration:", media.duration);
+
+      // Use the ref values to ensure we have the latest values
+      media.currentTime = startTimeRef.current;
+      debugLog("Set initial currentTime to startTime:", startTimeRef.current);
+
       if (onLoadedMetadata) {
         onLoadedMetadata(media.duration);
       }
-      media.currentTime = startTime;
       enforceClipBoundaryOnPlay();
       onPlayStateChange?.(!media.paused);
+
+      setIsLoading(false);
+      isReadyRef.current = true;
+    };
+
+    const handleCanPlay = () => {
+      debugLog("Can play event triggered");
+      setIsLoading(false);
+      isReadyRef.current = true;
+      setHasLoadError(false);
     };
 
     const handleError = (event: Event) => {
       const mediaError = (media as HTMLMediaElement).error;
-      console.warn('Media loading error:', {
+      debugLog('Media loading error:', {
         event,
         mediaError: mediaError ? {
           code: mediaError.code,
@@ -272,20 +459,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       });
 
       // Only show error UI for actual critical errors
-      // Don't show errors for CORS issues or network errors that might resolve
-      if (mediaError && mediaError.code === 3) {
-        // Code 3 = MEDIA_ERR_DECODE - actual format/corruption issues
-        setHasLoadError(true);
-      } else if (mediaError && mediaError.code === 4) {
-        // Code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED - format not supported
+      if (mediaError && (mediaError.code === 3 || mediaError.code === 4)) {
         setHasLoadError(true);
       }
-      // Don't show errors for codes 1 (aborted) or 2 (network) as these often resolve
-    };
-
-    const handleCanPlay = () => {
-      // Clear error state when media can play
-      setHasLoadError(false);
     };
 
     media.addEventListener('ratechange', handleRateChange);
@@ -299,18 +475,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     media.addEventListener('error', handleError);
     media.addEventListener('canplay', handleCanPlay);
 
-    // Don't set crossOrigin for direct media URLs
-    if (effectiveSrc.includes('youtube.com') || effectiveSrc.includes('youtu.be')) {
-      media.crossOrigin = 'anonymous';
-    } else {
-      media.removeAttribute('crossOrigin');
-    }
-
-    // Force reload when switching sources
-    media.src = effectiveSrc;
-    media.load();
-
     return () => {
+      debugLog("Cleaning up event listeners");
       playRequestRef.current = null;
       media.removeEventListener('ratechange', handleRateChange);
       media.removeEventListener("loadedmetadata", localHandleLoadedMetadata);
@@ -323,7 +489,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       media.removeEventListener('error', handleError);
       media.removeEventListener('canplay', handleCanPlay);
     };
-  }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onPlaybackRateChange, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onPlayStateChange, handleRateChange]);
+  }, [effectiveSrc, handleRateChange, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onLoadedMetadata, onPlayStateChange, debugLog]);
 
 
   if (!effectiveSrc) {
@@ -393,7 +559,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     return (
       <Card className={rootCardClasses}>
         <CardContent className={cn(contentClasses, isAudioSource ? "" : "aspect-video")}>
-                    <audio key={mediaKey}
+                    <audio
            ref={mediaRef as React.RefObject<HTMLAudioElement>}
            controls
            className="w-full"
@@ -410,7 +576,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       <CardContent className={cn(contentClasses, !isAudioSource ? "aspect-video" : "", "relative")}>
         {isAudioSource ? (
           <audio
-            key={mediaKey}
             ref={mediaRef as React.RefObject<HTMLAudioElement>}
             controls
             className="w-full"
@@ -420,7 +585,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
           </audio>
         ) : (
           <video
-            key={mediaKey}
             ref={mediaRef as React.RefObject<HTMLVideoElement>}
             controls
             className="w-full h-full bg-black"
