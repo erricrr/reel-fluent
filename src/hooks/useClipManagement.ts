@@ -29,8 +29,17 @@ export function useClipManagement(language: string) {
     setClips(newClips);
   }, []);
 
-  const generateClipsFromDuration = useCallback((duration: number, clipLength: number, mediaSourceId: string) => {
+    const generateClipsFromDuration = useCallback((duration: number, clipLength: number, mediaSourceId: string) => {
+    console.log('generateClipsFromDuration called with:', {
+      duration,
+      clipLength,
+      mediaSourceId,
+      language
+    });
+
     const newClips = generateClips(duration, clipLength, language, mediaSourceId);
+    console.log('Generated clips:', newClips.length, 'clips for media source:', mediaSourceId);
+
     updateClipsRef(newClips);
     setCurrentClipIndex(0);
     setFocusedClip(null);

@@ -58,7 +58,7 @@ export function generateClips(duration: number, clipLength: number, language: st
       isFocusedClip: false,
       mediaSourceId: mediaSourceId,
     });
-    currentTime += clipLength;
+        currentTime += clipLength;
   }
   return clips;
 }

@@ -71,6 +71,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const isLoopingRef = useRef(isLooping);
   const [boundaryEnforcementEnabled, setBoundaryEnforcementEnabled] = useState(true);
+  const [hasLoadError, setHasLoadError] = useState(false);
 
   // Sync media element playbackRate to prop on mount and when it changes
   useEffect(() => {
@@ -217,6 +218,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       return;
     }
 
+    // Reset error state when source changes
+    setHasLoadError(false);
+
     const localHandleLoadedMetadata = () => {
       if (!media) return;
       if (onLoadedMetadata) {
@@ -227,6 +231,22 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       onPlayStateChange?.(!media.paused); // Initial state after metadata load
     };
 
+    const handleError = (event: Event) => {
+      const mediaError = (media as HTMLMediaElement).error;
+      console.warn('Media loading error:', {
+        event,
+        mediaError: mediaError ? {
+          code: mediaError.code,
+          message: mediaError.message
+        } : 'No media error details'
+      });
+
+      // Only show error UI for non-CORS errors or if we don't have duration info
+      if (mediaError?.code !== 2 || !media.duration) {
+        setHasLoadError(true);
+      }
+    };
+
     media.addEventListener('ratechange', handleRateChange);
     media.addEventListener("loadedmetadata", localHandleLoadedMetadata);
     media.addEventListener("timeupdate", handleTimeUpdate);
@@ -235,23 +255,25 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     media.addEventListener('playing', enforceClipBoundaryOnPlay);
     media.addEventListener('play', handlePlayEvent);
     media.addEventListener('pause', handlePauseEvent);
+    media.addEventListener('error', handleError);
 
-    // Set crossOrigin for direct URLs to handle CORS
+    // Set crossOrigin for all HTTP(S) URLs except YouTube
     if (effectiveSrc.startsWith('http://') || effectiveSrc.startsWith('https://')) {
       if (!effectiveSrc.includes('youtube.com') && !effectiveSrc.includes('youtu.be')) {
         media.crossOrigin = 'anonymous';
       }
     }
 
+    // Only reload if source actually changed
     if (media.currentSrc !== effectiveSrc && media.src !== effectiveSrc) {
-        media.src = effectiveSrc;
-        media.load();
+      media.src = effectiveSrc;
+      media.load();
     } else if (media.readyState >= 1) {
-        if(media.currentTime !== startTime) {
-            media.currentTime = startTime;
-        }
-        enforceClipBoundaryOnPlay();
-        onPlayStateChange?.(!media.paused); // Reflect current state
+      if (media.currentTime !== startTime) {
+        media.currentTime = startTime;
+      }
+      enforceClipBoundaryOnPlay();
+      onPlayStateChange?.(!media.paused);
     }
 
     return () => {
@@ -263,6 +285,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       media.removeEventListener('playing', enforceClipBoundaryOnPlay);
       media.removeEventListener('play', handlePlayEvent);
       media.removeEventListener('pause', handlePauseEvent);
+      media.removeEventListener('error', handleError);
     };
   }, [mediaKey, effectiveSrc, startTime, endTime, onTimeUpdate, onPlaybackRateChange, onLoadedMetadata, onEnded, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onPlayStateChange, handleRateChange]);
 
@@ -348,16 +371,40 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
   return (
     <Card className={rootCardClasses}>
-      <CardContent className={cn(contentClasses, !isAudioSource ? "aspect-video" : "")}>
-                <video
-          key={mediaKey}
-          ref={mediaRef as React.RefObject<HTMLVideoElement>}
-          controls
-          className="w-full h-full bg-black"
-          playsInline
-        >
-          Your browser does not support the video tag.
-        </video>
+      <CardContent className={cn(contentClasses, !isAudioSource ? "aspect-video" : "", "relative")}>
+        {isAudioSource ? (
+          <audio
+            key={mediaKey}
+            ref={mediaRef as React.RefObject<HTMLAudioElement>}
+            controls
+            className="w-full"
+            playsInline
+          >
+            Your browser does not support the audio tag.
+          </audio>
+        ) : (
+          <video
+            key={mediaKey}
+            ref={mediaRef as React.RefObject<HTMLVideoElement>}
+            controls
+            className="w-full h-full bg-black"
+            playsInline
+          >
+            Your browser does not support the video tag.
+          </video>
+        )}
+        {hasLoadError && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
+            <div className="text-center text-white">
+              <p className="text-sm mb-2">⚠️ Media playback error</p>
+              <p className="text-xs text-gray-300">
+                {(mediaRef.current as HTMLMediaElement)?.error?.code === 2
+                  ? "This media source doesn't allow direct playback. Try downloading the file first."
+                  : "Unable to play this media file. The format might not be supported or the file might be corrupted."}
+              </p>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

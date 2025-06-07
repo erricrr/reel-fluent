@@ -129,8 +129,8 @@ export default function ReelFluentApp() {
 
   const mediaProcessingHookValues = useMediaProcessing();
   const {
-    isLoading, isSaving, isYouTubeProcessing, processingProgress, processingStatus,
-    youtubeVideoInfo, processFile, processYouTubeUrl, resetProcessingState,
+    isLoading, isSaving, isYouTubeProcessing, processingStatus,
+    youtubeVideoInfo, processFile, processYouTubeUrl, processDirectUrl, resetProcessingState,
     cleanupObjectUrl, cleanupBlobUrl, setIsSaving, globalAppBusyState
   } = mediaProcessingHookValues;
 
@@ -223,181 +223,34 @@ export default function ReelFluentApp() {
         }
       });
     } else {
-      try {
-        const urlObj = new URL(url);
-        const pathname = urlObj.pathname;
-        const filename = pathname.split('/').pop() || 'Media File';
-        const decodedDisplayName = decodeURIComponent(filename);
+      await processDirectUrl(url, (src, displayName, duration, type) => {
+        console.log('processDirectUrl callback called with:', { src: src.substring(0, 50) + '...', displayName, duration, type });
 
-        const extension = pathname.toLowerCase().split('.').pop() || '';
-        const isVideoExtension = ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(extension);
-        const isAudioExtension = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(extension);
-
-        // Default to video if we can't determine from extension
-        let resolvedMediaType: 'video' | 'audio' = 'video';
-        if (isAudioExtension) {
-          resolvedMediaType = 'audio';
-        } else if (isVideoExtension) {
-          resolvedMediaType = 'video';
-        }
-
-        console.log('Processing direct URL:', {
-          url: url.substring(0, 100) + '...',
-          filename: decodedDisplayName,
-          extension,
-          resolvedMediaType
-        });
-
-        const resolvedDuration = await new Promise<number>((resolve, reject) => {
-          const media = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
-
-          // Try without CORS first, then with CORS if that fails
-          media.preload = 'metadata';
-
-          const timeout = setTimeout(() => {
-            media.src = '';
-            reject(new Error('Timeout loading media metadata (10 seconds)'));
-          }, 10000);
-
-          const cleanup = () => {
-            clearTimeout(timeout);
-            media.removeEventListener('loadedmetadata', onLoadedMetadata);
-            media.removeEventListener('error', onError);
-            media.src = '';
-          };
-
-          const onLoadedMetadata = () => {
-            cleanup();
-            if (isNaN(media.duration) || media.duration <= 0) {
-              reject(new Error('Invalid media duration'));
-            } else {
-              console.log('Media metadata loaded:', {
-                duration: media.duration,
-                type: resolvedMediaType
-              });
-              resolve(media.duration);
-            }
-          };
-
-                    const onError = (event: Event) => {
-            console.warn('Media error event:', event);
-            const error = (media as any).error;
-            let errorMessage = 'Failed to load media from URL';
-
-            if (error) {
-              console.warn('Media error details:', error);
-              switch (error.code) {
-                case 1: // MEDIA_ERR_ABORTED
-                  errorMessage = 'Media loading was aborted';
-                  break;
-                case 2: // MEDIA_ERR_NETWORK
-                  errorMessage = 'Network error while loading media. The server may not allow cross-origin requests or the URL may be invalid.';
-                  break;
-                case 3: // MEDIA_ERR_DECODE
-                  errorMessage = 'Media format not supported or corrupted';
-                  break;
-                case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                  errorMessage = 'Media format not supported by browser';
-                  break;
-                default:
-                  errorMessage = `Media error (code: ${error.code})`;
-              }
-            }
-
-            // Try with CORS if the first attempt failed
-            if (!media.crossOrigin) {
-              console.log('Retrying with CORS enabled...');
-              cleanup();
-
-              // Retry with CORS
-              const corsMedia = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
-              corsMedia.crossOrigin = 'anonymous';
-              corsMedia.preload = 'metadata';
-
-              const corsTimeout = setTimeout(() => {
-                corsMedia.src = '';
-                reject(new Error('Timeout loading media metadata with CORS (10 seconds)'));
-              }, 10000);
-
-              const corsCleanup = () => {
-                clearTimeout(corsTimeout);
-                corsMedia.removeEventListener('loadedmetadata', corsOnLoadedMetadata);
-                corsMedia.removeEventListener('error', corsOnError);
-                corsMedia.src = '';
-              };
-
-              const corsOnLoadedMetadata = () => {
-                corsCleanup();
-                if (isNaN(corsMedia.duration) || corsMedia.duration <= 0) {
-                  reject(new Error('Invalid media duration'));
-                } else {
-                  console.log('Media metadata loaded with CORS:', {
-                    duration: corsMedia.duration,
-                    type: resolvedMediaType
-                  });
-                  resolve(corsMedia.duration);
-                }
-              };
-
-              const corsOnError = () => {
-                corsCleanup();
-                reject(new Error(errorMessage + ' (CORS retry also failed)'));
-              };
-
-              corsMedia.addEventListener('loadedmetadata', corsOnLoadedMetadata);
-              corsMedia.addEventListener('error', corsOnError);
-              corsMedia.src = url;
-
-              return;
-            }
-
-            cleanup();
-            reject(new Error(errorMessage));
-          };
-
-          media.addEventListener('loadedmetadata', onLoadedMetadata);
-          media.addEventListener('error', onError);
-
-          // Try loading the media
-          try {
-            media.src = url;
-          } catch (srcError) {
-            cleanup();
-            reject(new Error('Invalid media URL'));
-          }
-        });
-
-        const directUrlMediaSource: MediaSource = {
+        const newMediaSource: MediaSource = {
           id: generateUniqueId(),
-          src: url,
-          displayName: decodedDisplayName,
-          type: resolvedMediaType,
-          duration: resolvedDuration,
+          src,
+          displayName,
+          type,
+          duration,
           language
         };
 
-        if (addMediaSource(directUrlMediaSource)) {
-          selectMediaSource(directUrlMediaSource.id);
-          setMediaSrc(url);
-          setMediaDisplayName(decodedDisplayName);
-          setMediaDuration(resolvedDuration);
-          setCurrentSourceType(resolvedMediaType);
+        console.log('Adding media source:', newMediaSource.id);
+        if (addMediaSource(newMediaSource)) {
+          console.log('Media source added successfully, updating state...');
+          selectMediaSource(newMediaSource.id);
+          setMediaSrc(src);
+          setMediaDisplayName(displayName);
+          setMediaDuration(duration);
+          setCurrentSourceType(type);
           setSourceFile(null);
+          console.log('State updated - should trigger clip generation');
+        } else {
+          console.log('Failed to add media source');
         }
-        toast({
-          title: "Direct Media URL Added",
-          description: `Added "${decodedDisplayName}" (${formatSecondsToMMSS(resolvedDuration)}) from direct URL.`
-        });
-      } catch (error) {
-        console.error('Direct URL processing error:', error);
-        toast({
-          variant: "destructive",
-          title: "Invalid URL",
-          description: error instanceof Error ? error.message : "Please enter a valid YouTube URL or direct media file URL."
-        });
-      }
+      });
     }
-  }, [processYouTubeUrl, addMediaSource, selectMediaSource, toast, language]);
+  }, [processYouTubeUrl, processDirectUrl, addMediaSource, selectMediaSource, toast, language]);
 
   // Media source management
   const handleSelectMediaSource = useCallback((sourceId: string) => {
@@ -898,13 +751,7 @@ export default function ReelFluentApp() {
     }
   }, [user, sourceFile, sourceUrl, mediaDisplayName, mediaDuration, currentSourceType, language, clipSegmentationDuration, sessionClips, setIsSaving, toast]);
 
-  // Effect to generate clips when duration becomes available
-  useEffect(() => {
-    if (mediaDuration > 0 && clips.length === 0 && mediaSrc && activeMediaSourceId) {
-      // Generate clips when duration becomes available (e.g., for direct URLs)
-      generateClipsFromDuration(mediaDuration, clipSegmentationDuration, activeMediaSourceId);
-    }
-  }, [mediaDuration, clips.length, mediaSrc, generateClipsFromDuration, clipSegmentationDuration, activeMediaSourceId]);
+    // Note: Clip generation is handled by the main effect below that reacts to activeMediaSourceId, mediaDuration, and language changes
 
   // Separate effect to update MediaSource duration when it becomes available
   useEffect(() => {
@@ -957,8 +804,15 @@ export default function ReelFluentApp() {
     }
   }, [mediaSources.length, isUploadSectionHidden]);
 
-  // Effect for initializing and re-generating clips when media source or critical params change
+    // Effect for initializing and re-generating clips when media source or critical params change
   useEffect(() => {
+    console.log('Main clip generation effect triggered:', {
+      activeMediaSourceId,
+      mediaDuration,
+      language,
+      hasGenerateFunction: !!generateClipsFromDuration
+    });
+
     if (activeMediaSourceId && mediaDuration > 0 && language) {
       let durationForClipsMs = getSegmentationPreference(activeMediaSourceId);
       if (durationForClipsMs === null) {
@@ -966,9 +820,20 @@ export default function ReelFluentApp() {
       }
       setClipSegmentationDuration(durationForClipsMs);
 
+      console.log('Generating clips with params:', {
+        mediaDuration,
+        durationForClipsSeconds: durationForClipsMs / 1000,
+        activeMediaSourceId
+      });
+
       // Use the hook's generateClipsFromDuration to ensure mediaSourceId is set
       generateClipsFromDuration(mediaDuration, durationForClipsMs / 1000, activeMediaSourceId);
     } else {
+      console.log('Clearing clips - missing required params:', {
+        activeMediaSourceId,
+        mediaDuration,
+        language
+      });
       // If no active source or duration, clear clips
       // generateClipsFromDuration(0,0, activeMediaSourceId || '') would also work if it handles duration 0 gracefully
       setClips([]); // from useClipManagement
@@ -1080,8 +945,8 @@ export default function ReelFluentApp() {
                           }}
                           isLoading={globalAppBusyState || isAnyClipTranscribing}
                         />
-                        {isYouTubeProcessing && (
-                          <YouTubeProcessingLoader status={processingStatus} />
+                        {(isYouTubeProcessing || isLoading) && (
+                          <MediaProcessingLoader status={processingStatus} />
                         )}
                       </div>
                     </div>
@@ -1153,13 +1018,6 @@ export default function ReelFluentApp() {
               onUpdateClipData={updateClipData}
             />
           </div>
-        )}
-
-        {isLoading && !mediaDisplayName && !isYouTubeProcessing && (
-          <MediaProcessingLoader
-            status={processingStatus}
-            progress={processingProgress}
-          />
         )}
       </main>
 
