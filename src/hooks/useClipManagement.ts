@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useToast } from './use-toast';
 import { generateClips, createFocusedClip, type Clip } from '@/lib/videoUtils';
+import { hydrateClipWithAIData } from '@/lib/aiToolsHydration';
 
 export interface ClipManagementState {
   clips: Clip[];
@@ -29,7 +30,34 @@ export function useClipManagement(language: string) {
     setClips(newClips);
   }, []);
 
-    const generateClipsFromDuration = useCallback((duration: number, clipLength: number, mediaSourceId: string) => {
+  // Shared function to get AI tools cache
+  const getAIToolsCache = () => {
+    if (typeof window === 'undefined') return {};
+    try {
+      return JSON.parse(localStorage.getItem('reel-fluent-ai-tools-cache') || '{}');
+    } catch {
+      return {};
+    }
+  };
+
+  // Shared function to hydrate clips with AI data
+  const hydrateClipsWithAIData = useCallback((clips: Clip[], mediaSourceId: string) => {
+    const cache = getAIToolsCache();
+    // Pass sessionClips to hydration to ensure proper merging of saved data
+    return clips.map(clip => {
+      // Generate cache key the same way as in aiToolsHydration.ts
+      const cacheKey = `${mediaSourceId}-${clip.startTime}-${clip.endTime}`;
+      // Ensure clip has the correct ID format that matches the cache key
+      const hydratedClip = {
+        ...clip,
+        id: `clip-${cacheKey}`, // Ensure ID matches timing for cache lookup
+        mediaSourceId // Ensure mediaSourceId is set
+      };
+      return hydrateClipWithAIData(hydratedClip, mediaSourceId, [], cache);
+    });
+  }, []);
+
+  const generateClipsFromDuration = useCallback((duration: number, clipLength: number, mediaSourceId: string) => {
     console.log('generateClipsFromDuration called with:', {
       duration,
       clipLength,
@@ -37,14 +65,19 @@ export function useClipManagement(language: string) {
       language
     });
 
+    // Generate base clips with deterministic IDs
     const newClips = generateClips(duration, clipLength, language, mediaSourceId);
     console.log('Generated clips:', newClips.length, 'clips for media source:', mediaSourceId);
 
-    updateClipsRef(newClips);
+    // Immediately hydrate clips with AI data using shared function
+    const hydratedClips = hydrateClipsWithAIData(newClips, mediaSourceId);
+    console.log('Hydrated clips with AI data:', hydratedClips.length, 'clips');
+
+    updateClipsRef(hydratedClips);
     setCurrentClipIndex(0);
     setFocusedClip(null);
     setActiveMediaSourceId(mediaSourceId);
-  }, [language, updateClipsRef]);
+  }, [language, updateClipsRef, hydrateClipsWithAIData]);
 
   const selectClip = useCallback((index: number) => {
     if (index >= 0 && index < clips.length) {
@@ -70,15 +103,19 @@ export function useClipManagement(language: string) {
   }, [language, updateClipsRef, toast]);
 
   const backToAutoClips = useCallback((duration: number, clipSegmentationDuration: number, mediaSourceId: string) => {
-    // Generate clips with the same deterministic IDs they had before
-    // This ensures AI tools cache lookup continues to work
+    // Generate clips with deterministic IDs based on timing
     const autoClips = generateClips(duration, clipSegmentationDuration / 1000, language, mediaSourceId);
-    updateClipsRef(autoClips);
+
+    // Immediately hydrate clips with AI data using shared function
+    const hydratedClips = hydrateClipsWithAIData(autoClips, mediaSourceId);
+    console.log('Hydrated auto clips with AI data:', hydratedClips.length, 'clips');
+
+    updateClipsRef(hydratedClips);
     setCurrentClipIndex(0);
     setFocusedClip(null);
     setShowClipTrimmer(false);
     setActiveMediaSourceId(mediaSourceId);
-  }, [language, updateClipsRef]);
+  }, [language, updateClipsRef, hydrateClipsWithAIData]);
 
   const updateClip = useCallback((clipId: string, updates: Partial<Clip>) => {
     const updateClipInArray = (clipsArray: Clip[]) =>

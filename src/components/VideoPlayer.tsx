@@ -89,8 +89,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const getEffectiveSrc = useCallback(() => src, [src]);
 
   const effectiveSrc = getEffectiveSrc();
-  // Only key the element on the source URL so boundary changes don't remount the media element
-  const mediaKey = effectiveSrc;
+  // Key the element on source URL AND timing to ensure proper reset for custom clips
+  const mediaKey = `${effectiveSrc}-${startTime}-${endTime}`;
 
   const isYouTube = effectiveSrc?.includes("youtube.com/") || effectiveSrc?.includes("youtu.be/");
 

@@ -511,14 +511,6 @@ export default function TranscriptionWorkspace({
     ? { ...displayClip, startTime: previewClip.startTime, endTime: previewClip.endTime }
     : displayClip;
 
-  // Debug logging for clip issues
-  console.log('TranscriptionWorkspace render:', {
-    focusedClip: focusedClip ? { id: focusedClip.id, startTime: focusedClip.startTime, endTime: focusedClip.endTime } : null,
-    displayClip: displayClip ? { id: displayClip.id, startTime: displayClip.startTime, endTime: displayClip.endTime } : null,
-    effectiveClip: effectiveClip ? { id: effectiveClip.id, startTime: effectiveClip.startTime, endTime: effectiveClip.endTime } : null,
-    initialCurrentClip: initialCurrentClip ? { id: initialCurrentClip.id, startTime: initialCurrentClip.startTime, endTime: initialCurrentClip.endTime } : null
-  });
-
   const disableTextarea = isLoadingMedia || isSavingMedia;
   const clipDisplayName = focusedClip ? (focusedClip.displayName || 'Custom Clip') : getCurrentClipDisplayName();
 
@@ -545,7 +537,6 @@ export default function TranscriptionWorkspace({
     {/* Left Pane */}
         <div ref={leftPaneRef} className="w-full space-y-4 resize-none overflow-visible md:w-auto md:min-w-[15rem] md:max-w-[50%] md:overflow-auto">
           <VideoPlayer
-            key={`${mediaSrc}-${effectiveClip.startTime}-${effectiveClip.endTime}`}
             ref={videoPlayerRef}
             src={mediaSrc}
             startTime={effectiveClip.startTime}

@@ -38,13 +38,13 @@ export function generateClips(duration: number, clipLength: number, language: st
 
   const clips: Clip[] = [];
   let currentTime = 0;
-  let clipId = 0;
-  const uniquePrefix = mediaSourceId ? `${mediaSourceId}-clip` : 'clip';
 
   while (currentTime < duration) {
     const endTime = Math.min(currentTime + clipLength, duration);
+    // Generate deterministic ID based on timing and media source
+    const cacheKey = mediaSourceId ? `${mediaSourceId}-${currentTime}-${endTime}` : `auto-${currentTime}-${endTime}`;
     clips.push({
-      id: `${uniquePrefix}-${clipId++}`,
+      id: `clip-${cacheKey}`,
       startTime: currentTime,
       endTime: endTime,
       userTranscription: null,
@@ -58,15 +58,15 @@ export function generateClips(duration: number, clipLength: number, language: st
       isFocusedClip: false,
       mediaSourceId: mediaSourceId,
     });
-        currentTime += clipLength;
+    currentTime += clipLength;
   }
   return clips;
 }
 
 export function createFocusedClip(startTime: number, endTime: number, language: string, mediaSourceId?: string): Clip {
-  // Create deterministic ID based on timing instead of timestamp
-  const timeHash = Math.round(startTime * 1000).toString(36) + Math.round(endTime * 1000).toString(36);
-  const uniqueId = mediaSourceId ? `${mediaSourceId}-focused-clip-${timeHash}` : `focused-clip-${timeHash}`;
+  // Create deterministic ID based on timing and media source
+  const cacheKey = mediaSourceId ? `${mediaSourceId}-${startTime}-${endTime}` : `focused-${startTime}-${endTime}`;
+  const uniqueId = `clip-${cacheKey}`;
   return {
     id: uniqueId,
     startTime: startTime,

@@ -163,7 +163,6 @@ export default function ReelFluentApp() {
   // Drawer refs
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
-  const forceHydrationRef = useRef<boolean>(false);
 
   // Current clip - use focused clip if available, otherwise use indexed clip
   const currentClipToDisplay = useMemo(() => focusedClip || clips[currentClipIndex] || null,
@@ -461,12 +460,10 @@ export default function ReelFluentApp() {
   }, [showClipTrimmer, setShowClipTrimmer]);
 
   const handleBackToAutoClips = useCallback(() => {
-    if (mediaDuration && activeMediaSourceId) {
-      backToAutoClips(mediaDuration, clipSegmentationDuration, activeMediaSourceId);
+    if (mediaDuration > 0 && clipSegmentationDuration > 0) {
+      backToAutoClips(mediaDuration, clipSegmentationDuration, activeMediaSourceId || '');
       setShowClipTrimmer(false);
       setFocusedClip(null);
-      // Force hydration after returning to auto clips
-      forceHydrationRef.current = true;
     }
   }, [mediaDuration, clipSegmentationDuration, backToAutoClips, setShowClipTrimmer, setFocusedClip, activeMediaSourceId]);
 
@@ -840,43 +837,6 @@ export default function ReelFluentApp() {
       setClipSegmentationDuration(DEFAULT_SEGMENTATION_DURATION_MS);
     }
   }, [activeMediaSourceId, mediaDuration, language, generateClipsFromDuration, setClipSegmentationDuration, setClips, setCurrentClipIndex, setFocusedClip, setShowClipTrimmer]);
-
-      // Hydrate raw clips with AI and session data after auto-generation
-  useEffect(() => {
-    if (!activeMediaSourceId || clips.length === 0) return;
-
-    // Check if clips need hydration (don't have AI data but cache might have it)
-    const cache = getLocalAIToolsCache();
-    let needsHydration = forceHydrationRef.current;
-
-    const hydratedClips = clips.map(clip => {
-      const hydratedClip = hydrateClipWithAIData(clip, activeMediaSourceId, sessionClips, cache);
-
-      // Check if hydration added any data
-      if (
-        hydratedClip.automatedTranscription !== clip.automatedTranscription ||
-        hydratedClip.translation !== clip.translation ||
-        hydratedClip.englishTranslation !== clip.englishTranslation ||
-        hydratedClip.comparisonResult !== clip.comparisonResult
-      ) {
-        needsHydration = true;
-      }
-
-      return hydratedClip;
-    });
-
-    if (needsHydration) {
-      console.log('Hydrating clips with AI data for media source:', activeMediaSourceId, {
-        clipsCount: clips.length,
-        hydratedClipsCount: hydratedClips.length,
-        forceHydration: forceHydrationRef.current,
-        sampleClip: clips[0] ? { id: clips[0].id, hasAI: !!clips[0].automatedTranscription } : null,
-        sampleHydrated: hydratedClips[0] ? { id: hydratedClips[0].id, hasAI: !!hydratedClips[0].automatedTranscription } : null
-      });
-      setClips(hydratedClips);
-      forceHydrationRef.current = false; // Reset force flag
-    }
-  }, [activeMediaSourceId, sessionClips, clips.length]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
