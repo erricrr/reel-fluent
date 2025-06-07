@@ -77,19 +77,18 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const isReadyRef = useRef(false);
   const startTimeRef = useRef(startTime);
   const endTimeRef = useRef(endTime);
+  const currentSrcRef = useRef<string>('');
+  const listenersAttachedRef = useRef(false);
 
   const getEffectiveSrc = useCallback(() => src, [src]);
   const effectiveSrc = getEffectiveSrc();
-  // Store source in ref to avoid useEffect triggers
-  const effectiveSrcRef = useRef(effectiveSrc);
 
   // Update refs when props change
   useEffect(() => {
     startTimeRef.current = startTime;
     endTimeRef.current = endTime;
     isLoopingRef.current = isLooping;
-    effectiveSrcRef.current = effectiveSrc;
-  }, [startTime, endTime, isLooping, effectiveSrc]);
+  }, [startTime, endTime, isLooping]);
 
   // Debug logging function
   const debugLog = useCallback((message: string, ...args: any[]) => {
@@ -393,34 +392,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     }
   }, [onPlaybackRateChange]);
 
+  // Attach event listeners once and keep them
   useEffect(() => {
     const media = mediaRef.current;
-    if (!media) {
+    if (!media || listenersAttachedRef.current) {
       return;
     }
 
-    // Only reload the source if it actually changed
-    const srcChanged = media.src !== effectiveSrc && effectiveSrc;
-
-    if (srcChanged) {
-      debugLog("Source changed, setting up media with source:", effectiveSrc, { startTime, endTime });
-
-      setIsLoading(true);
-      isReadyRef.current = false;
-      setHasLoadError(false);
-
-      // Don't set crossOrigin for direct media URLs
-      if (effectiveSrc.includes('youtube.com') || effectiveSrc.includes('youtu.be')) {
-        media.crossOrigin = 'anonymous';
-      } else {
-        media.removeAttribute('crossOrigin');
-      }
-
-      // Force reload when switching sources
-      media.src = effectiveSrc;
-      debugLog("Loading media source:", effectiveSrc);
-      media.load();
-    }
+    debugLog("Attaching event listeners");
 
     const localHandleLoadedMetadata = () => {
       if (!media) return;
@@ -475,9 +454,12 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     media.addEventListener('error', handleError);
     media.addEventListener('canplay', handleCanPlay);
 
+    listenersAttachedRef.current = true;
+
     return () => {
       debugLog("Cleaning up event listeners");
       playRequestRef.current = null;
+      listenersAttachedRef.current = false;
       media.removeEventListener('ratechange', handleRateChange);
       media.removeEventListener("loadedmetadata", localHandleLoadedMetadata);
       media.removeEventListener("timeupdate", handleTimeUpdate);
@@ -489,8 +471,38 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       media.removeEventListener('error', handleError);
       media.removeEventListener('canplay', handleCanPlay);
     };
-  }, [effectiveSrc, handleRateChange, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onLoadedMetadata, onPlayStateChange, debugLog]);
+  }, [handleRateChange, handleTimeUpdate, handleMediaEnded, enforceClipBoundaryOnPlay, handlePlayEvent, handlePauseEvent, onLoadedMetadata, onPlayStateChange, debugLog]);
 
+  // Handle source changes separately
+  useEffect(() => {
+    const media = mediaRef.current;
+    if (!media || !effectiveSrc) {
+      return;
+    }
+
+    // Only reload the source if it actually changed
+    const srcChanged = currentSrcRef.current !== effectiveSrc;
+
+    if (srcChanged) {
+      debugLog("Source changed, loading new source:", effectiveSrc);
+
+      setIsLoading(true);
+      isReadyRef.current = false;
+      setHasLoadError(false);
+      currentSrcRef.current = effectiveSrc;
+
+      // Don't set crossOrigin for direct media URLs
+      if (effectiveSrc.includes('youtube.com') || effectiveSrc.includes('youtu.be')) {
+        media.crossOrigin = 'anonymous';
+      } else {
+        media.removeAttribute('crossOrigin');
+      }
+
+      // Force reload when switching sources
+      media.src = effectiveSrc;
+      media.load();
+    }
+  }, [effectiveSrc, debugLog]);
 
   if (!effectiveSrc) {
     return (

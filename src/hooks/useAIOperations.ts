@@ -205,8 +205,8 @@ export function useAIOperations() {
     if (!clip.userTranscription?.trim() || !clip.automatedTranscription?.trim()) {
       toast({
         variant: "destructive",
-        title: "Missing Text",
-        description: "Both user input and automated transcription are required for corrections.",
+        title: "Resave Transcription Required",
+        description: "Please save your transcription again to enable the comparison tool with your latest changes.",
       });
       return;
     }
