@@ -83,34 +83,45 @@ async function getVideoInfo(url: string) {
           `"${url}"`
         ].join(' ')
       },
-      // Strategy 2: Use mobile client
+      // Strategy 2: Use iframe/embed endpoint to bypass some restrictions
       {
-        name: 'mobile',
+        name: 'embed',
         command: [
           'yt-dlp',
           '--dump-json',
           '--no-playlist',
           '--quiet',
-          '--extractor-args', '"youtube:player_client=mweb"',
+          '--extractor-args', '"youtube:player_client=web,web_creator"',
           `"${url}"`
         ].join(' ')
       },
-      // Strategy 3: Use android client with user agent
+      // Strategy 3: Use TV client (most resistant to blocking)
       {
-        name: 'android',
+        name: 'tv',
         command: [
           'yt-dlp',
           '--dump-json',
           '--no-playlist',
           '--quiet',
-          '--extractor-args', '"youtube:player_client=android"',
-          '--user-agent', '"com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip"',
+          '--extractor-args', '"youtube:player_client=tv_embedded"',
           `"${url}"`
         ].join(' ')
       },
-      // Strategy 4: Use web client with spoofed user agent
+      // Strategy 4: Try with old iOS client
       {
-        name: 'web-spoofed',
+        name: 'ios-old',
+        command: [
+          'yt-dlp',
+          '--dump-json',
+          '--no-playlist',
+          '--quiet',
+          '--extractor-args', '"youtube:player_client=ios,web_creator;formats=missing_pot"',
+          `"${url}"`
+        ].join(' ')
+      },
+      // Strategy 5: Legacy approach with old web client
+      {
+        name: 'legacy-web',
         command: [
           'yt-dlp',
           '--dump-json',
@@ -118,6 +129,7 @@ async function getVideoInfo(url: string) {
           '--quiet',
           '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
           '--referer', '"https://www.youtube.com/"',
+          '--extractor-args', '"youtube:formats=missing_pot"',
           `"${url}"`
         ].join(' ')
       }
@@ -214,40 +226,54 @@ async function downloadAudio(url: string, outputPath: string) {
         `"${url}"`
       ].join(' ')
     },
-    // Strategy 2: Use mobile client
+    // Strategy 2: Use iframe/embed endpoint to bypass some restrictions
     {
-      name: 'mobile',
+      name: 'embed',
       command: [
         'yt-dlp',
         '--extract-audio',
         '--audio-format', 'mp3',
         '--audio-quality', '192K',
         '--no-playlist',
-        '--extractor-args', '"youtube:player_client=mweb"',
+        '--extractor-args', '"youtube:player_client=web,web_creator"',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
       ].join(' ')
     },
-    // Strategy 3: Use android client
+    // Strategy 3: Use TV client (most resistant to blocking)
     {
-      name: 'android',
+      name: 'tv',
       command: [
         'yt-dlp',
         '--extract-audio',
         '--audio-format', 'mp3',
         '--audio-quality', '192K',
         '--no-playlist',
-        '--extractor-args', '"youtube:player_client=android"',
-        '--user-agent', '"com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip"',
+        '--extractor-args', '"youtube:player_client=tv_embedded"',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
       ].join(' ')
     },
-    // Strategy 4: Use web client with spoofed user agent
+    // Strategy 4: Try with cookie and old iOS client
     {
-      name: 'web-spoofed',
+      name: 'ios-old',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--extractor-args', '"youtube:player_client=ios,web_creator;formats=missing_pot"',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ].join(' ')
+    },
+    // Strategy 5: Legacy approach with old web client
+    {
+      name: 'legacy-web',
       command: [
         'yt-dlp',
         '--extract-audio',
@@ -256,6 +282,7 @@ async function downloadAudio(url: string, outputPath: string) {
         '--no-playlist',
         '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
         '--referer', '"https://www.youtube.com/"',
+        '--extractor-args', '"youtube:formats=missing_pot"',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
