@@ -70,7 +70,20 @@ async function getVideoInfo(url: string) {
       throw new Error('yt-dlp is installed but not functioning properly. Please contact support.');
     }
 
-    const { stdout } = await execAsync(`yt-dlp --dump-json "${url}"`, { timeout: 30000 });
+    // Try with user-agent spoofing to avoid bot detection
+    const command = [
+      'yt-dlp',
+      '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
+      '--referer', '"https://www.youtube.com/"',
+      '--extractor-args', '"youtube:player_client=web"',
+      '--no-check-certificate',
+      '--dump-json',
+      `"${url}"`
+    ].join(' ');
+
+    console.log('Getting video info with command:', command);
+
+    const { stdout } = await execAsync(command, { timeout: 30000 });
     const info = JSON.parse(stdout);
     return {
       title: info.title || 'Unknown Title',
@@ -88,6 +101,16 @@ async function getVideoInfo(url: string) {
 
     if (error.code === 'ENOENT') {
       throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
+    }
+
+    // Handle bot detection specifically
+    if (error.stderr && (
+      error.stderr.includes('Sign in to confirm you\'re not a bot') ||
+      error.stderr.includes('bot') ||
+      error.stderr.includes('automated') ||
+      error.stderr.includes('unusual traffic')
+    )) {
+      throw new Error('YouTube is currently blocking automated requests. This is a temporary issue from YouTube\'s side. Please try again in a few minutes or try a different video.');
     }
 
     if (error.stderr && error.stderr.includes('Video unavailable')) {
@@ -122,6 +145,10 @@ async function downloadAudio(url: string, outputPath: string) {
     '--audio-format', 'mp3',
     '--audio-quality', '192K',
     '--no-playlist',
+    '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
+    '--referer', '"https://www.youtube.com/"',
+    '--extractor-args', '"youtube:player_client=web"',
+    '--no-check-certificate',
     '--match-filters', `"duration < ${MAX_DURATION}"`,
     '--output', `"${outputPath}.%(ext)s"`,
     `"${url}"`
@@ -150,6 +177,17 @@ async function downloadAudio(url: string, outputPath: string) {
     if (error.signal === 'SIGTERM') {
       throw new Error('Download timed out. The video might be too long or unavailable.');
     }
+
+    // Handle bot detection specifically
+    if (error.stderr && (
+      error.stderr.includes('Sign in to confirm you\'re not a bot') ||
+      error.stderr.includes('bot') ||
+      error.stderr.includes('automated') ||
+      error.stderr.includes('unusual traffic')
+    )) {
+      throw new Error('YouTube is currently blocking automated requests. This is a temporary issue from YouTube\'s side. Please try again in a few minutes or try a different video.');
+    }
+
     if (error.stderr && error.stderr.includes('Video unavailable')) {
       throw new Error('Video is unavailable or private');
     }
