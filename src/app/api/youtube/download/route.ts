@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, statSync, unlinkSync } from 'fs';
 
 const execAsync = promisify(exec);
 
@@ -70,60 +70,121 @@ async function getVideoInfo(url: string) {
       throw new Error('yt-dlp is installed but not functioning properly. Please contact support.');
     }
 
-    // Try with user-agent spoofing to avoid bot detection
-    const command = [
-      'yt-dlp',
-      '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
-      '--referer', '"https://www.youtube.com/"',
-      '--dump-json',
-      `"${url}"`
-    ].join(' ');
+    // Multiple extraction strategies - try each one until one works
+    const strategies = [
+      // Strategy 1: Basic extraction with minimal flags
+      {
+        name: 'basic',
+        command: [
+          'yt-dlp',
+          '--dump-json',
+          '--no-playlist',
+          '--quiet',
+          `"${url}"`
+        ].join(' ')
+      },
+      // Strategy 2: Use mobile client
+      {
+        name: 'mobile',
+        command: [
+          'yt-dlp',
+          '--dump-json',
+          '--no-playlist',
+          '--quiet',
+          '--extractor-args', '"youtube:player_client=mweb"',
+          `"${url}"`
+        ].join(' ')
+      },
+      // Strategy 3: Use android client with user agent
+      {
+        name: 'android',
+        command: [
+          'yt-dlp',
+          '--dump-json',
+          '--no-playlist',
+          '--quiet',
+          '--extractor-args', '"youtube:player_client=android"',
+          '--user-agent', '"com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip"',
+          `"${url}"`
+        ].join(' ')
+      },
+      // Strategy 4: Use web client with spoofed user agent
+      {
+        name: 'web-spoofed',
+        command: [
+          'yt-dlp',
+          '--dump-json',
+          '--no-playlist',
+          '--quiet',
+          '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+          '--referer', '"https://www.youtube.com/"',
+          `"${url}"`
+        ].join(' ')
+      }
+    ];
 
-    console.log('Getting video info with command:', command);
+    let lastError: Error | null = null;
 
-    const { stdout } = await execAsync(command, { timeout: 30000 });
-    const info = JSON.parse(stdout);
-    return {
-      title: info.title || 'Unknown Title',
-      duration: info.duration || 0,
-      uploader: info.uploader || 'Unknown',
-      view_count: info.view_count || 0
-    };
-  } catch (error: any) {
-    console.error('Error getting video info:', error);
+    for (const strategy of strategies) {
+      try {
+        console.log(`Trying strategy "${strategy.name}" for video info extraction`);
 
-    // Check for specific yt-dlp availability errors first
-    if (error.message.includes('yt-dlp is not installed') || error.message.includes('not functioning properly')) {
-      throw error; // Re-throw our custom errors
+        const { stdout } = await execAsync(strategy.command, {
+          timeout: 30000,
+          env: {
+            ...process.env,
+            // Add some environment variables that might help
+            'PYTHONPATH': '/usr/local/lib/python3.11/site-packages:/usr/lib/python3.11/site-packages',
+            'PATH': '/root/.local/bin:/usr/local/bin:' + process.env.PATH
+          }
+        });
+
+        if (!stdout.trim()) {
+          throw new Error('Empty response from yt-dlp');
+        }
+
+        const videoInfo = JSON.parse(stdout.trim());
+
+        if (!videoInfo.title || !videoInfo.duration) {
+          throw new Error('Invalid video information received');
+        }
+
+        console.log(`Strategy "${strategy.name}" succeeded for video info`);
+        console.log('Video info extracted:', {
+          title: videoInfo.title,
+          duration: videoInfo.duration,
+          uploader: videoInfo.uploader
+        });
+
+        return videoInfo;
+
+      } catch (error) {
+        console.log(`Strategy "${strategy.name}" failed:`, error instanceof Error ? error.message : String(error));
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // If this strategy failed due to bot detection, wait a bit before trying the next one
+        if (error instanceof Error && error.message.includes('bot')) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        continue;
+      }
     }
 
-    if (error.code === 'ENOENT') {
-      throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
-    }
+    // If all strategies failed, throw the most informative error
+    console.error('All video info extraction strategies failed');
 
-    // Handle bot detection specifically
-    if (error.stderr && (
-      error.stderr.includes('Sign in to confirm you\'re not a bot') ||
-      error.stderr.includes('bot') ||
-      error.stderr.includes('automated') ||
-      error.stderr.includes('unusual traffic')
-    )) {
+    if (lastError?.message.includes('Sign in to confirm')) {
       throw new Error('YouTube is currently blocking automated requests. This is a temporary issue from YouTube\'s side. Please try again in a few minutes or try a different video.');
+    } else if (lastError?.message.includes('Private video') || lastError?.message.includes('unavailable')) {
+      throw new Error('This video is private, unavailable, or restricted. Please try a different video.');
+    } else {
+      throw new Error('Failed to get video information. YouTube may be experiencing issues or blocking requests. Please try again later.');
     }
 
-    if (error.stderr && error.stderr.includes('Video unavailable')) {
-      throw new Error('Video is unavailable or private');
-    }
-    if (error.stderr && error.stderr.includes('Sign in to confirm your age')) {
-      throw new Error('Video requires age verification');
-    }
-    if (error.stderr && error.stderr.includes('This video is not available')) {
-      throw new Error('Video is not available in your region');
-    }
-    if (error.signal === 'SIGTERM') {
-      throw new Error('Request timed out while getting video information');
-    }
-    throw new Error('Failed to get video information. Please check the URL and try again.');
+  } catch (error) {
+    console.error('getVideoInfo error:', error);
+    throw error;
   }
 }
 
@@ -137,73 +198,145 @@ async function downloadAudio(url: string, outputPath: string) {
     throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
   }
 
-  const command = [
-    'yt-dlp',
-    '--extract-audio',
-    '--audio-format', 'mp3',
-    '--audio-quality', '192K',
-    '--no-playlist',
-    '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
-    '--referer', '"https://www.youtube.com/"',
-    '--match-filters', `"duration < ${MAX_DURATION}"`,
-    '--output', `"${outputPath}.%(ext)s"`,
-    `"${url}"`
-  ].join(' ');
-
-  console.log('Executing command:', command);
-
-  try {
-    const { stdout, stderr } = await execAsync(command, {
-      timeout: 5 * 60 * 1000, // 5 minute timeout
-      maxBuffer: 1024 * 1024 * 10 // 10MB buffer
-    });
-
-    console.log('yt-dlp stdout:', stdout);
-    if (stderr) {
-      console.log('yt-dlp stderr:', stderr);
+  // Multiple download strategies - try each one until one works
+  const strategies = [
+    // Strategy 1: Basic download with minimal flags
+    {
+      name: 'basic',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ].join(' ')
+    },
+    // Strategy 2: Use mobile client
+    {
+      name: 'mobile',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--extractor-args', '"youtube:player_client=mweb"',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ].join(' ')
+    },
+    // Strategy 3: Use android client
+    {
+      name: 'android',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--extractor-args', '"youtube:player_client=android"',
+        '--user-agent', '"com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip"',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ].join(' ')
+    },
+    // Strategy 4: Use web client with spoofed user agent
+    {
+      name: 'web-spoofed',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+        '--referer', '"https://www.youtube.com/"',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ].join(' ')
     }
+  ];
 
-    return `${outputPath}.mp3`;
-  } catch (error: any) {
-    console.error('yt-dlp error:', error);
+  let lastError: Error | null = null;
 
-    if (error.code === 'ENOENT') {
-      throw new Error('yt-dlp not found. Please ensure yt-dlp is installed.');
-    }
-    if (error.signal === 'SIGTERM') {
-      throw new Error('Download timed out. The video might be too long or unavailable.');
-    }
+  for (const strategy of strategies) {
+    try {
+      console.log(`Trying strategy "${strategy.name}" for audio download`);
 
-    // Handle bot detection specifically
-    if (error.stderr && (
-      error.stderr.includes('Sign in to confirm you\'re not a bot') ||
-      error.stderr.includes('bot') ||
-      error.stderr.includes('automated') ||
-      error.stderr.includes('unusual traffic')
-    )) {
-      throw new Error('YouTube is currently blocking automated requests. This is a temporary issue from YouTube\'s side. Please try again in a few minutes or try a different video.');
-    }
+      const { stdout, stderr } = await execAsync(strategy.command, {
+        timeout: 120000, // 2 minutes timeout for download
+        env: {
+          ...process.env,
+          'PYTHONPATH': '/usr/local/lib/python3.11/site-packages:/usr/lib/python3.11/site-packages',
+          'PATH': '/root/.local/bin:/usr/local/bin:' + process.env.PATH
+        }
+      });
 
-    if (error.stderr && error.stderr.includes('Video unavailable')) {
-      throw new Error('Video is unavailable or private');
-    }
-    if (error.stderr && error.stderr.includes('Sign in to confirm your age')) {
-      throw new Error('Video requires age verification');
-    }
-    if (error.stderr && error.stderr.includes('This video is not available')) {
-      throw new Error('Video is not available in your region');
-    }
+      console.log(`yt-dlp stdout:`, stdout);
+      if (stderr) {
+        console.log(`yt-dlp stderr:`, stderr);
+      }
 
-    // Log the full error for debugging
-    console.error('Full yt-dlp error details:', {
-      code: error.code,
-      signal: error.signal,
-      stdout: error.stdout,
-      stderr: error.stderr,
-      message: error.message
-    });
+      // Check if audio file was created
+      const expectedAudioPath = `${outputPath}.mp3`;
+      if (existsSync(expectedAudioPath)) {
+        const stats = statSync(expectedAudioPath);
+        console.log(`Strategy "${strategy.name}" succeeded - Audio file created:`, expectedAudioPath);
+        console.log(`File size: ${(stats.size / (1024 * 1024)).toFixed(2)} MB`);
+        return expectedAudioPath;
+      } else {
+        throw new Error('Audio file was not created');
+      }
 
-    throw new Error(`Failed to download audio: ${error.message || 'Unknown error'}`);
+    } catch (error) {
+      console.log(`Strategy "${strategy.name}" failed:`, error instanceof Error ? error.message : String(error));
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Clean up any partial files
+      const possibleFiles = [
+        `${outputPath}.mp3`,
+        `${outputPath}.webm`,
+        `${outputPath}.m4a`,
+        `${outputPath}.mp4`
+      ];
+
+      possibleFiles.forEach(filePath => {
+        if (existsSync(filePath)) {
+          try {
+            unlinkSync(filePath);
+            console.log(`Cleaned up partial file: ${filePath}`);
+          } catch (cleanupError) {
+            console.warn(`Failed to clean up file ${filePath}:`, cleanupError);
+          }
+        }
+      });
+
+      // If this strategy failed due to bot detection, wait a bit before trying the next one
+      if (error instanceof Error && (error.message.includes('bot') || error.message.includes('Sign in'))) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      continue;
+    }
+  }
+
+  // If all strategies failed, throw the most informative error
+  console.error('All audio download strategies failed');
+
+  if (lastError?.message.includes('Sign in to confirm') || lastError?.message.includes('bot')) {
+    throw new Error('YouTube is currently blocking automated requests. This is a temporary issue from YouTube\'s side. Please try again in a few minutes or try a different video.');
+  } else if (lastError?.message.includes('Private video') || lastError?.message.includes('unavailable')) {
+    throw new Error('This video is private, unavailable, or restricted. Please try a different video.');
+  } else if (lastError?.message.includes('duration')) {
+    throw new Error('Video is too long. Please try a video shorter than 30 minutes.');
+  } else {
+    throw new Error('Failed to download audio. YouTube may be experiencing issues or blocking requests. Please try again later.');
   }
 }
 
