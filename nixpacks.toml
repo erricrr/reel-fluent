@@ -2,7 +2,7 @@
 node = "18.x"
 
 [phases.setup]
-nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg", "python3Packages.setuptools"]
+nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg", "python3Packages.setuptools", "curl", "ca-certificates"]
 
 [phases.install]
 dependsOn = ["setup"]
@@ -11,7 +11,7 @@ cmds = [
   "rm -rf node_modules || true",
   "rm -rf package-lock.json || true",
   "npm install --legacy-peer-deps --no-audit --no-fund",
-  "pip3 install --break-system-packages yt-dlp",
+  "pip3 install --break-system-packages --upgrade yt-dlp",
   "which yt-dlp || echo 'yt-dlp not found in PATH'",
   "yt-dlp --version || echo 'yt-dlp version check failed'"
 ]
