@@ -53,7 +53,24 @@ async function cleanupOldFiles() {
 // Get video info without downloading
 async function getVideoInfo(url: string) {
   try {
-    const { stdout } = await execAsync(`yt-dlp --dump-json "${url}"`);
+    // First check if yt-dlp is available
+    try {
+      await execAsync('which yt-dlp', { timeout: 5000 });
+    } catch (error) {
+      console.error('yt-dlp not found in PATH');
+      throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
+    }
+
+    // Try to get version to ensure it's working
+    try {
+      const { stdout: versionOutput } = await execAsync('yt-dlp --version', { timeout: 10000 });
+      console.log('yt-dlp version:', versionOutput.trim());
+    } catch (error) {
+      console.error('yt-dlp version check failed:', error);
+      throw new Error('yt-dlp is installed but not functioning properly. Please contact support.');
+    }
+
+    const { stdout } = await execAsync(`yt-dlp --dump-json "${url}"`, { timeout: 30000 });
     const info = JSON.parse(stdout);
     return {
       title: info.title || 'Unknown Title',
@@ -63,6 +80,16 @@ async function getVideoInfo(url: string) {
     };
   } catch (error: any) {
     console.error('Error getting video info:', error);
+
+    // Check for specific yt-dlp availability errors first
+    if (error.message.includes('yt-dlp is not installed') || error.message.includes('not functioning properly')) {
+      throw error; // Re-throw our custom errors
+    }
+
+    if (error.code === 'ENOENT') {
+      throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
+    }
+
     if (error.stderr && error.stderr.includes('Video unavailable')) {
       throw new Error('Video is unavailable or private');
     }
@@ -72,12 +99,23 @@ async function getVideoInfo(url: string) {
     if (error.stderr && error.stderr.includes('This video is not available')) {
       throw new Error('Video is not available in your region');
     }
+    if (error.signal === 'SIGTERM') {
+      throw new Error('Request timed out while getting video information');
+    }
     throw new Error('Failed to get video information. Please check the URL and try again.');
   }
 }
 
 // Download audio using yt-dlp
 async function downloadAudio(url: string, outputPath: string) {
+  // Ensure yt-dlp is available before attempting download
+  try {
+    await execAsync('which yt-dlp', { timeout: 5000 });
+  } catch (error) {
+    console.error('yt-dlp not found in PATH during download');
+    throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
+  }
+
   const command = [
     'yt-dlp',
     '--extract-audio',
@@ -105,6 +143,13 @@ async function downloadAudio(url: string, outputPath: string) {
     return `${outputPath}.mp3`;
   } catch (error: any) {
     console.error('yt-dlp error:', error);
+
+    if (error.code === 'ENOENT') {
+      throw new Error('yt-dlp not found. Please ensure yt-dlp is installed.');
+    }
+    if (error.signal === 'SIGTERM') {
+      throw new Error('Download timed out. The video might be too long or unavailable.');
+    }
     if (error.stderr && error.stderr.includes('Video unavailable')) {
       throw new Error('Video is unavailable or private');
     }
@@ -114,12 +159,16 @@ async function downloadAudio(url: string, outputPath: string) {
     if (error.stderr && error.stderr.includes('This video is not available')) {
       throw new Error('Video is not available in your region');
     }
-    if (error.code === 'ENOENT') {
-      throw new Error('yt-dlp not found. Please ensure yt-dlp is installed.');
-    }
-    if (error.signal === 'SIGTERM') {
-      throw new Error('Download timed out. The video might be too long or unavailable.');
-    }
+
+    // Log the full error for debugging
+    console.error('Full yt-dlp error details:', {
+      code: error.code,
+      signal: error.signal,
+      stdout: error.stdout,
+      stderr: error.stderr,
+      message: error.message
+    });
+
     throw new Error(`Failed to download audio: ${error.message || 'Unknown error'}`);
   }
 }
@@ -234,11 +283,43 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  // Check yt-dlp availability
+  let ytDlpStatus = 'unknown';
+  let ytDlpVersion = 'unknown';
+  let ytDlpPath = 'unknown';
+  let pathEnv = process.env.PATH || 'not set';
+
+  try {
+    const { stdout: pathOutput } = await execAsync('which yt-dlp', { timeout: 5000 });
+    ytDlpPath = pathOutput.trim();
+    ytDlpStatus = 'found';
+  } catch (error) {
+    ytDlpStatus = 'not found';
+  }
+
+  if (ytDlpStatus === 'found') {
+    try {
+      const { stdout: versionOutput } = await execAsync('yt-dlp --version', { timeout: 10000 });
+      ytDlpVersion = versionOutput.trim();
+      ytDlpStatus = 'working';
+    } catch (error) {
+      ytDlpStatus = 'found but not working';
+    }
+  }
+
   return NextResponse.json({
     status: 'YouTube Audio Download API',
     version: '1.0.0',
     maxDuration: `${MAX_DURATION / 60} minutes`,
     supportedFormats: ['mp3'],
-    usage: 'POST with { "url": "https://youtube.com/watch?v=..." }'
+    usage: 'POST with { "url": "https://youtube.com/watch?v=..." }',
+    diagnostics: {
+      ytDlpStatus,
+      ytDlpVersion,
+      ytDlpPath,
+      pathEnv,
+      tempDir: TEMP_DIR,
+      nodeEnv: process.env.NODE_ENV || 'not set'
+    }
   });
 }
