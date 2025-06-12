@@ -75,8 +75,6 @@ async function getVideoInfo(url: string) {
       'yt-dlp',
       '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
       '--referer', '"https://www.youtube.com/"',
-      '--extractor-args', '"youtube:player_client=web"',
-      '--no-check-certificate',
       '--dump-json',
       `"${url}"`
     ].join(' ');
@@ -147,8 +145,6 @@ async function downloadAudio(url: string, outputPath: string) {
     '--no-playlist',
     '--user-agent', '"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
     '--referer', '"https://www.youtube.com/"',
-    '--extractor-args', '"youtube:player_client=web"',
-    '--no-check-certificate',
     '--match-filters', `"duration < ${MAX_DURATION}"`,
     '--output', `"${outputPath}.%(ext)s"`,
     `"${url}"`
