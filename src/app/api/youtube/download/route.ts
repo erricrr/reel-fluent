@@ -18,71 +18,85 @@ function extractVideoId(url: string): string | null {
   return match ? match[1] : null;
 }
 
-// Attempt download via a public Piped instance (no cookies, server-friendly)
+// Attempt download via public Piped instances (no cookies, server-friendly)
 async function downloadViaPiped(url: string, outputPath: string): Promise<{ filePath: string; title: string; duration: number; uploader?: string } | null> {
-  try {
-    const videoId = extractVideoId(url);
-    if (!videoId) return null;
+  const videoId = extractVideoId(url);
+  if (!videoId) return null;
 
-    const base = process.env.PIPED_INSTANCE_URL || 'https://piped.video';
-    const streamsUrl = `${base}/api/v1/streams/${videoId}`;
-    const metaUrl = `${base}/api/v1/videos/${videoId}`;
+  const fromEnv = (process.env.PIPED_INSTANCE_URLS || process.env.PIPED_INSTANCE_URL || '').trim();
+  const envInstances = fromEnv
+    ? fromEnv.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  const defaultInstances = [
+    'https://piped.video',
+    'https://pipedapi.kavin.rocks',
+    'https://piped-api.orkiv.com',
+    'https://piped.moomoo.me',
+    'https://piped.garudalinux.org'
+  ];
+  const instances = [...envInstances, ...defaultInstances];
 
-    const [streamsResp, metaResp] = await Promise.all([
-      fetch(streamsUrl, { redirect: 'follow' }),
-      fetch(metaUrl, { redirect: 'follow' }).catch(() => null)
-    ]);
+  for (const base of instances) {
+    try {
+      const streamsUrl = `${base}/api/v1/streams/${videoId}`;
+      const metaUrl = `${base}/api/v1/videos/${videoId}`;
 
-    if (!streamsResp.ok) {
-      console.warn('Piped streams request failed:', streamsResp.status);
-      return null;
+      const [streamsResp, metaResp] = await Promise.all([
+        fetch(streamsUrl, { redirect: 'follow' }),
+        fetch(metaUrl, { redirect: 'follow' }).catch(() => null)
+      ]);
+
+      if (!streamsResp.ok) {
+        console.warn('Piped streams request failed:', base, streamsResp.status);
+        continue;
+      }
+
+      const streams = await streamsResp.json();
+      const meta = metaResp && metaResp.ok ? await metaResp.json() : {} as any;
+
+      const audioStreams: Array<any> = streams?.audioStreams || [];
+      if (!audioStreams.length) continue;
+
+      audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+      const best = audioStreams[0];
+      const streamUrl: string = best?.url;
+      if (!streamUrl) continue;
+
+      const ffmpegCmd = [
+        'ffmpeg',
+        '-y',
+        '-i', `"${streamUrl}"`,
+        '-vn',
+        '-acodec', 'libmp3lame',
+        '-ar', '44100',
+        '-ab', '192k',
+        '-ac', '2',
+        '-f', 'mp3',
+        `"${outputPath}.mp3"`
+      ].join(' ');
+
+      const { stdout, stderr } = await execAsync(ffmpegCmd, {
+        timeout: 12 * 60 * 1000,
+        maxBuffer: 1024 * 1024 * 30
+      });
+      console.log('ffmpeg (piped) stdout:', stdout);
+      if (stderr) console.log('ffmpeg (piped) stderr:', stderr);
+
+      const mp3Path = `${outputPath}.mp3`;
+      if (!existsSync(mp3Path)) continue;
+
+      const title: string = streams?.title || meta?.title || 'YouTube Audio';
+      const duration: number = Number(streams?.duration ?? meta?.duration ?? 0);
+      const uploader: string | undefined = streams?.uploader || meta?.uploaderName;
+
+      return { filePath: mp3Path, title, duration, uploader };
+    } catch (e) {
+      console.warn('downloadViaPiped instance failed:', base, (e as any)?.message || e);
+      continue;
     }
-
-    const streams = await streamsResp.json();
-    const meta = metaResp && metaResp.ok ? await metaResp.json() : {} as any;
-
-    const audioStreams: Array<any> = streams?.audioStreams || [];
-    if (!audioStreams.length) return null;
-
-    // Pick the highest bitrate audio stream
-    audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-    const best = audioStreams[0];
-    const streamUrl: string = best?.url;
-    if (!streamUrl) return null;
-
-    // Transcode to MP3 via ffmpeg directly from the remote URL
-    const ffmpegCmd = [
-      'ffmpeg',
-      '-y',
-      '-i', `"${streamUrl}"`,
-      '-vn',
-      '-acodec', 'libmp3lame',
-      '-ar', '44100',
-      '-ab', '192k',
-      '-ac', '2',
-      '-f', 'mp3',
-      `"${outputPath}.mp3"`
-    ].join(' ');
-
-    const { stdout, stderr } = await execAsync(ffmpegCmd, {
-      timeout: 12 * 60 * 1000,
-      maxBuffer: 1024 * 1024 * 30
-    });
-    console.log('ffmpeg (piped) stdout:', stdout);
-    if (stderr) console.log('ffmpeg (piped) stderr:', stderr);
-
-    const mp3Path = `${outputPath}.mp3`;
-    if (!existsSync(mp3Path)) return null;
-
-    const title: string = streams?.title || meta?.title || 'YouTube Audio';
-    const duration: number = Number(streams?.duration ?? meta?.duration ?? 0);
-    const uploader: string | undefined = streams?.uploader || meta?.uploaderName;
-
-    return { filePath: mp3Path, title, duration, uploader };
-  } catch (e) {
-    console.warn('downloadViaPiped fallback failed:', (e as any)?.message || e);
-    return null;
   }
+
+  return null;
 }
 
 const TEMP_DIR = process.env.TEMP_DIR || path.join(process.env.NODE_ENV === 'production' ? '/tmp' : process.cwd(), 'temp-downloads');
