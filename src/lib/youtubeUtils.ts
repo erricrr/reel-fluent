@@ -87,8 +87,16 @@ export async function downloadYouTubeAudio(
         }
 
         // If it's a temporary error, continue to retry
-        if (response.status === 500 && errorMessage.includes('blocking automated requests') && attempt < maxRetries) {
+        if (response.status === 500 && attempt < maxRetries) {
           lastError = new Error(errorMessage);
+
+          // For blocking errors, try immediately with shorter delay
+          if (errorMessage.includes('blocking automated requests')) {
+            console.log('YouTube blocking detected, retrying immediately with shorter delay...');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Just 1 second delay for blocking errors
+            continue;
+          }
+
           continue;
         }
 

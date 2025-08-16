@@ -28,21 +28,25 @@ async function downloadViaPiped(url: string, outputPath: string): Promise<{ file
     ? fromEnv.split(',').map(s => s.trim()).filter(Boolean)
     : [];
   const defaultInstances = [
+    'https://pipedapi.kavin.rocks', // Most reliable
+    'https://piped-api.hostux.net',
     'https://piped.video',
-    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.palveluntarjoaja.eu',
     'https://piped-api.orkiv.com',
+    'https://piped-api.r4fo.com',
     'https://piped.moomoo.me',
     'https://piped.garudalinux.org',
-    'https://pipedapi.palveluntarjoaja.eu',
-    'https://piped-api.r4fo.com',
-    'https://piped-api.hostux.net'
+    'https://api.piped.projectsegfau.lt',
+    'https://pipedapi.adminforge.de'
   ];
   const instances = [...envInstances, ...defaultInstances];
 
   for (const base of instances) {
     try {
-      const streamsUrl = `${base}/api/v1/streams/${videoId}`;
-      const metaUrl = `${base}/api/v1/videos/${videoId}`;
+      // Add cache busting to avoid cached errors
+      const cacheBuster = Date.now();
+      const streamsUrl = `${base}/api/v1/streams/${videoId}?cb=${cacheBuster}`;
+      const metaUrl = `${base}/api/v1/videos/${videoId}?cb=${cacheBuster}`;
 
       const [streamsResp, metaResp] = await Promise.all([
         fetch(streamsUrl, { redirect: 'follow' }),
@@ -108,18 +112,21 @@ async function downloadViaInvidious(url: string, outputPath: string): Promise<{ 
   if (!videoId) return null;
 
   const invidiousInstances = [
-    'https://invidio.us',
-    'https://yewtu.be',
-    'https://invidious.snopyta.org',
+    'https://yewtu.be', // Most reliable
     'https://invidious.kavin.rocks',
     'https://vid.puffyan.us',
     'https://invidious.namazso.eu',
-    'https://invidious.zapashcanon.fr'
+    'https://invidious.zapashcanon.fr',
+    'https://invidious.lunar.icu',
+    'https://invidious.projectsegfau.lt',
+    'https://invidious.flokinet.to'
   ];
 
   for (const base of invidiousInstances) {
     try {
-      const apiUrl = `${base}/api/v1/videos/${videoId}`;
+      // Add cache busting to avoid cached errors
+      const cacheBuster = Date.now();
+      const apiUrl = `${base}/api/v1/videos/${videoId}?cb=${cacheBuster}`;
 
       const response = await fetch(apiUrl, {
         redirect: 'follow',
@@ -178,6 +185,47 @@ async function downloadViaInvidious(url: string, outputPath: string): Promise<{ 
       console.warn('downloadViaInvidious instance failed:', base, (e as any)?.message || e);
       continue;
     }
+  }
+
+  return null;
+}
+
+// Emergency fallback using youtube-dl-exec as a last resort
+async function downloadViaYoutubeDL(url: string, outputPath: string): Promise<{ filePath: string; title: string; duration: number; uploader?: string } | null> {
+  try {
+    // Check if youtube-dl is available as emergency fallback
+    await execAsync('which youtube-dl', { timeout: 5000 });
+
+    const command = [
+      'youtube-dl',
+      '--extract-audio',
+      '--audio-format', 'mp3',
+      '--audio-quality', '192K',
+      '--no-playlist',
+      '--ignore-errors',
+      '--no-warnings',
+      '--output', `"${outputPath}.%(ext)s"`,
+      `"${url}"`
+    ].join(' ');
+
+    console.log('Trying emergency youtube-dl fallback...');
+
+    const { stdout, stderr } = await execAsync(command, {
+      timeout: 15 * 60 * 1000, // 15 minutes
+      maxBuffer: 1024 * 1024 * 50
+    });
+
+    const mp3Path = `${outputPath}.mp3`;
+    if (existsSync(mp3Path)) {
+      return {
+        filePath: mp3Path,
+        title: 'YouTube Audio (Emergency Download)',
+        duration: 0,
+        uploader: 'Unknown'
+      };
+    }
+  } catch (e) {
+    console.warn('Emergency youtube-dl fallback failed:', (e as any)?.message || e);
   }
 
   return null;
@@ -764,44 +812,106 @@ export async function POST(request: NextRequest) {
 
     console.log('Downloading audio to:', outputPath);
 
-    // Download audio with multiple fallback methods
+        // Smart download strategy: prioritize methods based on current YouTube blocking status
     let audioFilePath: string | null = null;
     let lastDownloadError: any = null;
 
-    try {
-      audioFilePath = await downloadAudio(url, outputPath);
-    } catch (dlErr: any) {
-      lastDownloadError = dlErr;
-      console.warn('yt-dlp download failed, trying Piped fallback...', dlErr?.message || dlErr);
+    // Check if we should prioritize fallback methods (if yt-dlp failed recently due to blocking)
+    const shouldPrioritizeFallbacks = ytInfoError && (
+      ytInfoError.message?.includes('blocking automated requests') ||
+      ytInfoError.message?.includes('bot') ||
+      ytInfoError.message?.includes('403')
+    );
 
-      // Try Piped fallback
+    if (shouldPrioritizeFallbacks) {
+      console.log('YouTube appears to be blocking yt-dlp aggressively, trying alternative methods first...');
+
+      // Try Piped first when YouTube is blocking
+      console.log('Trying Piped API as primary method...');
       const piped = await downloadViaPiped(url, outputPath);
       if (piped) {
         audioFilePath = piped.filePath;
-        // If we did not have metadata earlier, fill it now
         if (!videoInfo) {
           videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
         }
       } else {
-        console.warn('Piped download also failed, trying Invidious fallback...');
-
-        // Try Invidious fallback
+        console.log('Piped failed, trying Invidious API...');
+        // Try Invidious as secondary
         const invidious = await downloadViaInvidious(url, outputPath);
         if (invidious) {
           audioFilePath = invidious.filePath;
-          // If we did not have metadata earlier, fill it now
           if (!videoInfo) {
             videoInfo = { title: invidious.title, duration: invidious.duration, uploader: invidious.uploader };
           }
         } else {
-          // All methods failed
-          console.error('All download methods failed (yt-dlp, Piped, Invidious)');
+          console.log('Alternative APIs failed, trying yt-dlp as last resort...');
+          // Try yt-dlp as last resort
+          try {
+            audioFilePath = await downloadAudio(url, outputPath);
+          } catch (dlErr: any) {
+            console.log('yt-dlp also failed, trying emergency youtube-dl fallback...');
+            // Final emergency fallback
+            const emergency = await downloadViaYoutubeDL(url, outputPath);
+            if (emergency) {
+              audioFilePath = emergency.filePath;
+              if (!videoInfo) {
+                videoInfo = { title: emergency.title, duration: emergency.duration, uploader: emergency.uploader };
+              }
+            } else {
+              lastDownloadError = dlErr;
+              console.error('All download methods failed including emergency fallback');
+              throw new Error('All download methods failed. YouTube is heavily blocking requests right now. Please try again later or try a different video.');
+            }
+          }
+        }
+      }
+    } else {
+      // Normal flow: try yt-dlp first, then fallbacks
+      try {
+        audioFilePath = await downloadAudio(url, outputPath);
+      } catch (dlErr: any) {
+        lastDownloadError = dlErr;
+        console.warn('yt-dlp download failed, trying Piped fallback...', dlErr?.message || dlErr);
 
-          // If we have a yt-dlp error with a known message, surface it
-          if (ytInfoError) throw ytInfoError;
-          if (lastDownloadError) throw lastDownloadError;
+        // Try Piped fallback
+        const piped = await downloadViaPiped(url, outputPath);
+        if (piped) {
+          audioFilePath = piped.filePath;
+          // If we did not have metadata earlier, fill it now
+          if (!videoInfo) {
+            videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
+          }
+        } else {
+          console.warn('Piped download also failed, trying Invidious fallback...');
 
-          throw new Error('All download methods failed. YouTube may be temporarily blocking requests. Please try again in a few minutes or try a different video.');
+          // Try Invidious fallback
+          const invidious = await downloadViaInvidious(url, outputPath);
+          if (invidious) {
+            audioFilePath = invidious.filePath;
+            // If we did not have metadata earlier, fill it now
+            if (!videoInfo) {
+              videoInfo = { title: invidious.title, duration: invidious.duration, uploader: invidious.uploader };
+            }
+          } else {
+            // Try emergency fallback before giving up
+            console.log('All primary methods failed, trying emergency youtube-dl fallback...');
+            const emergency = await downloadViaYoutubeDL(url, outputPath);
+            if (emergency) {
+              audioFilePath = emergency.filePath;
+              if (!videoInfo) {
+                videoInfo = { title: emergency.title, duration: emergency.duration, uploader: emergency.uploader };
+              }
+            } else {
+              // All methods failed
+              console.error('All download methods failed (yt-dlp, Piped, Invidious, youtube-dl)');
+
+              // If we have a yt-dlp error with a known message, surface it
+              if (ytInfoError) throw ytInfoError;
+              if (lastDownloadError) throw lastDownloadError;
+
+              throw new Error('All download methods failed. YouTube may be temporarily blocking requests. Please try again in a few minutes or try a different video.');
+            }
+          }
         }
       }
     }
