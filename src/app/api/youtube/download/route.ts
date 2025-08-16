@@ -73,6 +73,25 @@ async function getVideoInfo(url: string) {
     // Server-friendly approach without browser cookies
     const approaches = [
       {
+        name: 'Android client with geo-bypass + IPv4',
+        command: [
+          'yt-dlp',
+          '--force-ipv4',
+          '--geo-bypass',
+          '--extractor-args', '"youtube:player_client=android,playability_errors=rethrow"',
+          '--user-agent', '"Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"',
+          '--referer', '"https://www.youtube.com/"',
+          '--extractor-retries', '6',
+          '--socket-timeout', '30',
+          '--no-check-certificates',
+          '--sleep-interval', '4',
+          '--max-sleep-interval', '10',
+          '--add-header', '"Accept-Language:en-US,en;q=0.9"',
+          '--dump-json',
+          `"${url}"`
+        ]
+      },
+      {
         name: 'Enhanced headers with delays',
         command: [
           'yt-dlp',
@@ -92,6 +111,8 @@ async function getVideoInfo(url: string) {
           '--add-header', '"Sec-Fetch-Mode:navigate"',
           '--add-header', '"Sec-Fetch-Site:none"',
           '--add-header', '"Sec-Fetch-User:?1"',
+          '--force-ipv4',
+          '--geo-bypass',
           '--dump-json',
           `"${url}"`
         ]
@@ -109,6 +130,8 @@ async function getVideoInfo(url: string) {
           '--max-sleep-interval', '10',
           '--add-header', '"Accept:*/*"',
           '--add-header', '"Accept-Language:en-US,en;q=0.5"',
+          '--force-ipv4',
+          '--geo-bypass',
           '--dump-json',
           `"${url}"`
         ]
@@ -122,6 +145,8 @@ async function getVideoInfo(url: string) {
           '--socket-timeout', '60',
           '--sleep-interval', '8',
           '--max-sleep-interval', '15',
+          '--force-ipv4',
+          '--geo-bypass',
           '--dump-json',
           `"${url}"`
         ]
@@ -214,6 +239,29 @@ async function downloadAudio(url: string, outputPath: string) {
   // Server-friendly approaches without browser cookies
   const approaches = [
     {
+      name: 'Android client download (geo-bypass + IPv4)',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--force-ipv4',
+        '--geo-bypass',
+        '--extractor-args', '"youtube:player_client=android,playability_errors=rethrow"',
+        '--user-agent', '"Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"',
+        '--referer', '"https://www.youtube.com/"',
+        '--extractor-retries', '6',
+        '--socket-timeout', '30',
+        '--no-check-certificates',
+        '--sleep-interval', '4',
+        '--max-sleep-interval', '10',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ]
+    },
+    {
       name: 'Enhanced download with delays',
       command: [
         'yt-dlp',
@@ -237,6 +285,8 @@ async function downloadAudio(url: string, outputPath: string) {
         '--add-header', '"Sec-Fetch-Mode:navigate"',
         '--add-header', '"Sec-Fetch-Site:none"',
         '--add-header', '"Sec-Fetch-User:?1"',
+        '--force-ipv4',
+        '--geo-bypass',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
@@ -259,6 +309,8 @@ async function downloadAudio(url: string, outputPath: string) {
         '--max-sleep-interval', '10',
         '--add-header', '"Accept:*/*"',
         '--add-header', '"Accept-Language:en-US,en;q=0.5"',
+        '--force-ipv4',
+        '--geo-bypass',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
@@ -277,6 +329,8 @@ async function downloadAudio(url: string, outputPath: string) {
         '--socket-timeout', '60',
         '--sleep-interval', '8',
         '--max-sleep-interval', '15',
+        '--force-ipv4',
+        '--geo-bypass',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
