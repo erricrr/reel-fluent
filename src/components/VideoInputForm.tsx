@@ -195,13 +195,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
       </TabsContent>
       <TabsContent value="url">
         <form onSubmit={handleUrlSubmit} className="space-y-3">
-          <div className="space-y-2">
-            <Label
-              htmlFor="video-url-input"
-              className="text-sm md:text-base transition-all duration-300"
-            >
-              YouTube or direct media file URL
-            </Label>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 space-y-2 sm:space-y-0">
             <Input
               id="video-url-input"
               type="url"
@@ -209,16 +203,16 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isLoading}
-              className="transition-all duration-300"
+              className="transition-all duration-300 flex-1"
             />
+            <Button
+              type="submit"
+              disabled={isLoading || !url.trim()}
+              className="w-full sm:w-auto transition-all duration-300 sm:whitespace-nowrap"
+            >
+              {isLoading ? "Loading..." : "Load"}
+            </Button>
           </div>
-          <Button
-            type="submit"
-            disabled={isLoading || !url.trim()}
-            className="w-full sm:w-auto transition-all duration-300"
-          >
-            {isLoading ? "Loading..." : "Load Media from URL"}
-          </Button>
           <p className="text-xs sm:text-sm text-muted-foreground transition-all duration-300">
             Supports YouTube videos and direct media links (MP3, WAV, MP4, WebM). Some servers may block cross-origin requests.
           </p>
