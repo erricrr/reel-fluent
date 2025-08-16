@@ -173,9 +173,12 @@ export function useMediaProcessing() {
       } else if (errorMessage.includes('Invalid YouTube URL')) {
         title = "Invalid URL";
         userFriendlyMessage = "Please enter a valid YouTube URL.";
-      } else if (errorMessage.includes('timeout')) {
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
         title = "Download Timeout";
-        userFriendlyMessage = "The download took too long. Please try again or try a shorter video.";
+        userFriendlyMessage = "The download took too long. This can happen with longer videos or slow connections. Please try again or try a shorter video.";
+      } else if (errorMessage.includes('TimeoutError')) {
+        title = "Connection Timeout";
+        userFriendlyMessage = "The connection timed out while downloading. This may be due to network issues or server load. Please try again in a moment.";
       }
 
       toast({

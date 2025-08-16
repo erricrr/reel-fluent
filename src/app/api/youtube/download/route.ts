@@ -79,8 +79,8 @@ async function downloadViaPiped(url: string, outputPath: string): Promise<{ file
       ].join(' ');
 
       const { stdout, stderr } = await execAsync(ffmpegCmd, {
-        timeout: 12 * 60 * 1000,
-        maxBuffer: 1024 * 1024 * 30
+        timeout: 15 * 60 * 1000, // 15 minute timeout for ffmpeg
+        maxBuffer: 1024 * 1024 * 50 // 50MB buffer
       });
       console.log('ffmpeg (piped) stdout:', stdout);
       if (stderr) console.log('ffmpeg (piped) stderr:', stderr);
@@ -159,8 +159,8 @@ async function downloadViaInvidious(url: string, outputPath: string): Promise<{ 
       ].join(' ');
 
       const { stdout, stderr } = await execAsync(ffmpegCmd, {
-        timeout: 12 * 60 * 1000,
-        maxBuffer: 1024 * 1024 * 30
+        timeout: 15 * 60 * 1000, // 15 minute timeout for ffmpeg
+        maxBuffer: 1024 * 1024 * 50 // 50MB buffer
       });
 
       console.log('ffmpeg (invidious) stdout:', stdout);
@@ -429,6 +429,7 @@ async function downloadAudio(url: string, outputPath: string) {
         '--sleep-interval', '6',
         '--max-sleep-interval', '15',
         '--fragment-retries', '10',
+        '--retry-sleep', 'linear=1::10',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
@@ -544,8 +545,8 @@ async function downloadAudio(url: string, outputPath: string) {
       console.log('Command:', command);
 
       const { stdout, stderr } = await execAsync(command, {
-        timeout: 12 * 60 * 1000, // 12 minute timeout (increased for downloads)
-        maxBuffer: 1024 * 1024 * 30 // 30MB buffer (increased)
+        timeout: 20 * 60 * 1000, // 20 minute timeout for yt-dlp downloads
+        maxBuffer: 1024 * 1024 * 50 // 50MB buffer for larger files
       });
 
       console.log('yt-dlp stdout:', stdout);

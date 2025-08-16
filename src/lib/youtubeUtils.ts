@@ -47,7 +47,8 @@ export async function downloadYouTubeAudio(
     try {
       console.log(`Downloading YouTube audio for: ${url} (attempt ${attempt}/${maxRetries})`);
 
-      onProgress?.(0, attempt === 1 ? "Connecting to YouTube..." : `Retrying download (attempt ${attempt}/${maxRetries})...`);
+            const timeoutMinutes = (attempt * 120000) / 60000; // Convert to minutes
+      onProgress?.(0, attempt === 1 ? "Connecting to YouTube..." : `Retrying download (attempt ${attempt}/${maxRetries}, ${timeoutMinutes}min timeout)...`);
 
       // Add exponential backoff for retries
       if (attempt > 1) {
@@ -58,7 +59,7 @@ export async function downloadYouTubeAudio(
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      onProgress?.(0, "Downloading and extracting audio...");
+      onProgress?.(0, `Downloading and extracting audio (timeout: ${timeoutMinutes}min)...`);
 
       const response = await fetch('/api/youtube/download', {
         method: 'POST',
@@ -66,8 +67,8 @@ export async function downloadYouTubeAudio(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ url }),
-        // Add longer timeout for retries
-        signal: AbortSignal.timeout(attempt === 1 ? 30000 : 60000)
+        // Progressive timeout increase: 2 min, 4 min, 6 min
+        signal: AbortSignal.timeout(attempt * 120000)
       });
 
       if (!response.ok) {
@@ -144,12 +145,16 @@ export async function downloadYouTubeAudio(
 // Helper function to determine if an error is retryable
 function isRetryableError(error: Error): boolean {
   const message = error.message.toLowerCase();
+  const errorName = error.name.toLowerCase();
   return (
     message.includes('blocking automated requests') ||
     message.includes('500') ||
     message.includes('timeout') ||
+    message.includes('timed out') ||
     message.includes('network') ||
-    message.includes('temporary')
+    message.includes('temporary') ||
+    errorName.includes('timeouterror') ||
+    message.includes('signal timed out')
   );
 }
 
