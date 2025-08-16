@@ -187,11 +187,27 @@ export async function processYouTubeUrl(
     throw new Error('Invalid YouTube URL');
   }
 
-  const result = await downloadYouTubeAudio(url, onProgress);
-  const file = createAudioFileFromBlob(result.audioBlob, result.filename);
+  // Try client-side download first (bypasses server blocking)
+  try {
+    onProgress?.(0, "Trying direct browser download...");
+    const { downloadYouTubeAudioClient } = await import('./clientYouTubeDownload');
+    const result = await downloadYouTubeAudioClient(url, onProgress);
 
-  return {
-    file,
-    videoInfo: result.videoInfo
-  };
+    return {
+      file: result.file,
+      videoInfo: result.videoInfo
+    };
+  } catch (clientError) {
+    console.warn('Client-side download failed, falling back to server:', clientError);
+    onProgress?.(0, "Falling back to server download...");
+
+    // Fallback to server-side download
+    const result = await downloadYouTubeAudio(url, onProgress);
+    const file = createAudioFileFromBlob(result.audioBlob, result.filename);
+
+    return {
+      file,
+      videoInfo: result.videoInfo
+    };
+  }
 }
