@@ -11,6 +11,80 @@ interface YouTubeDownloadRequest {
   url: string;
 }
 
+// Extract YouTube Video ID
+function extractVideoId(url: string): string | null {
+  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+  const match = url.match(regex);
+  return match ? match[1] : null;
+}
+
+// Attempt download via a public Piped instance (no cookies, server-friendly)
+async function downloadViaPiped(url: string, outputPath: string): Promise<{ filePath: string; title: string; duration: number; uploader?: string } | null> {
+  try {
+    const videoId = extractVideoId(url);
+    if (!videoId) return null;
+
+    const base = process.env.PIPED_INSTANCE_URL || 'https://piped.video';
+    const streamsUrl = `${base}/api/v1/streams/${videoId}`;
+    const metaUrl = `${base}/api/v1/videos/${videoId}`;
+
+    const [streamsResp, metaResp] = await Promise.all([
+      fetch(streamsUrl, { redirect: 'follow' }),
+      fetch(metaUrl, { redirect: 'follow' }).catch(() => null)
+    ]);
+
+    if (!streamsResp.ok) {
+      console.warn('Piped streams request failed:', streamsResp.status);
+      return null;
+    }
+
+    const streams = await streamsResp.json();
+    const meta = metaResp && metaResp.ok ? await metaResp.json() : {} as any;
+
+    const audioStreams: Array<any> = streams?.audioStreams || [];
+    if (!audioStreams.length) return null;
+
+    // Pick the highest bitrate audio stream
+    audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+    const best = audioStreams[0];
+    const streamUrl: string = best?.url;
+    if (!streamUrl) return null;
+
+    // Transcode to MP3 via ffmpeg directly from the remote URL
+    const ffmpegCmd = [
+      'ffmpeg',
+      '-y',
+      '-i', `"${streamUrl}"`,
+      '-vn',
+      '-acodec', 'libmp3lame',
+      '-ar', '44100',
+      '-ab', '192k',
+      '-ac', '2',
+      '-f', 'mp3',
+      `"${outputPath}.mp3"`
+    ].join(' ');
+
+    const { stdout, stderr } = await execAsync(ffmpegCmd, {
+      timeout: 12 * 60 * 1000,
+      maxBuffer: 1024 * 1024 * 30
+    });
+    console.log('ffmpeg (piped) stdout:', stdout);
+    if (stderr) console.log('ffmpeg (piped) stderr:', stderr);
+
+    const mp3Path = `${outputPath}.mp3`;
+    if (!existsSync(mp3Path)) return null;
+
+    const title: string = streams?.title || meta?.title || 'YouTube Audio';
+    const duration: number = Number(streams?.duration ?? meta?.duration ?? 0);
+    const uploader: string | undefined = streams?.uploader || meta?.uploaderName;
+
+    return { filePath: mp3Path, title, duration, uploader };
+  } catch (e) {
+    console.warn('downloadViaPiped fallback failed:', (e as any)?.message || e);
+    return null;
+  }
+}
+
 const TEMP_DIR = process.env.TEMP_DIR || path.join(process.env.NODE_ENV === 'production' ? '/tmp' : process.cwd(), 'temp-downloads');
 const MAX_DURATION = 1800; // 30 minutes max duration
 
@@ -532,12 +606,26 @@ export async function POST(request: NextRequest) {
     // Clean up old files
     await cleanupOldFiles();
 
-    // Get video info first
+    // Try yt-dlp metadata first; on failure, fall back to Piped metadata
     console.log('Getting video info for:', url);
-    const videoInfo = await getVideoInfo(url);
+    let videoInfo: { title: string; duration: number; uploader?: string } | null = null;
+    let ytInfoError: any = null;
+    try {
+      videoInfo = await getVideoInfo(url);
+    } catch (e: any) {
+      ytInfoError = e;
+      console.warn('yt-dlp getVideoInfo failed, will try Piped fallback for metadata');
+      const tempBase = path.join(TEMP_DIR, `piped_meta_${Date.now()}`);
+      const piped = await downloadViaPiped(url, tempBase);
+      if (piped) {
+        // Clean up the temp file used only to probe metadata
+        try { await fs.unlink(piped.filePath); } catch {}
+        videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
+      }
+    }
 
     // Check duration limit
-    if (videoInfo.duration > MAX_DURATION) {
+    if (videoInfo && videoInfo.duration > MAX_DURATION) {
       return NextResponse.json(
         { error: `Video duration (${Math.round(videoInfo.duration / 60)} minutes) exceeds maximum allowed duration (${MAX_DURATION / 60} minutes)` },
         { status: 400 }
@@ -546,13 +634,31 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename
     const timestamp = Date.now();
-    const sanitizedTitle = videoInfo.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+    const fallbackTitle = videoInfo?.title || 'YouTube_Audio';
+    const sanitizedTitle = fallbackTitle.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
     const outputPath = path.join(TEMP_DIR, `youtube_${sanitizedTitle}_${timestamp}`);
 
     console.log('Downloading audio to:', outputPath);
 
     // Download audio
-    const audioFilePath = await downloadAudio(url, outputPath);
+    let audioFilePath: string | null = null;
+    try {
+      audioFilePath = await downloadAudio(url, outputPath);
+    } catch (dlErr: any) {
+      console.warn('yt-dlp download failed, trying Piped fallback...', dlErr?.message || dlErr);
+      const piped = await downloadViaPiped(url, outputPath);
+      if (piped) {
+        audioFilePath = piped.filePath;
+        // If we did not have metadata earlier, fill it now
+        if (!videoInfo) {
+          videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
+        }
+      } else {
+        // If piped also failed and yt-dlp had a known message, surface it
+        if (ytInfoError) throw ytInfoError;
+        throw dlErr;
+      }
+    }
 
     // Verify file exists
     if (!existsSync(audioFilePath)) {
@@ -583,9 +689,9 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'audio/mpeg',
         'Content-Length': stats.size.toString(),
         'Content-Disposition': `attachment; filename="${sanitizedTitle}.mp3"`,
-        'X-Video-Title': encodeURIComponent(videoInfo.title),
-        'X-Video-Duration': videoInfo.duration.toString(),
-        'X-Video-Uploader': encodeURIComponent(videoInfo.uploader || ''),
+        'X-Video-Title': encodeURIComponent(videoInfo?.title || 'YouTube Audio'),
+        'X-Video-Duration': (videoInfo?.duration ?? 0).toString(),
+        'X-Video-Uploader': encodeURIComponent(videoInfo?.uploader || ''),
       },
     });
 
