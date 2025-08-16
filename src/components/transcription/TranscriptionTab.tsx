@@ -8,6 +8,8 @@ import MediaControls from './MediaControls';
 import type { VideoPlayerRef } from "../VideoPlayer";
 import { useEffect, useRef } from "react";
 import { useMobileViewportReset } from "@/hooks/use-mobile-viewport";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import ListenRepeatPractice from "./ListenRepeatPractice";
 
 // Inline utility function
 const formatSecondsToMMSS = (totalSeconds: number): string => {
@@ -122,6 +124,21 @@ export default function TranscriptionTab({
           onChange={onUserInputChange}
           onBlur={resetMobileViewport}
         />
+
+        {/* Optional Listen & Repeat practice */}
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="listen-repeat">
+            <AccordionTrigger className="text-sm">Speaking Practice (optional)</AccordionTrigger>
+            <AccordionContent>
+              <ListenRepeatPractice
+                mediaSrc={mediaSrc}
+                clip={effectiveClip}
+                clipDisplayName={clipDisplayName}
+                disabled={disableTextarea || !mediaSrc}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2">
         <Button
