@@ -2,6 +2,23 @@
 
 This guide will help you deploy ReelFluent to Railway with all the required environment variables.
 
+## YouTube Download Resilience (Optional Configuration)
+
+To improve YouTube download reliability and handle temporary blocking issues, you can configure these optional environment variables:
+
+### Piped Instance Configuration
+- `PIPED_INSTANCE_URLS`: Comma-separated list of Piped instance URLs for fallback downloading
+- Example: `https://piped.video,https://pipedapi.kavin.rocks,https://piped-api.orkiv.com`
+
+### Proxy Configuration (Alternative Approach)
+- `YT_AUDIO_PROXY_URL`: URL of an external YouTube audio download service
+- `YT_AUDIO_PROXY_METHOD`: HTTP method (GET or POST, default: GET)
+- `YT_AUDIO_PROXY_URL_PARAM`: Parameter name for the YouTube URL (default: url)
+- `YT_AUDIO_PROXY_HEADERS`: Newline-separated headers (format: Header: Value)
+
+### Temporary Directory
+- `TEMP_DIR`: Custom path for temporary file storage (default: /tmp in production)
+
 ## Prerequisites
 
 1. A Railway account ([sign up here](https://railway.app))

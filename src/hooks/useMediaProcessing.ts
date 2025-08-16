@@ -155,10 +155,33 @@ export function useMediaProcessing() {
 
     } catch (error) {
       console.error('YouTube processing error:', error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to process YouTube video";
+
+      // Provide more helpful error messages based on the error type
+      let userFriendlyMessage = errorMessage;
+      let title = "YouTube Processing Error";
+
+      if (errorMessage.includes('blocking automated requests')) {
+        title = "YouTube Temporarily Unavailable";
+        userFriendlyMessage = "YouTube is temporarily blocking automated requests. This usually resolves in a few minutes. Please try again shortly or try a different video.";
+      } else if (errorMessage.includes('Video unavailable')) {
+        title = "Video Unavailable";
+        userFriendlyMessage = "This video is unavailable, private, or has been removed.";
+      } else if (errorMessage.includes('duration') && errorMessage.includes('exceeds')) {
+        title = "Video Too Long";
+        userFriendlyMessage = errorMessage;
+      } else if (errorMessage.includes('Invalid YouTube URL')) {
+        title = "Invalid URL";
+        userFriendlyMessage = "Please enter a valid YouTube URL.";
+      } else if (errorMessage.includes('timeout')) {
+        title = "Download Timeout";
+        userFriendlyMessage = "The download took too long. Please try again or try a shorter video.";
+      }
+
       toast({
         variant: "destructive",
-        title: "YouTube Processing Error",
-        description: error instanceof Error ? error.message : "Failed to process YouTube video",
+        title,
+        description: userFriendlyMessage,
       });
     } finally {
       if (currentProcessingId === processingIdRef.current) {

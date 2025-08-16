@@ -40,38 +40,59 @@ export async function downloadYouTubeAudio(
   url: string,
   onProgress?: ProgressCallback
 ): Promise<YouTubeAudioResult> {
-  try {
-    console.log('Downloading YouTube audio for:', url);
+  const maxRetries = 3;
+  let lastError: Error | null = null;
 
-    onProgress?.(0, "Connecting to YouTube...");
-    await new Promise(resolve => setTimeout(resolve, 500));
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Downloading YouTube audio for: ${url} (attempt ${attempt}/${maxRetries})`);
 
-    onProgress?.(0, "Downloading and extracting audio...");
+      onProgress?.(0, attempt === 1 ? "Connecting to YouTube..." : `Retrying download (attempt ${attempt}/${maxRetries})...`);
 
-    const response = await fetch('/api/youtube/download', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ url }),
-    });
-
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (parseError) {
-        // If response is not JSON, try to get text content
-        try {
-          const errorText = await response.text();
-          errorMessage = errorText || errorMessage;
-        } catch (textError) {
-          console.warn('Could not parse error response:', parseError);
-        }
+      // Add exponential backoff for retries
+      if (attempt > 1) {
+        const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
+        onProgress?.(0, `Waiting ${backoffDelay / 1000} seconds before retry...`);
+        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-      throw new Error(errorMessage);
-    }
+
+      onProgress?.(0, "Downloading and extracting audio...");
+
+      const response = await fetch('/api/youtube/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+        // Add longer timeout for retries
+        signal: AbortSignal.timeout(attempt === 1 ? 30000 : 60000)
+      });
+
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          // If response is not JSON, try to get text content
+          try {
+            const errorText = await response.text();
+            errorMessage = errorText || errorMessage;
+          } catch (textError) {
+            console.warn('Could not parse error response:', parseError);
+          }
+        }
+
+        // If it's a temporary error, continue to retry
+        if (response.status === 500 && errorMessage.includes('blocking automated requests') && attempt < maxRetries) {
+          lastError = new Error(errorMessage);
+          continue;
+        }
+
+        throw new Error(errorMessage);
+      }
 
     onProgress?.(0, "Processing audio file...");
 
@@ -103,10 +124,33 @@ export async function downloadYouTubeAudio(
       filename
     };
 
-  } catch (error: any) {
-    console.error('Error downloading YouTube audio:', error);
-    throw new Error(error.message || 'Failed to download YouTube audio');
+    } catch (error: any) {
+      console.error(`YouTube download attempt ${attempt} failed:`, error);
+      lastError = error instanceof Error ? error : new Error(error.message || 'Failed to download YouTube audio');
+
+      // If this is the last attempt or it's not a retryable error, throw immediately
+      if (attempt === maxRetries || !isRetryableError(lastError)) {
+        throw lastError;
+      }
+
+      // Otherwise continue to next attempt
+    }
   }
+
+  // If we reach here, all retries failed
+  throw lastError || new Error('YouTube download failed after multiple attempts');
+}
+
+// Helper function to determine if an error is retryable
+function isRetryableError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('blocking automated requests') ||
+    message.includes('500') ||
+    message.includes('timeout') ||
+    message.includes('network') ||
+    message.includes('temporary')
+  );
 }
 
 /**

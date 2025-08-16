@@ -32,7 +32,10 @@ async function downloadViaPiped(url: string, outputPath: string): Promise<{ file
     'https://pipedapi.kavin.rocks',
     'https://piped-api.orkiv.com',
     'https://piped.moomoo.me',
-    'https://piped.garudalinux.org'
+    'https://piped.garudalinux.org',
+    'https://pipedapi.palveluntarjoaja.eu',
+    'https://piped-api.r4fo.com',
+    'https://piped-api.hostux.net'
   ];
   const instances = [...envInstances, ...defaultInstances];
 
@@ -92,6 +95,87 @@ async function downloadViaPiped(url: string, outputPath: string): Promise<{ file
       return { filePath: mp3Path, title, duration, uploader };
     } catch (e) {
       console.warn('downloadViaPiped instance failed:', base, (e as any)?.message || e);
+      continue;
+    }
+  }
+
+  return null;
+}
+
+// Attempt download via Invidious instances as additional fallback
+async function downloadViaInvidious(url: string, outputPath: string): Promise<{ filePath: string; title: string; duration: number; uploader?: string } | null> {
+  const videoId = extractVideoId(url);
+  if (!videoId) return null;
+
+  const invidiousInstances = [
+    'https://invidio.us',
+    'https://yewtu.be',
+    'https://invidious.snopyta.org',
+    'https://invidious.kavin.rocks',
+    'https://vid.puffyan.us',
+    'https://invidious.namazso.eu',
+    'https://invidious.zapashcanon.fr'
+  ];
+
+  for (const base of invidiousInstances) {
+    try {
+      const apiUrl = `${base}/api/v1/videos/${videoId}`;
+
+      const response = await fetch(apiUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      if (!response.ok) {
+        console.warn('Invidious API request failed:', base, response.status);
+        continue;
+      }
+
+      const data = await response.json();
+      const audioStreams = data?.adaptiveFormats?.filter((f: any) => f.type?.includes('audio')) || [];
+
+      if (!audioStreams.length) continue;
+
+      // Sort by quality, prefer higher bitrate
+      audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+      const best = audioStreams[0];
+      const streamUrl = best?.url;
+
+      if (!streamUrl) continue;
+
+      const ffmpegCmd = [
+        'ffmpeg',
+        '-y',
+        '-i', `"${streamUrl}"`,
+        '-vn',
+        '-acodec', 'libmp3lame',
+        '-ar', '44100',
+        '-ab', '192k',
+        '-ac', '2',
+        '-f', 'mp3',
+        `"${outputPath}.mp3"`
+      ].join(' ');
+
+      const { stdout, stderr } = await execAsync(ffmpegCmd, {
+        timeout: 12 * 60 * 1000,
+        maxBuffer: 1024 * 1024 * 30
+      });
+
+      console.log('ffmpeg (invidious) stdout:', stdout);
+      if (stderr) console.log('ffmpeg (invidious) stderr:', stderr);
+
+      const mp3Path = `${outputPath}.mp3`;
+      if (!existsSync(mp3Path)) continue;
+
+      const title = data?.title || 'YouTube Audio';
+      const duration = Number(data?.lengthSeconds || 0);
+      const uploader = data?.author;
+
+      return { filePath: mp3Path, title, duration, uploader };
+    } catch (e) {
+      console.warn('downloadViaInvidious instance failed:', base, (e as any)?.message || e);
       continue;
     }
   }
@@ -327,6 +411,30 @@ async function downloadAudio(url: string, outputPath: string) {
   // Server-friendly approaches without browser cookies
   const approaches = [
     {
+      name: 'iOS client download (bypass bot detection)',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--force-ipv4',
+        '--geo-bypass',
+        '--extractor-args', '"youtube:player_client=ios,playability_errors=rethrow"',
+        '--user-agent', '"Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"',
+        '--referer', '"https://www.youtube.com/"',
+        '--extractor-retries', '8',
+        '--socket-timeout', '45',
+        '--no-check-certificates',
+        '--sleep-interval', '6',
+        '--max-sleep-interval', '15',
+        '--fragment-retries', '10',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ]
+    },
+    {
       name: 'Android client download (geo-bypass + IPv4)',
       command: [
         'yt-dlp',
@@ -344,6 +452,7 @@ async function downloadAudio(url: string, outputPath: string) {
         '--no-check-certificates',
         '--sleep-interval', '4',
         '--max-sleep-interval', '10',
+        '--fragment-retries', '8',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
@@ -654,12 +763,17 @@ export async function POST(request: NextRequest) {
 
     console.log('Downloading audio to:', outputPath);
 
-    // Download audio
+    // Download audio with multiple fallback methods
     let audioFilePath: string | null = null;
+    let lastDownloadError: any = null;
+
     try {
       audioFilePath = await downloadAudio(url, outputPath);
     } catch (dlErr: any) {
+      lastDownloadError = dlErr;
       console.warn('yt-dlp download failed, trying Piped fallback...', dlErr?.message || dlErr);
+
+      // Try Piped fallback
       const piped = await downloadViaPiped(url, outputPath);
       if (piped) {
         audioFilePath = piped.filePath;
@@ -668,9 +782,26 @@ export async function POST(request: NextRequest) {
           videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
         }
       } else {
-        // If piped also failed and yt-dlp had a known message, surface it
-        if (ytInfoError) throw ytInfoError;
-        throw dlErr;
+        console.warn('Piped download also failed, trying Invidious fallback...');
+
+        // Try Invidious fallback
+        const invidious = await downloadViaInvidious(url, outputPath);
+        if (invidious) {
+          audioFilePath = invidious.filePath;
+          // If we did not have metadata earlier, fill it now
+          if (!videoInfo) {
+            videoInfo = { title: invidious.title, duration: invidious.duration, uploader: invidious.uploader };
+          }
+        } else {
+          // All methods failed
+          console.error('All download methods failed (yt-dlp, Piped, Invidious)');
+
+          // If we have a yt-dlp error with a known message, surface it
+          if (ytInfoError) throw ytInfoError;
+          if (lastDownloadError) throw lastDownloadError;
+
+          throw new Error('All download methods failed. YouTube may be temporarily blocking requests. Please try again in a few minutes or try a different video.');
+        }
       }
     }
 
