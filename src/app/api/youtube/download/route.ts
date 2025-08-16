@@ -446,6 +446,86 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Optional proxy mode for environments where direct downloads are blocked (e.g., Railway)
+    if (process.env.YT_AUDIO_PROXY_URL) {
+      // Lightweight metadata via YouTube oEmbed
+      async function getBasicMetadata(lookupUrl: string): Promise<{ title: string; uploader?: string }> {
+        try {
+          const oEmbed = `https://www.youtube.com/oembed?url=${encodeURIComponent(lookupUrl)}&format=json`;
+          const r = await fetch(oEmbed, { redirect: 'follow' });
+          if (!r.ok) throw new Error('oEmbed failed');
+          const data = await r.json();
+          return { title: data.title || 'YouTube Audio', uploader: data.author_name };
+        } catch (_e) {
+          return { title: 'YouTube Audio' };
+        }
+      }
+
+      async function downloadViaProxy(targetUrl: string, baseName: string) {
+        const proxyUrl = process.env.YT_AUDIO_PROXY_URL as string;
+        const method = (process.env.YT_AUDIO_PROXY_METHOD || 'GET').toUpperCase();
+        const urlParam = process.env.YT_AUDIO_PROXY_URL_PARAM || 'url';
+        const headersRaw = process.env.YT_AUDIO_PROXY_HEADERS || '';
+        const headers: Record<string, string> = {};
+        if (headersRaw) {
+          headersRaw.split('\n').forEach((line) => {
+            const idx = line.indexOf(':');
+            if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+          });
+        }
+
+        let proxyRequestUrl = proxyUrl;
+        let body: string | undefined;
+        if (method === 'GET') {
+          const u = new URL(proxyUrl);
+          u.searchParams.set(urlParam, targetUrl);
+          proxyRequestUrl = u.toString();
+        } else {
+          headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+          body = JSON.stringify({ [urlParam]: targetUrl });
+        }
+
+        const resp = await fetch(proxyRequestUrl, { method, headers, body });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          return NextResponse.json(
+            { error: `Proxy download failed: ${resp.status} ${text?.slice(0, 256)}` },
+            { status: 502 }
+          );
+        }
+
+        const contentType = resp.headers.get('content-type') || 'audio/mpeg';
+        if (!contentType.includes('audio')) {
+          return NextResponse.json(
+            { error: 'Proxy returned non-audio response' },
+            { status: 502 }
+          );
+        }
+
+        const arrayBuffer = await resp.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const filename = `${baseName}.mp3`;
+
+        return new NextResponse(buffer, {
+          status: 200,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Disposition': `attachment; filename="${filename}"`,
+            // Minimal metadata when yt-dlp is not used
+            'X-Proxy-Mode': 'true'
+          }
+        });
+      }
+
+      const basic = await getBasicMetadata(url);
+      const timestamp = Date.now();
+      const baseName = (basic.title || 'YouTube_Audio').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50) + `_${timestamp}`;
+      const proxyResponse = await downloadViaProxy(url, baseName);
+      if (proxyResponse instanceof NextResponse) {
+        return proxyResponse;
+      }
+    }
+
     // Ensure temp directory exists
     await ensureTempDir();
 
@@ -530,6 +610,7 @@ export async function GET() {
   let ytDlpVersion = 'unknown';
   let ytDlpPath = 'unknown';
   let pathEnv = process.env.PATH || 'not set';
+  const proxyMode = !!process.env.YT_AUDIO_PROXY_URL;
 
   try {
     const { stdout: pathOutput } = await execAsync('which yt-dlp', { timeout: 5000 });
@@ -561,7 +642,8 @@ export async function GET() {
       ytDlpPath,
       pathEnv,
       tempDir: TEMP_DIR,
-      nodeEnv: process.env.NODE_ENV || 'not set'
+      nodeEnv: process.env.NODE_ENV || 'not set',
+      proxyMode
     }
   });
 }
