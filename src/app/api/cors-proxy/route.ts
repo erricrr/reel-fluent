@@ -18,35 +18,50 @@ export async function GET(request: NextRequest) {
       'piped-api.hostux.net',
       'pipedapi.palveluntarjoaja.eu',
       'piped-api.orkiv.com',
+      'piped.video',
       'yewtu.be',
       'invidious.kavin.rocks',
       'vid.puffyan.us',
       'invidious.namazso.eu',
+      'invidious.lunar.icu',
+      'invidious.projectsegfau.lt',
+      'invidious.flokinet.to',
+      'api.piped.projectsegfau.lt',
+      'pipedapi.adminforge.de',
       'www.youtube.com'
     ];
 
     const urlObj = new URL(targetUrl);
-    if (!allowedDomains.includes(urlObj.hostname)) {
-      return NextResponse.json({ error: 'Domain not allowed' }, { status: 403 });
+    if (!allowedDomains.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain))) {
+      console.log(`Domain not allowed: ${urlObj.hostname}`);
+      return NextResponse.json({ error: `Domain not allowed: ${urlObj.hostname}` }, { status: 403 });
     }
+
+    console.log(`Proxying request to: ${targetUrl}`);
 
     const response = await fetch(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
+        'Origin': urlObj.origin,
+        'Referer': urlObj.origin
       },
-      redirect: 'follow'
+      redirect: 'follow',
+      timeout: 30000
     });
 
     if (!response.ok) {
+      console.log(`Target server error: ${response.status} ${response.statusText}`);
+      const errorText = await response.text().catch(() => 'No error details');
       return NextResponse.json(
-        { error: `Target server responded with status ${response.status}` },
+        { error: `Target server responded with status ${response.status}: ${errorText}` },
         { status: response.status }
       );
     }
 
     const data = await response.text();
+    console.log(`Successfully proxied response, length: ${data.length}`);
 
     return new NextResponse(data, {
       status: 200,
