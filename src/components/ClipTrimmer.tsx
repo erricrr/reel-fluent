@@ -196,8 +196,8 @@ export default function ClipTrimmer({
 
   return (
     <Card className="border-2 border-primary/20 bg-secondary/20">
-      <div className="absolute inset-0 blur-xl rounded-lg"></div>
-      <div className="absolute inset-0 animate-pulse"></div>
+      <div className="absolute inset-0 blur-xl rounded-lg pointer-events-none"></div>
+      <div className="absolute inset-0 animate-pulse pointer-events-none"></div>
       <div className="relative">
         <CardHeader className="pb-3 border-b">
           <CardTitle className="text-lg flex items-center gap-2 text-foreground font-semibold">
