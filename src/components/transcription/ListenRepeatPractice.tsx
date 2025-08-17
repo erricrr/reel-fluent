@@ -163,7 +163,7 @@ export default function ListenRepeatPractice({ mediaSrc, clip, clipDisplayName, 
         {recordedUrl && (
           <div className="space-y-2 bg-background/50 rounded-lg p-3 border shadow-sm">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Your recording</Label>
+              <Label className="text-xs font-medium">Your Recording</Label>
             </div>
             <audio
               ref={recordingPlayerRef}
