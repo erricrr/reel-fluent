@@ -187,27 +187,12 @@ export async function processYouTubeUrl(
     throw new Error('Invalid YouTube URL');
   }
 
-    // Try hybrid approach first (client-side URL extraction + server streaming)
-  try {
-    onProgress?.(0, "Extracting audio URL...");
-    const { downloadYouTubeAudioHybrid } = await import('./hybridYouTubeDownload');
-    const result = await downloadYouTubeAudioHybrid(url, onProgress);
+      // Use improved yt-dlp server-side download (most reliable)
+  const result = await downloadYouTubeAudio(url, onProgress);
+  const file = createAudioFileFromBlob(result.audioBlob, result.filename);
 
-    return {
-      file: result.file,
-      videoInfo: result.videoInfo
-    };
-  } catch (hybridError) {
-    console.warn('Hybrid download failed, falling back to server-only:', hybridError);
-    onProgress?.(0, "Falling back to server download...");
-
-    // Fallback to server-side download
-    const result = await downloadYouTubeAudio(url, onProgress);
-    const file = createAudioFileFromBlob(result.audioBlob, result.filename);
-
-    return {
-      file,
-      videoInfo: result.videoInfo
-    };
-  }
+  return {
+    file,
+    videoInfo: result.videoInfo
+  };
 }

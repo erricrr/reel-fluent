@@ -448,18 +448,29 @@ async function getVideoInfo(url: string) {
 
 // Download audio using yt-dlp
 async function downloadAudio(url: string, outputPath: string) {
-  // Ensure yt-dlp is available before attempting download
+  // Ensure yt-dlp is available and up-to-date
   try {
-    await execAsync('which yt-dlp', { timeout: 5000 });
+    const { stdout: versionOutput } = await execAsync('yt-dlp --version', { timeout: 10000 });
+    const version = versionOutput.trim();
+    console.log('Using yt-dlp version:', version);
+
+    // Check if version is recent (optional warning)
+    const versionDate = new Date(version.split(' ')[0] || '2023-01-01');
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    if (versionDate < oneMonthAgo) {
+      console.warn('yt-dlp version might be outdated. Consider updating for better YouTube compatibility.');
+    }
   } catch (error) {
-    console.error('yt-dlp not found in PATH during download');
-    throw new Error('yt-dlp is not installed or not available in PATH. Please contact support.');
+    console.error('yt-dlp not found or not working:', error);
+    throw new Error('yt-dlp is not installed or not functioning properly. Please ensure yt-dlp is installed and accessible.');
   }
 
-  // Server-friendly approaches without browser cookies
+  // Modern yt-dlp approaches with better anti-bot measures
   const approaches = [
     {
-      name: 'iOS client download (bypass bot detection)',
+      name: 'yt-dlp with web client (most reliable)',
       command: [
         'yt-dlp',
         '--extract-audio',
@@ -468,16 +479,44 @@ async function downloadAudio(url: string, outputPath: string) {
         '--no-playlist',
         '--force-ipv4',
         '--geo-bypass',
-        '--extractor-args', '"youtube:player_client=ios,playability_errors=rethrow"',
+        '--extractor-args', 'youtube:player_client=web',
+        '--user-agent', '"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+        '--referer', '"https://www.youtube.com/"',
+        '--add-header', '"Accept-Language:en-US,en;q=0.9"',
+        '--add-header', '"Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"',
+        '--extractor-retries', '10',
+        '--fragment-retries', '15',
+        '--retry-sleep', 'exp=1:120',
+        '--socket-timeout', '60',
+        '--no-check-certificates',
+        '--sleep-interval', '1',
+        '--max-sleep-interval', '5',
+        '--throttled-rate', '100K',
+        '--match-filters', `"duration < ${MAX_DURATION}"`,
+        '--output', `"${outputPath}.%(ext)s"`,
+        `"${url}"`
+      ]
+    },
+    {
+      name: 'yt-dlp iOS client fallback',
+      command: [
+        'yt-dlp',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+        '--audio-quality', '192K',
+        '--no-playlist',
+        '--force-ipv4',
+        '--geo-bypass',
+        '--extractor-args', 'youtube:player_client=ios',
         '--user-agent', '"Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"',
         '--referer', '"https://www.youtube.com/"',
         '--extractor-retries', '8',
+        '--fragment-retries', '12',
+        '--retry-sleep', 'linear=1::10',
         '--socket-timeout', '45',
         '--no-check-certificates',
-        '--sleep-interval', '6',
-        '--max-sleep-interval', '15',
-        '--fragment-retries', '10',
-        '--retry-sleep', 'linear=1::10',
+        '--sleep-interval', '3',
+        '--max-sleep-interval', '8',
         '--match-filters', `"duration < ${MAX_DURATION}"`,
         '--output', `"${outputPath}.%(ext)s"`,
         `"${url}"`
@@ -812,107 +851,28 @@ export async function POST(request: NextRequest) {
 
     console.log('Downloading audio to:', outputPath);
 
-        // Smart download strategy: prioritize methods based on current YouTube blocking status
+            // Use improved yt-dlp with modern anti-bot measures
     let audioFilePath: string | null = null;
-    let lastDownloadError: any = null;
 
-    // Check if we should prioritize fallback methods (if yt-dlp failed recently due to blocking)
-    const shouldPrioritizeFallbacks = ytInfoError && (
-      ytInfoError.message?.includes('blocking automated requests') ||
-      ytInfoError.message?.includes('bot') ||
-      ytInfoError.message?.includes('403')
-    );
+    console.log('Downloading audio using improved yt-dlp...');
+    try {
+      audioFilePath = await downloadAudio(url, outputPath);
+    } catch (dlErr: any) {
+      console.error('yt-dlp download failed:', dlErr?.message || dlErr);
 
-    if (shouldPrioritizeFallbacks) {
-      console.log('YouTube appears to be blocking yt-dlp aggressively, trying alternative methods first...');
-
-      // Try Piped first when YouTube is blocking
-      console.log('Trying Piped API as primary method...');
-      const piped = await downloadViaPiped(url, outputPath);
-      if (piped) {
-        audioFilePath = piped.filePath;
-        if (!videoInfo) {
-          videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
-        }
+      // Enhanced error messages for better debugging
+      if (dlErr?.message?.includes('Sign in to confirm') || dlErr?.message?.includes('bot')) {
+        throw new Error('YouTube is currently blocking automated downloads. This is usually temporary. Please try again in a few minutes.');
+      } else if (dlErr?.message?.includes('Video unavailable')) {
+        throw new Error('Video is unavailable, private, or has been removed.');
+      } else if (dlErr?.message?.includes('age')) {
+        throw new Error('Video requires age verification and cannot be downloaded.');
+      } else if (dlErr?.code === 'ENOENT') {
+        throw new Error('yt-dlp is not installed on this server. Please contact support.');
+      } else if (dlErr?.signal === 'SIGTERM') {
+        throw new Error('Download timed out. The video might be too long or the server is overloaded.');
       } else {
-        console.log('Piped failed, trying Invidious API...');
-        // Try Invidious as secondary
-        const invidious = await downloadViaInvidious(url, outputPath);
-        if (invidious) {
-          audioFilePath = invidious.filePath;
-          if (!videoInfo) {
-            videoInfo = { title: invidious.title, duration: invidious.duration, uploader: invidious.uploader };
-          }
-        } else {
-          console.log('Alternative APIs failed, trying yt-dlp as last resort...');
-          // Try yt-dlp as last resort
-          try {
-            audioFilePath = await downloadAudio(url, outputPath);
-          } catch (dlErr: any) {
-            console.log('yt-dlp also failed, trying emergency youtube-dl fallback...');
-            // Final emergency fallback
-            const emergency = await downloadViaYoutubeDL(url, outputPath);
-            if (emergency) {
-              audioFilePath = emergency.filePath;
-              if (!videoInfo) {
-                videoInfo = { title: emergency.title, duration: emergency.duration, uploader: emergency.uploader };
-              }
-            } else {
-              lastDownloadError = dlErr;
-              console.error('All download methods failed including emergency fallback');
-              throw new Error('All download methods failed. YouTube is heavily blocking requests right now. Please try again later or try a different video.');
-            }
-          }
-        }
-      }
-    } else {
-      // Normal flow: try yt-dlp first, then fallbacks
-      try {
-        audioFilePath = await downloadAudio(url, outputPath);
-      } catch (dlErr: any) {
-        lastDownloadError = dlErr;
-        console.warn('yt-dlp download failed, trying Piped fallback...', dlErr?.message || dlErr);
-
-        // Try Piped fallback
-        const piped = await downloadViaPiped(url, outputPath);
-        if (piped) {
-          audioFilePath = piped.filePath;
-          // If we did not have metadata earlier, fill it now
-          if (!videoInfo) {
-            videoInfo = { title: piped.title, duration: piped.duration, uploader: piped.uploader };
-          }
-        } else {
-          console.warn('Piped download also failed, trying Invidious fallback...');
-
-          // Try Invidious fallback
-          const invidious = await downloadViaInvidious(url, outputPath);
-          if (invidious) {
-            audioFilePath = invidious.filePath;
-            // If we did not have metadata earlier, fill it now
-            if (!videoInfo) {
-              videoInfo = { title: invidious.title, duration: invidious.duration, uploader: invidious.uploader };
-            }
-          } else {
-            // Try emergency fallback before giving up
-            console.log('All primary methods failed, trying emergency youtube-dl fallback...');
-            const emergency = await downloadViaYoutubeDL(url, outputPath);
-            if (emergency) {
-              audioFilePath = emergency.filePath;
-              if (!videoInfo) {
-                videoInfo = { title: emergency.title, duration: emergency.duration, uploader: emergency.uploader };
-              }
-            } else {
-              // All methods failed
-              console.error('All download methods failed (yt-dlp, Piped, Invidious, youtube-dl)');
-
-              // If we have a yt-dlp error with a known message, surface it
-              if (ytInfoError) throw ytInfoError;
-              if (lastDownloadError) throw lastDownloadError;
-
-              throw new Error('All download methods failed. YouTube may be temporarily blocking requests. Please try again in a few minutes or try a different video.');
-            }
-          }
-        }
+        throw new Error(`Download failed: ${dlErr?.message || 'Unknown error'}. Please try again or contact support if the issue persists.`);
       }
     }
 

@@ -19,6 +19,39 @@ To improve YouTube download reliability and handle temporary blocking issues, yo
 ### Temporary Directory
 - `TEMP_DIR`: Custom path for temporary file storage (default: /tmp in production)
 
+## yt-dlp Installation for YouTube Downloads
+
+**IMPORTANT:** For YouTube downloads to work on Railway, you need to ensure yt-dlp is installed. Add this to your `nixpacks.toml`:
+
+```toml
+[phases.setup]
+nixPkgs = ['nodejs_18', 'python3', 'pip', 'ffmpeg']
+
+[phases.install]
+cmds = [
+  'npm ci',
+  'pip install yt-dlp',
+  'yt-dlp --version'
+]
+```
+
+If you're using a Dockerfile instead, add these lines:
+
+```dockerfile
+RUN apt-get update && apt-get install -y python3 python3-pip ffmpeg
+RUN pip3 install yt-dlp
+RUN yt-dlp --version
+```
+
+### Alternative: Use Buildpack
+You can also use the Python buildpack by creating a `requirements.txt` file:
+
+```
+yt-dlp
+```
+
+And setting the buildpack to `heroku/python` in Railway settings.
+
 ## Prerequisites
 
 1. A Railway account ([sign up here](https://railway.app))
