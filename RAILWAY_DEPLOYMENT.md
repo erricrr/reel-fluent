@@ -19,6 +19,10 @@ To improve YouTube download reliability and handle temporary blocking issues, yo
 ### Temporary Directory
 - `TEMP_DIR`: Custom path for temporary file storage (default: /tmp in production)
 
+### YouTube Download Debugging (Optional)
+- `YTDLP_VERBOSE`: Set to `true` to enable verbose yt-dlp logging for debugging
+- `YTDLP_DEBUG`: Set to `true` to save yt-dlp debug logs to temp directory
+
 ## yt-dlp Installation for YouTube Downloads
 
 **IMPORTANT:** For YouTube downloads to work on Railway, you need to ensure yt-dlp is installed. Add this to your `nixpacks.toml`:

@@ -63,10 +63,23 @@ export async function GET() {
     nodeVersion: process.version
   };
 
-  // Test quick YouTube URL parsing (no download)
+  // Test quick YouTube URL parsing with cloud-optimized settings
   try {
     const testUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-    const { stdout: infoOutput } = await execAsync(`yt-dlp --dump-json --no-download "${testUrl}"`, { timeout: 30000 });
+    const command = [
+      'yt-dlp',
+      '--dump-json',
+      '--no-download',
+      '--geo-bypass',
+      '--extractor-args', 'youtube:player_client=web,bypass_verification=true',
+      '--user-agent', '"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
+      '--referer', '"https://www.youtube.com/"',
+      '--no-warnings',
+      '--ignore-errors',
+      `"${testUrl}"`
+    ].join(' ');
+
+    const { stdout: infoOutput } = await execAsync(command, { timeout: 60000 });
     const info = JSON.parse(infoOutput);
     diagnostics.youtube_test = {
       status: 'success',
@@ -75,11 +88,37 @@ export async function GET() {
       uploader: info.uploader || 'Unknown'
     };
   } catch (error: any) {
-    diagnostics.youtube_test = {
-      status: 'failed',
-      error: error.message,
-      stderr: error.stderr
-    };
+    // Try alternative approach for cloud platforms
+    try {
+      const testUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      const altCommand = [
+        'yt-dlp',
+        '--dump-json',
+        '--no-download',
+        '--geo-bypass',
+        '--extractor-args', 'youtube:player_client=tv_embedded',
+        '--user-agent', '"Mozilla/5.0 (PlayStation 4 5.07) AppleWebKit/601.2 (KHTML, like Gecko)"',
+        '--no-warnings',
+        '--ignore-errors',
+        `"${testUrl}"`
+      ].join(' ');
+
+      const { stdout: altOutput } = await execAsync(altCommand, { timeout: 60000 });
+      const altInfo = JSON.parse(altOutput);
+      diagnostics.youtube_test = {
+        status: 'success_with_fallback',
+        title: altInfo.title || 'Unknown',
+        duration: altInfo.duration || 0,
+        uploader: altInfo.uploader || 'Unknown'
+      };
+    } catch (fallbackError: any) {
+      diagnostics.youtube_test = {
+        status: 'failed',
+        error: error.message,
+        stderr: error.stderr,
+        fallback_error: fallbackError.message
+      };
+    }
   }
 
   return NextResponse.json(diagnostics, {
