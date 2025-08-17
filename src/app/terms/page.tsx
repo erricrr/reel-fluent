@@ -1,9 +1,30 @@
+"use client";
 import React from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { X } from 'lucide-react';
 
 export default function TermsPage() {
+  const router = useRouter();
+
+  const handleClose = () => {
+    router.push('/');
+  };
+
   return (
     <div className="max-w-2xl mx-auto py-12 px-4 text-foreground">
-      <h1 className="text-3xl font-bold mb-6">Terms of Service</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Terms of Service</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleClose}
+          className="h-10 w-10 rounded-full hover:bg-secondary"
+          aria-label="Close Terms of Service"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
       <div className="space-y-6 text-sm">
         <p>Welcome to ReelFluent. By accessing or using our service, you agree to comply with and be bound by the following terms and conditions. Please read them carefully.</p>
 

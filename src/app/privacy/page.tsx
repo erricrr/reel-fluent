@@ -1,9 +1,30 @@
+"use client";
 import React from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { X } from 'lucide-react';
 
 export default function PrivacyPage() {
+  const router = useRouter();
+
+  const handleClose = () => {
+    router.push('/');
+  };
+
   return (
     <div className="max-w-2xl mx-auto py-12 px-4 text-foreground">
-      <h1 className="text-3xl font-bold mb-6">Privacy Policy</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Privacy Policy</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleClose}
+          className="h-10 w-10 rounded-full hover:bg-secondary"
+          aria-label="Close Privacy Policy"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
       <div className="space-y-6 text-sm">
         <p>At ReelFluent, we are committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our language learning service.</p>
 
