@@ -29,13 +29,13 @@ const RangeSlider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-      <SliderPrimitive.Range className="absolute h-full bg-gray-500 dark:bg-gray-400" />
+    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
+      <SliderPrimitive.Range className="absolute h-full bg-primary" />
     </SliderPrimitive.Track>
     {/* First thumb (start) */}
-    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-gray-500 dark:border-gray-400 bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 shadow-md" />
+    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-muted bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 shadow-md" />
     {/* Second thumb (end) */}
-    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-gray-500 dark:border-gray-400 bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 shadow-md" />
+    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-muted bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 dark:focus-visible:ring-gray-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 shadow-md" />
   </SliderPrimitive.Root>
 ));
 RangeSlider.displayName = "RangeSlider";
@@ -195,17 +195,15 @@ export default function ClipTrimmer({
   const isValidClip = clipDuration >= 1 && clipDuration <= 300;
 
   return (
-    <Card className="shadow-xl border-2 border-primary/60 bg-gradient-to-br from-background via-primary/10 to-primary/15 duration-500 relative animate-in slide-in-from-bottom-4 fade-in">
-      <div className="absolute inset-0 bg-primary/10 blur-xl rounded-lg transition-opacity duration-500"></div>
+    <Card className="border-2 border-primary/20 bg-secondary/20">
+      <div className="absolute inset-0 blur-xl rounded-lg"></div>
       <div className="absolute inset-0 animate-pulse"></div>
       <div className="relative">
-        <CardHeader className="pb-3 border-b border-primary/30">
+        <CardHeader className="pb-3 border-b">
           <CardTitle className="text-lg flex items-center gap-2 text-foreground font-semibold">
             <Scissors className="h-5 w-5 animate-pulse" />
             Clip Trimmer
-            <span className="ml-auto text-xs bg-primary/20 text-foreground px-2 py-1 rounded-full font-normal">
-              Active
-            </span>
+
           </CardTitle>
           <CardDescription className="text-muted-foreground font-medium">
             Select custom start and stop points to create your focused clip for
@@ -241,6 +239,7 @@ export default function ClipTrimmer({
               step={0.1}
               minStepsBetweenThumbs={10}
               className="w-full"
+
               disabled={disabled}
             />
           </div>
@@ -248,9 +247,9 @@ export default function ClipTrimmer({
           {/* Clip Duration Display */}
           <div className="flex items-center justify-between p-3 bg-primary/10 backdrop-blur-sm rounded-lg border border-primary/30 shadow-sm transition-[background-color,border-color,shadow] duration-500">
             <span className="text-sm font-medium text-foreground">
-              Clip Duration:
+              Clip Duration
             </span>
-            <span className="text-sm font-mono text-primary font-semibold">
+            <span className="text-sm font-mono text-primary dark:text-primary-foreground font-semibold">
               {formatSecondsToMMSS(clipDuration)}
             </span>
           </div>
