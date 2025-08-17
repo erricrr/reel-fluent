@@ -199,7 +199,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
             <Input
               id="video-url-input"
               type="url"
-              placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4"
+              placeholder="https://example.com/video.mp4... or https://www.youtube.com/watch?v="
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               disabled={isLoading}
@@ -213,9 +213,8 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
               {isLoading ? "Loading..." : "Load"}
             </Button>
           </div>
-          <p className="text-xs sm:text-sm text-muted-foreground transition-all duration-300">
-            Supports YouTube videos and direct media links (MP3, WAV, MP4, WebM). Some servers may block cross-origin requests.
-          </p>
+          <p className="text-xs text-muted-foreground transition-all duration-300">
+          Supports direct media (MP3, WAV, MP4, WebM) and YouTube links. Some servers may block cross-origin requests.          </p>
         </form>
       </TabsContent>
     </Tabs>
