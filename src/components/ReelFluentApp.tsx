@@ -218,7 +218,15 @@ export default function ReelFluentApp() {
     setSourceUrl(url);
 
     if (isYouTubeUrl(url)) {
+      console.log('Processing YouTube URL:', url);
       await processYouTubeUrl(url, (src, ytDisplayName, ytDuration, videoInfo) => {
+        console.log('YouTube processing callback called with:', {
+          src: src.substring(0, 50) + '...',
+          ytDisplayName,
+          ytDuration,
+          videoInfo
+        });
+
         const newYtMediaSource: MediaSource = {
           id: generateUniqueId(src, ytDisplayName),
           src,
@@ -228,13 +236,18 @@ export default function ReelFluentApp() {
           language
         };
 
+        console.log('Adding YouTube media source:', newYtMediaSource.id);
         if (addMediaSource(newYtMediaSource)) {
+          console.log('YouTube media source added successfully, updating state...');
           selectMediaSource(newYtMediaSource.id);
           setMediaSrc(src);
           setMediaDisplayName(ytDisplayName);
           setMediaDuration(ytDuration);
           setCurrentSourceType('audio');
           setSourceFile(null);
+          console.log('YouTube state updated - should trigger clip generation');
+        } else {
+          console.log('Failed to add YouTube media source');
         }
       });
     } else {
@@ -804,7 +817,8 @@ export default function ReelFluentApp() {
       activeMediaSourceId,
       mediaDuration,
       language,
-      hasGenerateFunction: !!generateClipsFromDuration
+      hasGenerateFunction: !!generateClipsFromDuration,
+      mediaSourcesCount: mediaSources.length
     });
 
     if (activeMediaSourceId && mediaDuration > 0 && language) {

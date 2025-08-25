@@ -145,6 +145,14 @@ export function useMediaProcessing() {
       // Create object URL from the file
       const objectUrl = URL.createObjectURL(result.file);
 
+      console.log('YouTube processing successful:', {
+        objectUrl,
+        title: result.videoInfo.title,
+        duration,
+        fileSize: result.file.size,
+        fileType: result.file.type
+      });
+
       setYoutubeVideoInfo(result.videoInfo);
       onSuccess(objectUrl, result.videoInfo.title, duration, result.videoInfo);
 

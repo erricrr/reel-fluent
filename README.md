@@ -15,14 +15,14 @@ A feature-rich language learning application that allows users to download YouTu
 
 - **Frontend**: Next.js 15, React 18, TypeScript
 - **UI**: Tailwind CSS, Radix UI components
-- **Audio Processing**: yt-dlp, FFmpeg
+- **Audio Processing**: Railway-compatible YouTube audio extraction (Piped/Invidious APIs)
 - **AI**: Google Genkit with Gemini 2.0 Flash for transcription and translation
 - **Database**: Firebase (optional)
 
 ## Prerequisites
 
 - Node.js 18+
-- Python 3.x (for yt-dlp)
+- Node.js 18+ (no Python required)
 - FFmpeg
 - Google AI API Key (for transcription features)
 
@@ -39,10 +39,7 @@ cd lingua-clip
 npm install
 ```
 
-3. Install yt-dlp:
-```bash
-pip install yt-dlp
-```
+3. No additional dependencies required - the app uses Railway-compatible YouTube audio extraction.
 
 4. Set up environment variables:
 ```bash
@@ -57,7 +54,7 @@ npm run dev
 
 ## Railway Deployment
 
-This project is optimized for Railway deployment with automatic yt-dlp installation.
+This project is optimized for Railway deployment with Railway-compatible YouTube audio extraction (no yt-dlp required).
 
 ### Quick Deploy
 
@@ -68,7 +65,7 @@ This project is optimized for Railway deployment with automatic yt-dlp installat
 1. Connect your GitHub repository to Railway
 2. Railway will automatically detect this as a Node.js project
 3. **IMPORTANT**: Set your environment variables in Railway dashboard (see below)
-4. Deploy! Railway will handle yt-dlp installation automatically
+4. Deploy! Railway will handle the deployment automatically
 
 ### Environment Variables
 

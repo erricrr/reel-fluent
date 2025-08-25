@@ -34,7 +34,70 @@ export function extractVideoId(url: string): string | null {
 }
 
 /**
- * Download audio from YouTube URL with status updates
+ * Get video metadata using YouTube oEmbed API
+ */
+async function getVideoMetadata(url: string): Promise<YouTubeVideoInfo> {
+  try {
+    const oEmbedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const response = await fetch(oEmbedUrl);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch video metadata');
+    }
+
+    const data = await response.json();
+
+    // Get additional info using YouTube Data API if available
+    const videoId = extractVideoId(url);
+    let duration = 0;
+    let view_count = 0;
+
+    if (videoId && process.env.NEXT_PUBLIC_YOUTUBE_API_KEY) {
+      try {
+        const apiUrl = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=contentDetails,statistics&key=${process.env.NEXT_PUBLIC_YOUTUBE_API_KEY}`;
+        const apiResponse = await fetch(apiUrl);
+
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          if (apiData.items && apiData.items[0]) {
+            const item = apiData.items[0];
+            // Parse duration (ISO 8601 format)
+            const durationStr = item.contentDetails?.duration;
+            if (durationStr) {
+              const match = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+              if (match) {
+                const hours = parseInt(match[1] || '0');
+                const minutes = parseInt(match[2] || '0');
+                const seconds = parseInt(match[3] || '0');
+                duration = hours * 3600 + minutes * 60 + seconds;
+              }
+            }
+            view_count = parseInt(item.statistics?.viewCount || '0');
+          }
+        }
+      } catch (apiError) {
+        console.warn('YouTube Data API failed, using fallback duration:', apiError);
+      }
+    }
+
+    return {
+      title: data.title || 'Unknown Title',
+      duration,
+      uploader: data.author_name || 'Unknown',
+      view_count
+    };
+  } catch (error) {
+    console.error('Error fetching video metadata:', error);
+    return {
+      title: 'YouTube Audio',
+      duration: 0,
+      uploader: 'Unknown'
+    };
+  }
+}
+
+/**
+ * Download audio from YouTube URL using Railway-compatible approach
  */
 export async function downloadYouTubeAudio(
   url: string,
@@ -47,28 +110,30 @@ export async function downloadYouTubeAudio(
     try {
       console.log(`Downloading YouTube audio for: ${url} (attempt ${attempt}/${maxRetries})`);
 
-            const timeoutMinutes = (attempt * 120000) / 60000; // Convert to minutes
-      onProgress?.(0, attempt === 1 ? "Connecting to YouTube..." : `Retrying download (attempt ${attempt}/${maxRetries}, ${timeoutMinutes}min timeout)...`);
+      onProgress?.(0, attempt === 1 ? "Getting video information..." : `Retrying download (attempt ${attempt}/${maxRetries})...`);
 
-      // Add exponential backoff for retries
+      // Get video metadata first
+      const videoInfo = await getVideoMetadata(url);
+
+      onProgress?.(10, "Video information retrieved, preparing download...");
+
+      // Add delay between attempts
       if (attempt > 1) {
-        const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
-        onProgress?.(0, `Waiting ${backoffDelay / 1000} seconds before retry...`);
+        const backoffDelay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+        onProgress?.(10, `Waiting ${backoffDelay / 1000} seconds before retry...`);
         await new Promise(resolve => setTimeout(resolve, backoffDelay));
-      } else {
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      onProgress?.(0, `Downloading and extracting audio (timeout: ${timeoutMinutes}min)...`);
+      onProgress?.(20, "Downloading audio...");
 
+      // Use our Railway-compatible API
       const response = await fetch('/api/youtube/download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ url }),
-        // Progressive timeout increase: 2 min, 4 min, 6 min
-        signal: AbortSignal.timeout(attempt * 120000)
+        signal: AbortSignal.timeout(300000) // 5 minute timeout
       });
 
       if (!response.ok) {
@@ -89,49 +154,68 @@ export async function downloadYouTubeAudio(
         // If it's a temporary error, continue to retry
         if (response.status === 500 && attempt < maxRetries) {
           lastError = new Error(errorMessage);
-
-          // For blocking errors, try immediately with shorter delay
-          if (errorMessage.includes('blocking automated requests')) {
-            console.log('YouTube blocking detected, retrying immediately with shorter delay...');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Just 1 second delay for blocking errors
-            continue;
-          }
-
           continue;
         }
 
         throw new Error(errorMessage);
       }
 
-    onProgress?.(0, "Processing audio file...");
+      onProgress?.(90, "Processing audio file...");
 
-    // Extract video info from headers
-    const videoInfo: YouTubeVideoInfo = {
-      title: decodeURIComponent(response.headers.get('X-Video-Title') || 'Unknown Title'),
-      duration: parseInt(response.headers.get('X-Video-Duration') || '0'),
-      uploader: decodeURIComponent(response.headers.get('X-Video-Uploader') || 'Unknown'),
-    };
+      // Get the audio blob
+      const audioBlob = await response.blob();
 
-    // Get the audio blob
-    const audioBlob = await response.blob();
+      console.log('Response details:', {
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length'),
+        blobSize: audioBlob.size,
+        blobType: audioBlob.type
+      });
 
-    // Generate filename from title
-    const sanitizedTitle = videoInfo.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
-    const filename = `${sanitizedTitle}.mp3`;
+      // Generate filename from title
+      const sanitizedTitle = videoInfo.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+      const filename = `${sanitizedTitle}.mp3`;
 
-    onProgress?.(0, "YouTube audio extraction complete!");
+      onProgress?.(100, "YouTube audio extraction complete!");
 
-    console.log('YouTube audio downloaded successfully:', {
-      title: videoInfo.title,
-      duration: videoInfo.duration,
-      size: Math.round(audioBlob.size / 1024 / 1024 * 100) / 100 + ' MB'
-    });
+      console.log('YouTube audio downloaded successfully:', {
+        title: videoInfo.title,
+        duration: videoInfo.duration,
+        size: Math.round(audioBlob.size / 1024 / 1024 * 100) / 100 + ' MB'
+      });
 
-    return {
-      audioBlob,
-      videoInfo,
-      filename
-    };
+      // Ensure we have a valid duration
+      if (videoInfo.duration === 0) {
+        console.warn('Duration is 0, attempting to get duration from response headers...');
+        const durationHeader = response.headers.get('X-Video-Duration');
+        if (durationHeader) {
+          videoInfo.duration = parseInt(durationHeader) || 0;
+          console.log('Updated duration from headers:', videoInfo.duration);
+        }
+      }
+
+      // Also get title and uploader from headers if available
+      const titleHeader = response.headers.get('X-Video-Title');
+      const uploaderHeader = response.headers.get('X-Video-Uploader');
+
+      if (titleHeader) {
+        videoInfo.title = decodeURIComponent(titleHeader);
+        console.log('Updated title from headers:', videoInfo.title);
+      }
+
+      if (uploaderHeader) {
+        videoInfo.uploader = decodeURIComponent(uploaderHeader);
+        console.log('Updated uploader from headers:', videoInfo.uploader);
+      }
+
+      console.log('Final videoInfo:', videoInfo);
+
+      return {
+        audioBlob,
+        videoInfo,
+        filename
+      };
 
     } catch (error: any) {
       console.error(`YouTube download attempt ${attempt} failed:`, error);
@@ -155,14 +239,15 @@ function isRetryableError(error: Error): boolean {
   const message = error.message.toLowerCase();
   const errorName = error.name.toLowerCase();
   return (
-    message.includes('blocking automated requests') ||
-    message.includes('500') ||
     message.includes('timeout') ||
     message.includes('timed out') ||
     message.includes('network') ||
     message.includes('temporary') ||
+    message.includes('service unavailable') ||
+    message.includes('500') ||
     errorName.includes('timeouterror') ||
-    message.includes('signal timed out')
+    message.includes('signal timed out') ||
+    message.includes('fetch')
   );
 }
 
@@ -187,7 +272,7 @@ export async function processYouTubeUrl(
     throw new Error('Invalid YouTube URL');
   }
 
-      // Use improved yt-dlp server-side download (most reliable)
+  // Use Railway-compatible download approach
   const result = await downloadYouTubeAudio(url, onProgress);
   const file = createAudioFileFromBlob(result.audioBlob, result.filename);
 

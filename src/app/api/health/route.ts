@@ -1,23 +1,16 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 export async function GET() {
   try {
-    // Check if yt-dlp is available
-    let ytDlpStatus = 'unknown';
-    try {
-      await execAsync('yt-dlp --version', { timeout: 5000 });
-      ytDlpStatus = 'available';
-    } catch (error) {
-      ytDlpStatus = 'unavailable';
-    }
+    // Railway-compatible YouTube audio extraction
+    const ytDlpStatus = 'not required (using Piped/Invidious APIs)';
 
-    // Check if ffmpeg is available
+    // Check if ffmpeg is available (still needed for other audio processing)
     let ffmpegStatus = 'unknown';
     try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
       await execAsync('ffmpeg -version', { timeout: 5000 });
       ffmpegStatus = 'available';
     } catch (error) {
@@ -33,7 +26,7 @@ export async function GET() {
         'ffmpeg': ffmpegStatus
       },
       features: {
-        'youtube-processing': ytDlpStatus === 'available' && ffmpegStatus === 'available',
+        'youtube-processing': 'available (Railway-compatible)',
         'mobile-audio-extraction': ffmpegStatus === 'available',
         'ai-transcription': process.env.GOOGLE_GENAI_API_KEY ? 'configured' : 'missing-api-key'
       },

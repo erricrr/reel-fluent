@@ -1,13 +1,10 @@
 FROM node:18-alpine
 
-# Install system dependencies including Python and ffmpeg
+# Install system dependencies (no Python required)
 RUN apk add --no-cache \
-    python3 \
-    py3-pip \
     ffmpeg \
     curl \
-    ca-certificates \
-    && ln -sf python3 /usr/bin/python
+    ca-certificates
 
 WORKDIR /app
 
@@ -17,11 +14,8 @@ COPY package*.json ./
 # Install Node.js dependencies
 RUN npm install --legacy-peer-deps
 
-# Install/upgrade Python dependencies (yt-dlp)
-RUN pip3 install --break-system-packages --upgrade yt-dlp
-
-# Verify yt-dlp installation and version
-RUN yt-dlp --version
+# Railway-compatible YouTube audio extraction (no yt-dlp required)
+RUN echo "YouTube audio extraction using Piped/Invidious APIs"
 
 # Copy source code
 COPY . .

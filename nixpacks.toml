@@ -2,7 +2,7 @@
 node = "18.x"
 
 [phases.setup]
-nixPkgs = ["nodejs_18", "python3", "python3Packages.pip", "ffmpeg", "python3Packages.setuptools", "curl", "ca-certificates"]
+nixPkgs = ["nodejs_18", "ffmpeg", "curl", "ca-certificates"]
 
 [phases.install]
 dependsOn = ["setup"]
@@ -11,9 +11,8 @@ cmds = [
   "rm -rf node_modules || true",
   "rm -rf package-lock.json || true",
   "npm install --legacy-peer-deps --no-audit --no-fund",
-  "pip3 install --break-system-packages --upgrade yt-dlp",
-  "which yt-dlp || echo 'yt-dlp not found in PATH'",
-  "yt-dlp --version || echo 'yt-dlp version check failed'"
+  "echo 'YouTube audio extraction using Piped/Invidious APIs'",
+  "echo 'No yt-dlp installation required'"
 ]
 
 [phases.build]

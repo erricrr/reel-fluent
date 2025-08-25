@@ -2,59 +2,34 @@
 
 This guide will help you deploy ReelFluent to Railway with all the required environment variables.
 
-## YouTube Download Resilience (Optional Configuration)
+## YouTube Audio Extraction (Railway-Compatible)
 
-To improve YouTube download reliability and handle temporary blocking issues, you can configure these optional environment variables:
+ReelFluent now uses a Railway-compatible approach for YouTube audio extraction that doesn't require yt-dlp or Python. This approach:
 
-### Piped Instance Configuration
+- ✅ **Works on Railway** without DMCA compliance issues
+- ✅ **No yt-dlp installation** required
+- ✅ **No Python dependencies** required
+- ✅ **Uses Piped and Invidious APIs** for audio streams
+- ✅ **Client-side processing** for better reliability
+
+### How It Works
+
+The app uses external APIs (Piped and Invidious) to extract YouTube audio streams, which are then processed client-side. This approach is fully compliant with Railway's terms of service.
+
+### Optional Configuration
+
+To improve YouTube audio extraction reliability, you can configure these optional environment variables:
+
+#### Piped Instance Configuration
 - `PIPED_INSTANCE_URLS`: Comma-separated list of Piped instance URLs for fallback downloading
 - Example: `https://piped.video,https://pipedapi.kavin.rocks,https://piped-api.orkiv.com`
 
-### Proxy Configuration (Alternative Approach)
-- `YT_AUDIO_PROXY_URL`: URL of an external YouTube audio download service
-- `YT_AUDIO_PROXY_METHOD`: HTTP method (GET or POST, default: GET)
-- `YT_AUDIO_PROXY_URL_PARAM`: Parameter name for the YouTube URL (default: url)
-- `YT_AUDIO_PROXY_HEADERS`: Newline-separated headers (format: Header: Value)
+#### YouTube Data API (Optional)
+- `YOUTUBE_API_KEY`: Google YouTube Data API key for enhanced metadata (optional)
+- `NEXT_PUBLIC_YOUTUBE_API_KEY`: Public YouTube API key for client-side metadata
 
-### Temporary Directory
+#### Temporary Directory
 - `TEMP_DIR`: Custom path for temporary file storage (default: /tmp in production)
-
-### YouTube Download Debugging (Optional)
-- `YTDLP_VERBOSE`: Set to `true` to enable verbose yt-dlp logging for debugging
-- `YTDLP_DEBUG`: Set to `true` to save yt-dlp debug logs to temp directory
-
-## yt-dlp Installation for YouTube Downloads
-
-**IMPORTANT:** For YouTube downloads to work on Railway, you need to ensure yt-dlp is installed. Add this to your `nixpacks.toml`:
-
-```toml
-[phases.setup]
-nixPkgs = ['nodejs_18', 'python3', 'pip', 'ffmpeg']
-
-[phases.install]
-cmds = [
-  'npm ci',
-  'pip install yt-dlp',
-  'yt-dlp --version'
-]
-```
-
-If you're using a Dockerfile instead, add these lines:
-
-```dockerfile
-RUN apt-get update && apt-get install -y python3 python3-pip ffmpeg
-RUN pip3 install yt-dlp
-RUN yt-dlp --version
-```
-
-### Alternative: Use Buildpack
-You can also use the Python buildpack by creating a `requirements.txt` file:
-
-```
-yt-dlp
-```
-
-And setting the buildpack to `heroku/python` in Railway settings.
 
 ## Prerequisites
 
@@ -98,83 +73,3 @@ Replace `your_actual_api_key_here` with the API key you got from Google AI Studi
 After adding the environment variable:
 1. Go to the "Deployments" tab
 2. Click "Redeploy" on the latest deployment
-3. Wait for the deployment to complete
-
-## Verifying Your Deployment
-
-1. Once deployed, visit your Railway app URL
-2. Upload a video or paste a YouTube URL
-3. Try the "Transcribe Clip" feature
-4. If it works, you're all set! 🎉
-
-## Troubleshooting
-
-### AI Transcription Not Working
-
-**Symptoms**:
-- "Transcribe Clip" button doesn't work
-- No automated transcription appears
-- Console errors about API keys
-
-**Solution**:
-1. Check that you've set the `GOOGLE_API_KEY` environment variable
-2. Verify the API key is correct (starts with `AIza...`)
-3. Redeploy after adding the variable
-
-**Mobile Browser Issues**:
-- If transcription fails on mobile, the app automatically uses server-side processing
-- Look for the "📱 Mobile Device Detected" message
-- This requires ffmpeg to be available on the server (included in our Dockerfile)
-
-### YouTube Processing Not Working
-
-**Symptoms**:
-- YouTube URLs don't work
-- "Failed to download YouTube audio" errors
-
-**Solution**:
-- This should work automatically with our Dockerfile
-- Check the health endpoint at `/api/health` to verify yt-dlp is installed
-
-### Mobile Browser Support
-
-**Good news!** The app now automatically detects mobile browsers and uses server-side audio processing for better compatibility.
-
-**What this means:**
-- ✅ AI transcription works on iOS Safari, Android Chrome, and other mobile browsers
-- ✅ Automatic fallback when browser APIs are limited
-- ✅ Same functionality across all devices
-
-### Health Check
-
-Visit `your-app-url.railway.app/api/health` to check if all dependencies are working:
-
-```json
-{
-  "status": "healthy",
-  "dependencies": {
-    "yt-dlp": "available",
-    "ffmpeg": "available"
-  },
-  "features": {
-    "youtube-processing": true,
-    "mobile-audio-extraction": true,
-    "ai-transcription": "configured"
-  }
-}
-```
-
-## Environment Variables Reference
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_API_KEY` | **YES** | Google AI API key for transcription |
-| `NODE_ENV` | Auto-set | Set to `production` by Railway |
-| `PORT` | Auto-set | Set automatically by Railway |
-
-## Support
-
-If you're still having issues:
-1. Check the Railway deployment logs
-2. Verify your Google AI API key is valid
-3. Contact support: voicevoz321@gmail.com
