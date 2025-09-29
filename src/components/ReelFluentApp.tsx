@@ -316,6 +316,27 @@ export default function ReelFluentApp() {
     }
   }, [isAnyClipTranscribing, sessionClips, removeMediaSource, activeMediaSourceId, toast, resetProcessingState]);
 
+  const handleUpdateLanguage = useCallback((sourceId: string, newLanguage: string) => {
+    // Update the media source language
+    updateMediaSource(sourceId, { language: newLanguage });
+
+    // If this is the active source, we need to regenerate clips with the new language
+    if (sourceId === activeMediaSourceId) {
+      const source = mediaSources.find(s => s.id === sourceId);
+      if (source && mediaDuration > 0) {
+        // Regenerate clips with the new language
+        const newClips = generateClips(mediaDuration, clipSegmentationDuration, newLanguage, sourceId);
+        setClips(newClips);
+        selectClip(0); // Reset to first clip
+
+        toast({
+          title: "Language Updated",
+          description: `Clips regenerated with ${newLanguage} language setting.`,
+        });
+      }
+    }
+  }, [updateMediaSource, activeMediaSourceId, mediaSources, mediaDuration, clipSegmentationDuration, setClips, selectClip, toast]);
+
   // Settings handlers
   const handleLanguageChange = useCallback((newLanguage: string) => {
     setLanguage(newLanguage);
@@ -897,6 +918,7 @@ export default function ReelFluentApp() {
                         activeSourceId={activeMediaSourceId}
                         onSelectSource={handleSelectMediaSource}
                         onRemoveSource={handleRemoveMediaSource}
+                        onUpdateLanguage={handleUpdateLanguage}
                         disabled={globalAppBusyState || isAnyClipTranscribing}
                       />
                     </div>
@@ -920,6 +942,7 @@ export default function ReelFluentApp() {
               onTranslate={handleTranslate}
               onRemoveClip={handleRemoveClip}
               onUserTranscriptionChange={handleUserTranscriptionChange}
+              isYouTubeVideo={mediaSrc?.includes("youtube.com/") || mediaSrc?.includes("youtu.be/") || false}
               language={language}
               isAudioSource={currentSourceType === 'audio'}
               clipSegmentationDuration={clipSegmentationDuration}
