@@ -37,6 +37,10 @@ npm run dev
 
 Open http://localhost:9002
 
+## Deployment on Netlify
+
+This project is deployed on Netlify. For deployment instructions, see [NETLIFY_DEPLOYMENT.md](./NETLIFY_DEPLOYMENT.md).
+
 ## Enhanced YouTube Support (Optional)
 
 For better YouTube functionality in local development, install yt-dlp:

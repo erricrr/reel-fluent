@@ -14,7 +14,7 @@ COPY package*.json ./
 # Install Node.js dependencies
 RUN npm install --legacy-peer-deps
 
-# Railway-compatible YouTube audio extraction (no yt-dlp required)
+# YouTube audio extraction using Piped/Invidious APIs (no yt-dlp required)
 RUN echo "YouTube audio extraction using Piped/Invidious APIs"
 
 # Copy source code
