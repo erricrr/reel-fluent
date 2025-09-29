@@ -55,7 +55,7 @@ export default function VideoInputForm({ onSourceLoad, isLoading }: VideoInputFo
       try {
         new URL(url);
         onSourceLoad({ url });
-        setUrl("");
+        // Keep URL in input field while loading
       } catch (error) {
         toast({
           variant: "destructive",

@@ -532,7 +532,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Return the audio file
-      return new NextResponse(buffer, {
+      return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers: {
           'Content-Type': 'audio/mpeg',
@@ -574,7 +574,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Return the audio file
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         'Content-Type': 'audio/mpeg',
