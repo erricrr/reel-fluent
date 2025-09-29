@@ -1,3 +1,5 @@
+[![Netlify Status](https://api.netlify.com/api/v1/badges/db4eb6cd-b3b1-4e89-a97f-fde678ebfda6/deploy-status)](https://app.netlify.com/projects/reelfluent/deploys)
+
 # ReelFluent
 
 This is a tool I created for myself for Vietnamese listening practice. It's helped from having to go between Google Translate, a video or audio file, and a transcription service. Gemini currently powers it, but it could also use an OpenAI model or an Anthropic model.

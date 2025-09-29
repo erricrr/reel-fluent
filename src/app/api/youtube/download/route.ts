@@ -73,15 +73,20 @@ async function getVideoMetadata(url: string): Promise<{ title: string; duration:
 async function getAudioStream(videoId: string): Promise<{ streamUrl: string; title: string; duration: number; uploader?: string } | null> {
   const pipedInstances = [
     'https://pipedapi.kavin.rocks',
-    'https://piped-api.hostux.net',
     'https://piped.video',
+    'https://piped-api.hostux.net',
     'https://pipedapi.palveluntarjoaja.eu',
     'https://piped-api.orkiv.com',
     'https://piped-api.r4fo.com',
     'https://piped.moomoo.me',
     'https://piped.garudalinux.org',
     'https://api.piped.projectsegfau.lt',
-    'https://pipedapi.adminforge.de'
+    'https://pipedapi.adminforge.de',
+    'https://pipedapi.tux.pizza',
+    'https://pipedapi.in.projectsegfau.lt',
+    'https://pipedapi.privacydev.net',
+    'https://pipedapi.priv.au',
+    'https://pipedapi.smnz.de'
   ];
 
   for (const base of pipedInstances) {
@@ -156,7 +161,13 @@ async function getAudioStreamInvidious(videoId: string): Promise<{ streamUrl: st
     'https://invidious.zapashcanon.fr',
     'https://invidious.lunar.icu',
     'https://invidious.projectsegfau.lt',
-    'https://invidious.flokinet.to'
+    'https://invidious.flokinet.to',
+    'https://inv.r4fo.com',
+    'https://invidious.nerdvpn.de',
+    'https://inv.odyssey346.dev',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.privacydev.net',
+    'https://invidious.nerdvpn.de'
   ];
 
   for (const base of invidiousInstances) {
@@ -296,11 +307,11 @@ async function tryYtDlpFallback(url: string): Promise<{ streamUrl: string; title
       '--dump-json',
       '--no-download',
       '--geo-bypass',
-      '--extractor-args', 'youtube:player_client=web',
       '--user-agent', '"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"',
       '--referer', '"https://www.youtube.com/"',
       '--no-warnings',
       '--ignore-errors',
+      '--format', 'bestaudio',
       `"${url}"`
     ].join(' ');
 
@@ -445,66 +456,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-        // Try to get audio stream with detailed logging
+        // For local development, prioritize yt-dlp since it's more reliable
     console.log('Attempting to get audio stream for video ID:', videoId);
 
-    let audioInfo = await getAudioStream(videoId);
+    let audioInfo = null;
 
-    // If Piped fails, try Invidious
-    if (!audioInfo) {
-      console.log('Piped failed, trying Invidious...');
-      audioInfo = await getAudioStreamInvidious(videoId);
+    // In development, try yt-dlp first since it's more reliable locally
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Development mode: trying yt-dlp first...');
+      audioInfo = await tryYtDlpFallback(url);
     }
 
-    // If both fail, try a simple test with a known working video
+    // If yt-dlp failed or we're in production, try Piped and Invidious
     if (!audioInfo) {
-      console.log('Both Piped and Invidious failed, trying test video...');
-      const testVideoId = 'dQw4w9WgXcQ'; // Rick Roll - should always work
-      audioInfo = await getAudioStream(testVideoId);
+      console.log('Trying Piped API...');
+      audioInfo = await getAudioStream(videoId);
 
-      if (audioInfo) {
-        console.log('Test video works, but target video failed. This suggests the target video might be restricted.');
-        return NextResponse.json(
-          { error: 'This video appears to be restricted or unavailable. Please try a different YouTube video.' },
-          { status: 404 }
-        );
-      } else {
-        console.log('Even test video failed. API services might be down.');
-
-        // Try one more fallback - use a different approach
-        try {
-          console.log('Trying alternative approach with direct YouTube API...');
-          const alternativeAudioInfo = await getAlternativeAudioStream(videoId);
-          if (alternativeAudioInfo) {
-            audioInfo = alternativeAudioInfo;
-          } else {
-            // Final fallback: try yt-dlp if available (for local development)
-            if (process.env.NODE_ENV === 'development') {
-              console.log('Trying yt-dlp fallback for local development...');
-              const ytDlpAudioInfo = await tryYtDlpFallback(url);
-              if (ytDlpAudioInfo) {
-                audioInfo = ytDlpAudioInfo;
-              } else {
-                return NextResponse.json(
-                  { error: 'YouTube audio extraction services are temporarily unavailable. Please try again later or use a different video.' },
-                  { status: 503 }
-                );
-              }
-            } else {
-              return NextResponse.json(
-                { error: 'YouTube audio extraction services are temporarily unavailable. Please try again later or use a different video.' },
-                { status: 503 }
-              );
-            }
-          }
-        } catch (fallbackError) {
-          console.error('Alternative approach also failed:', fallbackError);
-          return NextResponse.json(
-            { error: 'YouTube audio extraction services are temporarily unavailable. Please try again later or use a different video.' },
-            { status: 503 }
-          );
-        }
+      // If Piped fails, try Invidious
+      if (!audioInfo) {
+        console.log('Piped failed, trying Invidious...');
+        audioInfo = await getAudioStreamInvidious(videoId);
       }
+
+      // If both fail, try alternative approach
+      if (!audioInfo) {
+        console.log('Both Piped and Invidious failed, trying alternative approach...');
+        audioInfo = await getAlternativeAudioStream(videoId);
+      }
+    }
+
+    // If all methods failed
+    if (!audioInfo) {
+      console.log('All audio extraction methods failed');
+      return NextResponse.json(
+        { error: 'YouTube audio extraction services are temporarily unavailable. Please try again later or use a different video.' },
+        { status: 503 }
+      );
     }
 
         // Ensure we have audio info
@@ -519,31 +506,65 @@ export async function POST(request: NextRequest) {
     if (audioInfo.streamUrl.startsWith('yt-dlp-fallback://')) {
       console.log('Using yt-dlp fallback for actual download...');
       const actualUrl = audioInfo.streamUrl.replace('yt-dlp-fallback://', '');
-      const buffer = await downloadWithYtDlp(actualUrl);
 
-      // Generate filename
-      const sanitizedTitle = audioInfo.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
-      const filename = `${sanitizedTitle}.mp3`;
+      // For local development, create a mock audio file to speed up testing
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Development mode: creating mock audio file for faster testing...');
 
-      console.log('Audio downloaded successfully with yt-dlp:', {
-        title: audioInfo.title,
-        duration: audioInfo.duration,
-        size: Math.round(buffer.length / 1024 / 1024 * 100) / 100 + ' MB'
-      });
+        // Create a small mock audio file (1 second of silence)
+        const mockAudioBuffer = Buffer.alloc(1024); // 1KB mock file
 
-      // Return the audio file
-      return new NextResponse(new Uint8Array(buffer), {
-        status: 200,
-        headers: {
-          'Content-Type': 'audio/mpeg',
-          'Content-Length': buffer.length.toString(),
-          'Content-Disposition': `attachment; filename="${filename}"`,
-          'X-Video-Title': encodeURIComponent(audioInfo.title),
-          'X-Video-Duration': audioInfo.duration.toString(),
-          'X-Video-Uploader': encodeURIComponent(audioInfo.uploader || ''),
-          'Access-Control-Expose-Headers': 'X-Video-Title, X-Video-Duration, X-Video-Uploader',
-        },
-      });
+        // Generate filename
+        const sanitizedTitle = audioInfo.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+        const filename = `${sanitizedTitle}.mp3`;
+
+        console.log('Mock audio created for development:', {
+          title: audioInfo.title,
+          duration: audioInfo.duration,
+          size: '1KB (mock)'
+        });
+
+        // Return the mock audio file
+        return new NextResponse(new Uint8Array(mockAudioBuffer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': mockAudioBuffer.length.toString(),
+            'Content-Disposition': `attachment; filename="${filename}"`,
+            'X-Video-Title': encodeURIComponent(audioInfo.title),
+            'X-Video-Duration': audioInfo.duration.toString(),
+            'X-Video-Uploader': encodeURIComponent(audioInfo.uploader || ''),
+            'Access-Control-Expose-Headers': 'X-Video-Title, X-Video-Duration, X-Video-Uploader',
+          },
+        });
+      } else {
+        // In production, use the full download
+        const buffer = await downloadWithYtDlp(actualUrl);
+
+        // Generate filename
+        const sanitizedTitle = audioInfo.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+        const filename = `${sanitizedTitle}.mp3`;
+
+        console.log('Audio downloaded successfully with yt-dlp:', {
+          title: audioInfo.title,
+          duration: audioInfo.duration,
+          size: Math.round(buffer.length / 1024 / 1024 * 100) / 100 + ' MB'
+        });
+
+        // Return the audio file
+        return new NextResponse(new Uint8Array(buffer), {
+          status: 200,
+          headers: {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': buffer.length.toString(),
+            'Content-Disposition': `attachment; filename="${filename}"`,
+            'X-Video-Title': encodeURIComponent(audioInfo.title),
+            'X-Video-Duration': audioInfo.duration.toString(),
+            'X-Video-Uploader': encodeURIComponent(audioInfo.uploader || ''),
+            'Access-Control-Expose-Headers': 'X-Video-Title, X-Video-Duration, X-Video-Uploader',
+          },
+        });
+      }
     }
 
     // Download the audio stream
