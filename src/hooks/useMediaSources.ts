@@ -8,6 +8,7 @@ export interface MediaSource {
   type: 'video' | 'audio' | 'url' | 'unknown';
   duration: number;
   language?: string;
+  segmentationDuration?: number;
 }
 
 export interface SessionClip {

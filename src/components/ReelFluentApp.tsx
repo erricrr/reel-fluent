@@ -197,7 +197,8 @@ export default function ReelFluentApp() {
         displayName,
         type,
         duration,
-        language
+        language,
+        segmentationDuration: clipSegmentationDuration
       };
 
       if (addMediaSource(newMediaSource)) {
@@ -222,7 +223,8 @@ export default function ReelFluentApp() {
           displayName,
           type,
           duration,
-          language
+          language,
+          segmentationDuration: clipSegmentationDuration
         };
 
         if (addMediaSource(newMediaSource)) {
@@ -324,10 +326,14 @@ export default function ReelFluentApp() {
     if (sourceId === activeMediaSourceId) {
       const source = mediaSources.find(s => s.id === sourceId);
       if (source && mediaDuration > 0) {
-        // Regenerate clips with the new language
-        const newClips = generateClips(mediaDuration, clipSegmentationDuration, newLanguage, sourceId);
-        setClips(newClips);
-        selectClip(0); // Reset to first clip
+        // Use the stored segmentation duration for this specific media source
+        const storedSegmentationDuration = source.segmentationDuration || clipSegmentationDuration;
+
+        // Update the global segmentation duration to match the stored one
+        setClipSegmentationDuration(storedSegmentationDuration);
+
+        // Use the hook's generateClipsFromDuration to ensure proper clip generation
+        generateClipsFromDuration(mediaDuration, storedSegmentationDuration / 1000, sourceId);
 
         toast({
           title: "Language Updated",
@@ -335,7 +341,7 @@ export default function ReelFluentApp() {
         });
       }
     }
-  }, [updateMediaSource, activeMediaSourceId, mediaSources, mediaDuration, clipSegmentationDuration, setClips, selectClip, toast]);
+  }, [updateMediaSource, activeMediaSourceId, mediaSources, mediaDuration, clipSegmentationDuration, generateClipsFromDuration, setClipSegmentationDuration, toast]);
 
   // Settings handlers
   const handleLanguageChange = useCallback((newLanguage: string) => {
