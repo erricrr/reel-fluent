@@ -32,7 +32,7 @@ export async function saveMediaItemAction(
   args: SaveMediaItemArgs
 ): Promise<{ success: boolean; message: string; mediaId?: string }> {
   if (!firestoreAdmin) {
-    console.warn('Firestore Admin is not initialized. Cannot save media item. Firebase might be disabled or not configured.');
+    // Firebase Admin is intentionally disabled
     return { success: false, message: 'Server error: Database connection failed or not configured.' };
   }
 

@@ -21,8 +21,3 @@ export function MediaProcessingLoader({ status }: ProcessingLoaderProps) {
     </div>
   );
 }
-
-// For backward compatibility, keep YouTubeProcessingLoader as an alias
-export function YouTubeProcessingLoader(props: { status: string }) {
-  return <MediaProcessingLoader {...props} />;
-}

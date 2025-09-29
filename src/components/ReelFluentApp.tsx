@@ -7,7 +7,7 @@ import LanguageSelector from "./LanguageSelector";
 import ClipDurationSelector from "./ClipDurationSelector";
 import TranscriptionWorkspace from "./TranscriptionWorkspace";
 import MediaSourceList from "./MediaSourceList";
-import { MediaProcessingLoader, YouTubeProcessingLoader } from "./ProcessingLoader";
+import { MediaProcessingLoader } from "./ProcessingLoader";
 import SessionClipsManager from './SessionClipsManager';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,6 @@ import { useToast } from "@/hooks/use-toast";
 import { formatSecondsToMMSS } from '@/lib/timeUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveMediaItemAction } from '@/app/actions';
-import { isYouTubeUrl } from '@/lib/youtubeUtils';
 import { cn } from "@/lib/utils";
 import { ToastAction } from "@/components/ui/toast";
 
@@ -129,8 +128,8 @@ export default function ReelFluentApp() {
 
   const mediaProcessingHookValues = useMediaProcessing();
   const {
-    isLoading, isSaving, isYouTubeProcessing, processingStatus,
-    youtubeVideoInfo, processFile, processYouTubeUrl, processDirectUrl, resetProcessingState,
+    isLoading, isSaving, processingStatus,
+    processFile, processDirectUrl, resetProcessingState,
     setIsSaving, globalAppBusyState
   } = mediaProcessingHookValues;
 
@@ -168,7 +167,6 @@ export default function ReelFluentApp() {
   const currentClipToDisplay = useMemo(() => focusedClip || clips[currentClipIndex] || null,
     [focusedClip, clips, currentClipIndex]);
 
-  const isYouTubeVideoCheck = sourceUrl ? isYouTubeUrl(sourceUrl) : false;
 
   // Utility functions
   const generateUniqueId = (src?: string, displayName?: string) => {
@@ -217,43 +215,7 @@ export default function ReelFluentApp() {
   const handleUrlSubmit = useCallback(async (url: string) => {
     setSourceUrl(url);
 
-    if (isYouTubeUrl(url)) {
-      console.log('Processing YouTube URL:', url);
-      await processYouTubeUrl(url, (src, ytDisplayName, ytDuration, videoInfo) => {
-        console.log('YouTube processing callback called with:', {
-          src: src.substring(0, 50) + '...',
-          ytDisplayName,
-          ytDuration,
-          videoInfo
-        });
-
-        const newYtMediaSource: MediaSource = {
-          id: generateUniqueId(src, ytDisplayName),
-          src,
-          displayName: ytDisplayName,
-          type: 'audio',
-          duration: ytDuration,
-          language
-        };
-
-        console.log('Adding YouTube media source:', newYtMediaSource.id);
-        if (addMediaSource(newYtMediaSource)) {
-          console.log('YouTube media source added successfully, updating state...');
-          selectMediaSource(newYtMediaSource.id);
-          setMediaSrc(src);
-          setMediaDisplayName(ytDisplayName);
-          setMediaDuration(ytDuration);
-          setCurrentSourceType('audio');
-          setSourceFile(null);
-          console.log('YouTube state updated - should trigger clip generation');
-        } else {
-          console.log('Failed to add YouTube media source');
-        }
-      });
-    } else {
       await processDirectUrl(url, (src, displayName, duration, type) => {
-        console.log('processDirectUrl callback called with:', { src: src.substring(0, 50) + '...', displayName, duration, type });
-
         const newMediaSource: MediaSource = {
           id: generateUniqueId(src, displayName),
           src,
@@ -263,22 +225,16 @@ export default function ReelFluentApp() {
           language
         };
 
-        console.log('Adding media source:', newMediaSource.id);
         if (addMediaSource(newMediaSource)) {
-          console.log('Media source added successfully, updating state...');
           selectMediaSource(newMediaSource.id);
           setMediaSrc(src);
           setMediaDisplayName(displayName);
           setMediaDuration(duration);
           setCurrentSourceType(type);
           setSourceFile(null);
-          console.log('State updated - should trigger clip generation');
-        } else {
-          console.log('Failed to add media source');
         }
       });
-    }
-  }, [processYouTubeUrl, processDirectUrl, addMediaSource, selectMediaSource, toast, language]);
+  }, [processDirectUrl, addMediaSource, selectMediaSource, toast, language]);
 
   // Media source management
   const handleSelectMediaSource = useCallback((sourceId: string) => {
@@ -719,7 +675,7 @@ export default function ReelFluentApp() {
       toast({
         variant: "destructive",
         title: "No Media to Save",
-        description: "Please upload a media file or enter a YouTube URL first.",
+        description: "Please upload a media file or enter a direct media URL first.",
       });
       return;
     }
@@ -813,13 +769,7 @@ export default function ReelFluentApp() {
 
     // Effect for initializing and re-generating clips when media source or critical params change
   useEffect(() => {
-    console.log('Main clip generation effect triggered:', {
-      activeMediaSourceId,
-      mediaDuration,
-      language,
-      hasGenerateFunction: !!generateClipsFromDuration,
-      mediaSourcesCount: mediaSources.length
-    });
+    // Main clip generation effect triggered
 
     if (activeMediaSourceId && mediaDuration > 0 && language) {
       let durationForClipsMs = getSegmentationPreference(activeMediaSourceId);
@@ -837,11 +787,7 @@ export default function ReelFluentApp() {
       // Use the hook's generateClipsFromDuration to ensure mediaSourceId is set
       generateClipsFromDuration(mediaDuration, durationForClipsMs / 1000, activeMediaSourceId);
     } else {
-      console.log('Clearing clips - missing required params:', {
-        activeMediaSourceId,
-        mediaDuration,
-        language
-      });
+      // Clearing clips - missing required params
       // If no active source or duration, clear clips
       // generateClipsFromDuration(0,0, activeMediaSourceId || '') would also work if it handles duration 0 gracefully
       setClips([]); // from useClipManagement
@@ -935,7 +881,7 @@ export default function ReelFluentApp() {
                           }}
                           isLoading={globalAppBusyState || isAnyClipTranscribing}
                         />
-                        {(isYouTubeProcessing || isLoading) && (
+                        {isLoading && (
                           <MediaProcessingLoader status={processingStatus} />
                         )}
                       </div>
@@ -974,7 +920,6 @@ export default function ReelFluentApp() {
               onTranslate={handleTranslate}
               onRemoveClip={handleRemoveClip}
               onUserTranscriptionChange={handleUserTranscriptionChange}
-              isYouTubeVideo={isYouTubeVideoCheck}
               language={language}
               isAudioSource={currentSourceType === 'audio'}
               clipSegmentationDuration={clipSegmentationDuration}

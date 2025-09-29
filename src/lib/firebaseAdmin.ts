@@ -1,7 +1,7 @@
 
 // src/lib/firebaseAdmin.ts
 // Server-side Firebase Admin SDK initialization
-import * as admin from 'firebase-admin'; 
+import * as admin from 'firebase-admin';
 import type { Firestore } from 'firebase-admin/firestore';
 
 let firestoreAdminInstance: Firestore | undefined;
@@ -13,7 +13,7 @@ let firestoreAdminInstance: Firestore | undefined;
 /*
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_PRIVATE_KEY; 
+const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
 if (projectId && clientEmail && privateKey) {
   if (!admin.apps.length) {
@@ -22,7 +22,7 @@ if (projectId && clientEmail && privateKey) {
         credential: admin.credential.cert({
           projectId: projectId,
           clientEmail: clientEmail,
-          privateKey: privateKey.replace(/\\n/g, '\n'), 
+          privateKey: privateKey.replace(/\\n/g, '\n'),
         }),
       });
       console.log('Firebase Admin SDK initialized.');
@@ -41,7 +41,7 @@ if (projectId && clientEmail && privateKey) {
 */
 
 // If Firebase Admin initialization is disabled, firestoreAdminInstance will remain undefined.
-console.warn("FIREBASE ADMIN DISABLED: Server-side Firebase Admin initialization is currently commented out in src/lib/firebaseAdmin.ts. Firestore save operations will fail.");
+// Firebase Admin is intentionally disabled for this build.
 
 // --- END: TEMPORARILY DISABLED FIREBASE ADMIN INITIALIZATION ---
 

@@ -28,11 +28,30 @@ export async function GET(request: NextRequest) {
       'invidious.flokinet.to',
       'api.piped.projectsegfau.lt',
       'pipedapi.adminforge.de',
-      'www.youtube.com'
+      'www.youtube.com',
+      // Common media hosting domains
+      'archive.org',
+      'dn720302.ca.archive.org',
+      'dn721800.ca.archive.org',
+      'vimeo.com',
+      'player.vimeo.com',
+      'soundcloud.com',
+      'bandcamp.com',
+      'freesound.org',
+      'pixabay.com',
+      'pexels.com',
+      'unsplash.com'
     ];
 
     const urlObj = new URL(targetUrl);
-    if (!allowedDomains.some(domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain))) {
+    const isAllowed = allowedDomains.some(domain =>
+      urlObj.hostname === domain ||
+      urlObj.hostname.endsWith('.' + domain) ||
+      // Allow all archive.org subdomains
+      (domain === 'archive.org' && urlObj.hostname.endsWith('.archive.org'))
+    );
+
+    if (!isAllowed) {
       console.log(`Domain not allowed: ${urlObj.hostname}`);
       return NextResponse.json({ error: `Domain not allowed: ${urlObj.hostname}` }, { status: 403 });
     }

@@ -1,21 +1,16 @@
 import { useState, useCallback, useRef } from 'react';
 import { useToast } from './use-toast';
-import { isYouTubeUrl, processYouTubeUrl as processYTUrl, type YouTubeVideoInfo, type ProgressCallback } from '@/lib/youtubeUtils';
 
 export interface MediaProcessingState {
   isLoading: boolean;
   isSaving: boolean;
-  isYouTubeProcessing: boolean;
   processingStatus: string;
-  youtubeVideoInfo: YouTubeVideoInfo | null;
 }
 
 export function useMediaProcessing() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isYouTubeProcessing, setIsYouTubeProcessing] = useState<boolean>(false);
   const [processingStatus, setProcessingStatus] = useState<string>("");
-  const [youtubeVideoInfo, setYoutubeVideoInfo] = useState<YouTubeVideoInfo | null>(null);
 
   const processingIdRef = useRef<number>(0);
   const { toast } = useToast();
@@ -23,19 +18,9 @@ export function useMediaProcessing() {
   const resetProcessingState = useCallback(() => {
     setIsLoading(false);
     setIsSaving(false);
-    setIsYouTubeProcessing(false);
     setProcessingStatus("");
-    setYoutubeVideoInfo(null);
   }, []);
 
-  const createProgressCallback = useCallback((processingId: number): ProgressCallback => {
-    return (_progress: number, status: string) => {
-      // Only update if this is still the current processing operation
-      if (processingId === processingIdRef.current) {
-        setProcessingStatus(status);
-      }
-    };
-  }, []);
 
   const processFile = useCallback(async (
     file: File,
@@ -105,101 +90,6 @@ export function useMediaProcessing() {
     }
   }, [toast]);
 
-  const processYouTubeUrl = useCallback(async (
-    url: string,
-    onSuccess: (src: string, displayName: string, duration: number, videoInfo: YouTubeVideoInfo) => void
-  ) => {
-    if (!isYouTubeUrl(url)) {
-      toast({
-        variant: "destructive",
-        title: "Invalid URL",
-        description: "Please enter a valid YouTube URL",
-      });
-      return;
-    }
-
-    // Prevent multiple simultaneous processing of the same URL
-    if (isYouTubeProcessing) {
-      console.warn('YouTube processing already in progress, skipping duplicate request');
-      return;
-    }
-
-    const currentProcessingId = ++processingIdRef.current;
-
-    try {
-      setIsYouTubeProcessing(true);
-      setProcessingStatus("Initializing YouTube download...");
-
-      const progressCallback = createProgressCallback(currentProcessingId);
-      const result = await processYTUrl(url, progressCallback);
-
-      if (currentProcessingId !== processingIdRef.current) return;
-
-      // Use the duration from videoInfo
-      const duration = result.videoInfo.duration;
-      const MAX_DURATION_MINUTES = 30;
-      if (duration > MAX_DURATION_MINUTES * 60) {
-        throw new Error(`Video duration (${Math.round(duration / 60)} minutes) exceeds the ${MAX_DURATION_MINUTES}-minute limit.`);
-      }
-
-      // Create object URL from the file
-      const objectUrl = URL.createObjectURL(result.file);
-
-      console.log('YouTube processing successful:', {
-        objectUrl,
-        title: result.videoInfo.title,
-        duration,
-        fileSize: result.file.size,
-        fileType: result.file.type
-      });
-
-      setYoutubeVideoInfo(result.videoInfo);
-      onSuccess(objectUrl, result.videoInfo.title, duration, result.videoInfo);
-
-      toast({
-        title: "YouTube Video Processed",
-        description: `Successfully processed: ${result.videoInfo.title}`,
-      });
-
-    } catch (error) {
-      console.error('YouTube processing error:', error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to process YouTube video";
-
-      // Provide more helpful error messages based on the error type
-      let userFriendlyMessage = errorMessage;
-      let title = "YouTube Processing Error";
-
-      if (errorMessage.includes('blocking automated requests')) {
-        title = "YouTube Temporarily Unavailable";
-        userFriendlyMessage = "YouTube is temporarily blocking automated requests. This usually resolves in a few minutes. Please try again shortly or try a different video.";
-      } else if (errorMessage.includes('Video unavailable')) {
-        title = "Video Unavailable";
-        userFriendlyMessage = "This video is unavailable, private, or has been removed.";
-      } else if (errorMessage.includes('duration') && errorMessage.includes('exceeds')) {
-        title = "Video Too Long";
-        userFriendlyMessage = errorMessage;
-      } else if (errorMessage.includes('Invalid YouTube URL')) {
-        title = "Invalid URL";
-        userFriendlyMessage = "Please enter a valid YouTube URL.";
-      } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
-        title = "Download Timeout";
-        userFriendlyMessage = "The download took too long. This can happen with longer videos or slow connections. Please try again or try a shorter video.";
-      } else if (errorMessage.includes('TimeoutError')) {
-        title = "Connection Timeout";
-        userFriendlyMessage = "The connection timed out while downloading. This may be due to network issues or server load. Please try again in a moment.";
-      }
-
-      toast({
-        variant: "destructive",
-        title,
-        description: userFriendlyMessage,
-      });
-    } finally {
-      if (currentProcessingId === processingIdRef.current) {
-        setIsYouTubeProcessing(false);
-      }
-    }
-  }, [toast, createProgressCallback, isYouTubeProcessing]);
 
   const processDirectUrl = useCallback(async (
     url: string,
@@ -228,11 +118,12 @@ export function useMediaProcessing() {
         resolvedMediaType = 'video';
       }
 
-      // Simple client-side loading
+      // Use CORS proxy for external URLs to avoid CORS issues
       const getDuration = (): Promise<number> => {
         return new Promise((resolve, reject) => {
           const media = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
           media.preload = 'metadata';
+          media.crossOrigin = 'anonymous';
 
           const cleanup = () => {
             media.removeEventListener('loadedmetadata', onMetadata);
@@ -250,18 +141,61 @@ export function useMediaProcessing() {
             }
           };
 
-          const onError = () => {
+          const onError = (error: Event) => {
             cleanup();
-            reject(new Error('Failed to load media metadata'));
+            reject(new Error('Failed to load media metadata - this may be due to CORS restrictions'));
           };
 
           media.addEventListener('loadedmetadata', onMetadata);
           media.addEventListener('error', onError);
+
+          // Try direct URL first, then fall back to CORS proxy if needed
           media.src = url;
         });
       };
 
-      const duration = await getDuration();
+      let duration: number;
+      let finalUrl = url;
+
+      try {
+        duration = await getDuration();
+      } catch (error) {
+        // Try with CORS proxy as fallback
+        const proxyUrl = `/api/cors-proxy?url=${encodeURIComponent(url)}`;
+        const proxyDuration = await new Promise<number>((resolve, reject) => {
+          const media = resolvedMediaType === 'video' ? document.createElement('video') : document.createElement('audio');
+          media.preload = 'metadata';
+          media.crossOrigin = 'anonymous';
+
+          const cleanup = () => {
+            media.removeEventListener('loadedmetadata', onMetadata);
+            media.removeEventListener('error', onError);
+            media.src = '';
+          };
+
+          const onMetadata = () => {
+            const duration = media.duration;
+            cleanup();
+            if (isNaN(duration) || duration <= 0) {
+              reject(new Error('Invalid media duration'));
+            } else {
+              resolve(duration);
+            }
+          };
+
+          const onError = (error: Event) => {
+            cleanup();
+            reject(new Error('Failed to load media even through CORS proxy'));
+          };
+
+          media.addEventListener('loadedmetadata', onMetadata);
+          media.addEventListener('error', onError);
+          media.src = proxyUrl;
+        });
+
+        duration = proxyDuration;
+        finalUrl = proxyUrl;
+      }
 
       if (currentProcessingId !== processingIdRef.current) return;
 
@@ -270,7 +204,7 @@ export function useMediaProcessing() {
         throw new Error(`Media duration (${Math.round(duration / 60)} minutes) exceeds the ${MAX_DURATION_MINUTES}-minute limit.`);
       }
 
-      onSuccess(url, decodedDisplayName, duration, resolvedMediaType);
+      onSuccess(finalUrl, decodedDisplayName, duration, resolvedMediaType);
 
       toast({
         title: "Direct Media URL Added",
@@ -278,11 +212,27 @@ export function useMediaProcessing() {
       });
 
     } catch (error) {
-      console.error('Direct URL processing error:', error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+
+      // Provide more specific error messages based on the error type
+      let userFriendlyMessage = "Please enter a valid direct media file URL.";
+      let title = "Media Loading Failed";
+
+      if (errorMessage.includes('CORS proxy')) {
+        title = "Media Access Restricted";
+        userFriendlyMessage = "This media file cannot be accessed due to server restrictions. Try a different URL or upload the file directly.";
+      } else if (errorMessage.includes('Invalid media duration')) {
+        title = "Invalid Media File";
+        userFriendlyMessage = "The media file appears to be corrupted or invalid. Please try a different file.";
+      } else if (errorMessage.includes('Failed to load media metadata')) {
+        title = "Media Loading Error";
+        userFriendlyMessage = "Unable to load the media file. Please check the URL and try again.";
+      }
+
       toast({
         variant: "destructive",
-        title: "Media Loading Failed",
-        description: "Please enter a valid direct media file URL."
+        title,
+        description: userFriendlyMessage
       });
     } finally {
       if (currentProcessingId === processingIdRef.current) {
@@ -296,25 +246,20 @@ export function useMediaProcessing() {
     // State
     isLoading,
     isSaving,
-    isYouTubeProcessing,
     processingStatus,
-    youtubeVideoInfo,
     processingIdRef,
 
     // Actions
     processFile,
-    processYouTubeUrl,
     processDirectUrl,
     resetProcessingState,
 
     // Setters
     setIsLoading,
     setIsSaving,
-    setIsYouTubeProcessing,
     setProcessingStatus,
-    setYoutubeVideoInfo,
 
     // Computed
-    globalAppBusyState: isLoading || isSaving || isYouTubeProcessing,
+    globalAppBusyState: isLoading || isSaving,
   };
 }

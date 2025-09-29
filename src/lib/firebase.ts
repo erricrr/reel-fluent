@@ -46,7 +46,7 @@ if (!isConfigSufficient) {
         configForFirebaseSDK[key] = firebaseConfigValues[typedKey] as string;
       }
     }
-    
+
     if (!getApps().length) {
       app = initializeApp(configForFirebaseSDK);
     } else {
@@ -70,7 +70,7 @@ if (!isConfigSufficient) {
 */
 
 // If Firebase initialization is disabled, app, auth, and firestore will remain undefined.
-console.warn("FIREBASE DISABLED: Client-side Firebase initialization is currently commented out in src/lib/firebase.ts. Auth and Firestore features will be unavailable.");
+// Firebase is intentionally disabled for this build.
 
 // --- END: TEMPORARILY DISABLED FIREBASE INITIALIZATION ---
 
