@@ -26,12 +26,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Add class to disable transitions during theme change
+    document.documentElement.classList.add('theme-transitioning');
+
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
     localStorage.setItem('reelFluentTheme', theme);
+
+    // Use requestAnimationFrame to ensure the theme change completes
+    // before re-enabling transitions
+    const frameId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.documentElement.classList.remove('theme-transitioning');
+      });
+    });
+
+    return () => cancelAnimationFrame(frameId);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {

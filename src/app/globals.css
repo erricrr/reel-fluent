@@ -127,6 +127,18 @@ body {
     @apply bg-background text-foreground;
     overflow-x: hidden;
   }
+
+  /* Disable transitions during theme changes to prevent lag */
+  .theme-transitioning * {
+    transition: none !important;
+  }
+
+  /* Specifically target problematic transition classes during theme changes */
+  .theme-transitioning .transition-all,
+  .theme-transitioning [class*="transition-all"],
+  .theme-transitioning [class*="duration-300"] {
+    transition: none !important;
+  }
 }
 
 @layer utilities {
