@@ -46,7 +46,7 @@
     "genkit": "^1.8.0",
     "genkitx-anthropic": "^0.22.0",
     "lucide-react": "^0.475.0",
-    "next": "15.4.8",
+    "next": "15.4.10",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
